@@ -28,7 +28,19 @@ def project_directory() -> Path:
 
 
 def default_workspace() -> Path:
-    return Path.cwd() / DEFAULT_DIRECTORY
+    """`./storage` for a source checkout. A release bundle is replaced on update, so its launcher
+    points PCUI_DEFAULT_WORKSPACE outside the unpacked folder."""
+    configured = os.environ.get("PCUI_DEFAULT_WORKSPACE")
+    return Path(configured).expanduser() if configured else Path.cwd() / DEFAULT_DIRECTORY
+
+
+def configured_workspace(value: str) -> Path:
+    """A remembered workspace must still exist: silently recreating a moved or deleted folder would
+    open an empty library where the reader expects theirs."""
+    path = workspace_path(value)
+    if not path.is_dir():
+        raise WorkspaceError("workspace_missing", 404)
+    return path
 
 
 def workspace_path(value: str | Path) -> Path:

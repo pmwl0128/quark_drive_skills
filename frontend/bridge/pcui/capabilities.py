@@ -140,7 +140,8 @@ def source_fingerprints(season: str, rule: str) -> dict[str, dict[str, str]]:
 
 
 def assemble(pool: WorkerPool, deployment_id: str | None = None,
-             ui_build_id: str | None = None) -> dict:
+             ui_build_id: str | None = None, report: dict | None = None) -> dict:
+    """`report`, when given, receives `projectionStale` for the local Console's status card."""
     data = {k: _data_digest(v) for k, v in _DATA_TREES.items()}
     fingerprints = {
         "dex": _fingerprint(pool.request_json("dex", ["schema"]), data["dex"]),
@@ -170,6 +171,8 @@ def assemble(pool: WorkerPool, deployment_id: str | None = None,
         # `release-<payload hash>` identity, which is a different preimage and would differ here
         # forever. Report rather than refuse — a deployed bridge that will not answer its own
         # handshake is worse than one serving a named mismatch.
+        if report is not None:
+            report["projectionStale"] = True
         print(f"WARNING: serving projection {deployment_id} against skill data that fingerprints "
               f"as {derived}. The static pages are stale; rebuild the projection "
               f"(frontend/web/scripts/build_projection.py).", file=sys.stderr, flush=True)

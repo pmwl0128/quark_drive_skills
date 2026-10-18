@@ -1,5 +1,5 @@
 /** Diagnostic facts and their evidence views; input, jobs and persistence stay in DiagnoseTab. */
-import type { DiagnoseReportDto } from "@pokemon-champions/protocol";
+import type { DiagnoseFactsDto } from "@pokemon-champions/protocol";
 import { createContext, memo, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { EntityHover } from "../../../components/EntityHover.tsx";
 import { TypeBadge } from "../../../components/TypeBadge.tsx";
@@ -71,7 +71,7 @@ function fillTemplate(template: string, params: Record<string, string | number |
   });
 }
 
-type CheckRow = NonNullable<DiagnoseReportDto["checks"]>["byOpponent"][number];
+type CheckRow = NonNullable<DiagnoseFactsDto["checks"]>["byOpponent"][number];
 
 /** Clickable per-opponent detail under the checks table: each member's own facts vs that
  * opponent (grade, our KO line, the worst incoming line, the speed read) — the matchup
@@ -265,7 +265,7 @@ function MegaFacts({ holders }: { holders: ReturnType<typeof useMegaHolders> }) 
  * like roles: singles hides Trick Room / Tailwind / Intimidate; doubles hides Wall-break.
  * Terrain is listed in BOTH formats, mirroring the terrain-control coverage row: a terrain
  * archetype is answered either by overwriting the field or by removing it. */
-function ModePressure({ report }: { report: DiagnoseReportDto }) {
+function ModePressure({ report }: { report: DiagnoseFactsDto }) {
   const t = useAssistT();
   const { lang } = useLang();
   const abilities = useAbilitiesByName();
@@ -430,7 +430,7 @@ function ModePressure({ report }: { report: DiagnoseReportDto }) {
   );
 }
 
-function ReportView({ report }: { report: DiagnoseReportDto }) {
+function ReportView({ report }: { report: DiagnoseFactsDto }) {
   const t = useAssistT();
   const navigate = useNavigate();
   const prose = useProseRenderer();
@@ -816,7 +816,7 @@ function ReportView({ report }: { report: DiagnoseReportDto }) {
 /** The report's headline numbers, each a tile: legality, answers to the metagame, shared weaknesses,
  * coverage gaps, speed range and role coverage. Every number is the report's own; the tiles only
  * count what the sections below list. */
-function Summary({ report }: { report: DiagnoseReportDto }) {
+function Summary({ report }: { report: DiagnoseFactsDto }) {
   const t = useAssistT();
   const issues = report.legality.issues ?? [];
   const valid = report.legality.status === "valid";

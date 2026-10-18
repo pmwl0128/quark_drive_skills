@@ -1,4 +1,4 @@
-"""pcui command line: serve / doctor / session / artifact / run / install-agent.
+"""pcui command line: serve / doctor / open / session / artifact / run / install-agent.
 
 Connects to a RUNNING daemon over HTTP (X-PCUI-Secret from daemon.json). Direct-SQLite
 degradation is allowed ONLY when the daemon is provably not running (daemon.json absent,
@@ -13,10 +13,14 @@ import shutil
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
+import webbrowser
 from pathlib import Path
 
 from . import cli_i18n as i18n
+from .agent_setup import (COMPANION_NAME, TARGETS, agent_skill_dir, companion_status,
+                          pcui_argv, pcui_command, render_companion, shell_argv)
 from .config import (CONFIG_ENV_NAME, EnvFileError, env_file_values,
                      load_runtime_config)
 from .paths import CLIS, META_DATA, PROJECT_ROOT, SKILLS_ROOT, data_dir
@@ -82,12 +86,55 @@ def _http(info: dict, method: str, path: str, body: dict | None = None, timeout:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _remembered_workspace(value: str) -> Path:
+    from .workspace import WorkspaceError, configured_workspace
+    try:
+        return configured_workspace(value)
+    except WorkspaceError as exc:
+        raise SystemExit(i18n.t("workspace_missing", path=value)) from exc
+
+
 def _store() -> Store:
-    from .workspace import default_workspace, workspace_path
+    from .workspace import default_workspace
     config = load_runtime_config()
-    workspace = workspace_path(config.workspace_dir) if config.workspace_dir else default_workspace()
-    workspace.mkdir(parents=True, exist_ok=True)
+    if config.workspace_dir:
+        workspace = _remembered_workspace(config.workspace_dir)
+    else:
+        workspace = default_workspace()
+        workspace.mkdir(parents=True, exist_ok=True)
     return Store(workspace / "sessions.db")
+
+
+CURRENT_SESSION_FILE = "current-session"
+
+
+def _session_scope() -> str:
+    daemon = _daemon()
+    if daemon:
+        return _http(daemon, "GET", "/api/workspace")["workspaceId"]
+    from .workspace import default_workspace
+    config = load_runtime_config()
+    folder = Path(config.workspace_dir) if config.workspace_dir else default_workspace()
+    return os.path.normcase(str(folder.expanduser().resolve()))
+
+
+def _current_session() -> str | None:
+    """Human CLI convenience only; assistants always pass an explicit session id."""
+    value = os.environ.get("PCUI_SESSION", "").strip()
+    if value:
+        return value
+    try:
+        current = json.loads((data_dir() / CURRENT_SESSION_FILE).read_text(encoding="utf-8"))
+        return current["session"] if isinstance(current, dict) and current.get("workspace") == _session_scope() else None
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _session_id(explicit: str | None) -> str:
+    session_id = explicit or _current_session()
+    if not session_id:
+        raise SystemExit(i18n.t("need_session"))
+    return session_id
 
 
 def _projection_deployment_id(value: str | None) -> str | None:
@@ -125,12 +172,19 @@ def cmd_serve(ns) -> int:
     existing = read_daemon_file()
     if existing and pid_alive(int(existing.get("pid", -1))):
         raise SystemExit(i18n.t("daemon_running", pid=existing["pid"], port=existing["port"]))
+    from .workspace import Workspace, default_workspace, save_workspace_default
+    remembered = load_runtime_config(Path(ns.workspace_config)).workspace_dir
+    if ns.workspace:
+        chosen = Path(ns.workspace).expanduser().resolve()
+    elif remembered:
+        chosen = _remembered_workspace(remembered)
+    else:
+        chosen = default_workspace().resolve()
     security = Security()
     pool = WorkerPool()
-    from .workspace import Workspace, save_workspace_default
-    workspace = Workspace(Path(ns.workspace).expanduser().resolve(), Path(ns.workspace_config))
+    workspace = Workspace(chosen, Path(ns.workspace_config))
     legacy = data_dir() / "sessions.db"
-    first_workspace = load_runtime_config(Path(ns.workspace_config)).workspace_dir is None
+    first_workspace = remembered is None
     if first_workspace and not (workspace.path / "sessions.db").exists() and legacy.is_file() and legacy.resolve() != workspace.path / "sessions.db":
         previous = Store(legacy)
         try:
@@ -320,33 +374,149 @@ def cmd_doctor(ns) -> int:
         status = i18n.t("status_ok" if good else "status_fail")
         print(f"  [{status}] {i18n.t('check_probe')}")
         ok &= good
+    # The assistant link is optional for browsing, so it informs without failing the check.
+    statuses = {target: companion_status(agent_skill_dir(target)) for target in TARGETS}
+    for target, status in statuses.items():
+        print(f"  [{i18n.t('companion_' + status)}] {i18n.t('check_companion', target=target)}")
+    if "installed" not in statuses.values():
+        print(i18n.t("companion_hint", cmd=pcui_command()))
     print(i18n.t("doctor_ok" if ok else "doctor_fail"))
     return 0 if ok else 1
 
 
+def cmd_open(ns) -> int:
+    """Print (and open) a fresh one-time sign-in link, optionally straight to one session."""
+    daemon = _daemon()
+    if daemon is None:
+        raise SystemExit(i18n.t("open_need_daemon"))
+    token = _http(daemon, "POST", "/api/bootstrap/mint", {})["token"]
+    target = f"sessions/{urllib.parse.quote(ns.session, safe='')}" if ns.session else ""
+    url = f"http://127.0.0.1:{daemon['port']}/{target}#bootstrap={token}"
+    print(url, flush=True)
+    if not ns.no_browser:
+        webbrowser.open(url)
+    return 0
+
+
+def mcp_config() -> str:
+    """How to register `pcui mcp` with the assistants pcui knows; registration stays the reader's
+    own step (design §5: nothing is injected into an agent)."""
+    argv = [*pcui_argv(), "mcp"]
+    toml_args = ", ".join(json.dumps(part, ensure_ascii=False) for part in argv[1:])
+    return (f"Claude Code:\n  claude mcp add quark-drive -- {shell_argv(argv)}\n\n"
+            f"Codex (~/.codex/config.toml):\n  [mcp_servers.quark-drive]\n"
+            f"  command = {json.dumps(argv[0], ensure_ascii=False)}\n  args = [{toml_args}]\n"
+            f"  tool_timeout_sec = 660\n")
+
+
+def cmd_mcp(ns) -> int:
+    if ns.print_config:
+        print(mcp_config(), end="")
+        return 0
+    from .mcp_server import serve
+    return serve()
+
+
+def _session_meta(ns, daemon: dict | None) -> dict:
+    """The same intake meta the Console's new-task form writes (frontend/design.md §6)."""
+    meta: dict = {}
+    if ns.intent and ns.intent.strip():
+        meta["intent"] = ns.intent.strip()
+    if ns.kind:
+        meta["requestKind"] = ns.kind
+    fmt = ns.format
+    if ns.team:
+        try:
+            team = json.loads(Path(ns.team).read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            raise SystemExit(i18n.t("team_invalid", path=ns.team)) from exc
+        if not isinstance(team, dict) or not isinstance(team.get("pokemon"), list) or not team["pokemon"]:
+            raise SystemExit(i18n.t("team_invalid", path=ns.team))
+        team_format = team.get("format") if team.get("format") in ("single", "double") else None
+        if fmt and team_format and fmt != team_format:
+            raise SystemExit(i18n.t("team_format_conflict", team=team_format, given=fmt))
+        fmt = fmt or team_format
+        meta["team"] = team
+        if ns.team_name:
+            meta["teamName"] = ns.team_name
+    if fmt:
+        meta["format"] = fmt
+    if daemon:
+        environment = _http(daemon, "GET", "/api/capabilities").get("environment")
+        if isinstance(environment, dict):
+            meta["environment"] = environment
+    return meta
+
+
+def _read_session(daemon: dict | None, session_id: str) -> dict:
+    if daemon:
+        try:
+            return _http(daemon, "GET", f"/api/sessions/{urllib.parse.quote(session_id, safe='')}")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise SystemExit(i18n.t("session_not_found", id=session_id)) from exc
+            raise
+    from .store import NotFound
+    s = _store()
+    try:
+        out = s.get_session(session_id)
+    except NotFound as exc:
+        raise SystemExit(i18n.t("session_not_found", id=session_id)) from exc
+    out["ledger"] = s.session_ledger(session_id)
+    return out
+
+
 def cmd_session(ns) -> int:
     daemon = _daemon()
+    explicit = ns.id or ns.session_id
     if ns.action == "create":
-        out = (_http(daemon, "POST", "/api/sessions", {"meta": {}}) if daemon
-               else _store().create_session())
+        meta = _session_meta(ns, daemon)
+        out = (_http(daemon, "POST", "/api/sessions", {"meta": meta}) if daemon
+               else _store().create_session(meta))
     elif ns.action == "list":
         out = (_http(daemon, "GET", "/api/sessions") if daemon
                else _store().list_sessions())
+    elif ns.action == "use":
+        if not explicit:
+            current = _current_session()
+            print(i18n.t("session_current", id=current) if current else i18n.t("session_none"))
+            return 0
+        _read_session(daemon, explicit)
+        (data_dir() / CURRENT_SESSION_FILE).write_text(
+            json.dumps({"session": explicit, "workspace": _session_scope()}) + "\n", encoding="utf-8")
+        print(i18n.t("session_current", id=explicit))
+        return 0
+    elif ns.action == "wait":
+        return _wait(daemon, _session_id(explicit), ns.wait_for, ns.timeout)
     else:                                     # show
-        if not ns.id:
-            raise SystemExit(i18n.t("need_id"))
-        if daemon:
-            out = _http(daemon, "GET", f"/api/sessions/{ns.id}")
-        else:
-            s = _store()
-            out = s.get_session(ns.id)
-            out["ledger"] = s.session_ledger(ns.id)
+        out = _read_session(daemon, _session_id(explicit))
     print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _wait(daemon: dict | None, session_id: str, kinds: str, timeout: float) -> int:
+    """Block until the reader answers in the panel, then print that artifact verbatim (rc 3 when
+    `timeout` passes first)."""
+    from .daemon_client import BridgeError, DaemonClient
+    if daemon is None:
+        raise SystemExit(i18n.t("wait_need_daemon"))
+    wanted = [kind for kind in kinds.split(",") if kind]
+    print(i18n.t("wait_started", id=session_id, kinds=", ".join(wanted)), file=sys.stderr, flush=True)
+    try:
+        answer = DaemonClient().wait_for_reader(session_id, wanted, timeout)
+    except BridgeError as exc:
+        raise SystemExit(i18n.t("session_not_found", id=session_id) if exc.status == 404 else str(exc)) from exc
+    if answer is None:
+        print(i18n.t("wait_timeout", id=session_id), file=sys.stderr)
+        return 3
+    print(i18n.t("wait_ready", kind=answer["kind"]), file=sys.stderr, flush=True)
+    sys.stdout.write(answer["payload"])
     return 0
 
 
 def cmd_artifact(ns) -> int:
     daemon = _daemon()
+    ns.session = _session_id(ns.session)
     if ns.action == "put":
         payload = Path(ns.file).read_text(encoding="utf-8") if ns.file else sys.stdin.read()
         if daemon:
@@ -389,6 +559,9 @@ def cmd_run(ns) -> int:
     daemon = _daemon()
     if daemon is None:
         raise SystemExit(i18n.t("run_need_daemon"))
+    body: dict = {}
+    if ns.session is not None:
+        body["session"] = _session_id(ns.session or None)
     op: dict = {"op": ns.op}
     if ns.args:
         extra = json.loads(ns.args)
@@ -399,29 +572,32 @@ def cmd_run(ns) -> int:
         path = getattr(ns, field)
         if path:
             op[field] = json.loads(Path(path).read_text(encoding="utf-8"))
-    out = _http(daemon, "POST", "/api/team/session", {"ops": [op]}, timeout=630)
+    out = _http(daemon, "POST", "/api/team/session", {**body, "ops": [op]}, timeout=630)
     result = out[0] if isinstance(out, list) and len(out) == 1 else out
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if (isinstance(result, dict) and result.get("rc", 0) == 0) else 1
-
-
-COMPANION_NAME = "pokemon-champions-ui-session"
-_AGENT_SKILL_DIRS = {"claude": Path.home() / ".claude" / "skills",
-                     "codex": Path.home() / ".codex" / "skills"}
+    ok = (isinstance(result, dict) and result.get("rc") == 0
+          and result.get("error") is None and result.get("result") is not None)
+    if ns.out:
+        from .operator_output import save_result
+        try:
+            summary = save_result(result, ns.out)
+        except OSError as exc:
+            print(json.dumps({"error": "output_save_failed", "message": str(exc),
+                              "operatorCompleted": True, "row": result}, ensure_ascii=False), file=sys.stderr)
+            return 1
+        print(json.dumps(summary, ensure_ascii=False))
+    else:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if ok else 1
 
 
 def _companion_dest(ns) -> Path:
-    base = Path(ns.dir) if ns.dir else _AGENT_SKILL_DIRS[ns.target]
+    base = Path(ns.dir) if ns.dir else agent_skill_dir(ns.target)
     return base / COMPANION_NAME
 
 
 def cmd_install_agent(ns) -> int:
     dest = _companion_dest(ns)
-    template = (Path(__file__).parent / "companion" / "SKILL.md").read_text(encoding="utf-8")
-    bridge_dir = Path(__file__).resolve().parents[1]
-    pcui_cmd = "pcui" if shutil.which("pcui") else "python -m pcui"
-    text = (template.replace("{{PCUI_CMD}}", pcui_cmd)
-                    .replace("{{BRIDGE_DIR}}", str(bridge_dir)))
+    text = render_companion()
     print(i18n.t("companion_dest", dest=dest / "SKILL.md"))
     if not ns.yes and input(i18n.t("write_confirm")).strip() != "yes":
         return 1
@@ -456,6 +632,9 @@ def main(argv: list[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(prog="pcui", description=i18n.t("description"))
     ap.add_argument("--lang", choices=i18n.LANGS, help=i18n.t("lang_help"))
+    # Read by the pre-parser above; declared here so `pcui --env-file X serve` parses.
+    ap.add_argument("--env-file", dest="global_env_file", metavar="PATH",
+                    help=i18n.t("env_file_help"))
     try:
         config_path = Path(selected.env_file).expanduser() if selected.env_file else (
             data_dir() / CONFIG_ENV_NAME)
@@ -467,9 +646,7 @@ def main(argv: list[str] | None = None) -> int:
     serve = sub.add_parser("serve", help=i18n.t("serve_help"))
     serve.add_argument("--port", type=int, default=runtime_config.local_port)
     serve.add_argument("--host", default="127.0.0.1")
-    from .workspace import default_workspace
-    serve.add_argument("--workspace", default=runtime_config.workspace_dir or str(default_workspace()),
-                       help="User workspace folder (default: ./storage; PCUI_WORKSPACE_DIR in pc.env)")
+    serve.add_argument("--workspace", default=None, help=i18n.t("workspace_help"))
     serve.set_defaults(workspace_config=str(config_path))
     # The dev-checkout default for --dist/--projection. It follows the repo layout, not SKILLS_ROOT,
     # which PCUI_SKILLS_ROOT may point outside the checkout entirely.
@@ -520,14 +697,32 @@ def main(argv: list[str] | None = None) -> int:
     doctor = sub.add_parser("doctor", help=i18n.t("doctor_help"))
     doctor.set_defaults(fn=cmd_doctor)
 
+    mcp = sub.add_parser("mcp", help=i18n.t("mcp_help"))
+    mcp.add_argument("--print-config", action="store_true", help=i18n.t("mcp_config_help"))
+    mcp.set_defaults(fn=cmd_mcp)
+
+    open_ = sub.add_parser("open", help=i18n.t("open_help"))
+    open_.add_argument("--session", help=i18n.t("open_session_help"))
+    open_.add_argument("--no-browser", action="store_true", help=i18n.t("no_browser_help"))
+    open_.set_defaults(fn=cmd_open)
+
     session = sub.add_parser("session", help=i18n.t("session_help"))
-    session.add_argument("action", choices=["create", "list", "show"])
+    session.add_argument("action", choices=["create", "list", "show", "use", "wait"])
+    session.add_argument("session_id", nargs="?", help=i18n.t("session_id_help"))
     session.add_argument("--id")
+    session.add_argument("--intent", help=i18n.t("intent_help"))
+    session.add_argument("--format", choices=["single", "double"])
+    session.add_argument("--kind", choices=["build", "rework", "diagnose", "tune"],
+                         help=i18n.t("kind_help"))
+    session.add_argument("--team", help=i18n.t("team_help"))
+    session.add_argument("--team-name", help=i18n.t("team_name_help"))
+    session.add_argument("--for", dest="wait_for", default="decision,intake-answer", help=i18n.t("wait_for_help"))
+    session.add_argument("--timeout", type=float, default=1800, help=i18n.t("wait_timeout_help"))
     session.set_defaults(fn=cmd_session)
 
     artifact = sub.add_parser("artifact", help=i18n.t("artifact_help"))
     artifact.add_argument("action", choices=["get", "put"])
-    artifact.add_argument("--session", required=True)
+    artifact.add_argument("--session", help=i18n.t("artifact_session_help"))
     artifact.add_argument("--kind", required=True)
     artifact.add_argument("--file")
     artifact.set_defaults(fn=cmd_artifact)
@@ -535,6 +730,8 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help=i18n.t("run_help"))
     run.add_argument("op", help=i18n.t("op_help"))
     run.add_argument("--args", help=i18n.t("args_help"))
+    run.add_argument("--out", help=i18n.t("out_help"))
+    run.add_argument("--session", nargs="?", const="", default=None, help=i18n.t("run_session_help"))
     for f in _RUN_FILE_FIELDS:
         run.add_argument(f"--{f.replace('_', '-')}", dest=f,
                          help=i18n.t("file_help", field=f))
@@ -546,7 +743,7 @@ def main(argv: list[str] | None = None) -> int:
             name,
             help=i18n.t("install_help" if name == "install-agent" else "uninstall_help"),
         )
-        p.add_argument("--target", choices=sorted(_AGENT_SKILL_DIRS), default="claude")
+        p.add_argument("--target", choices=TARGETS, default="claude")
         p.add_argument("--dir", help=i18n.t("dir_help"))
         if name == "install-agent":
             p.add_argument("--yes", action="store_true", help=i18n.t("yes_help"))

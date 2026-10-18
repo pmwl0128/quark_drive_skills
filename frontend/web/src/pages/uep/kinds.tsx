@@ -1,29 +1,14 @@
 /** Shared bits of the UEP panel chunk: kind badges + payload pretty-printing. Artifact
  * payloads are agent-authored skill JSON the panel must NOT re-validate (design §4.2 keeps
  * them verbatim) — rendering is best-effort, the raw text is always the fallback. */
-import { UEP_GATE_KINDS, type UepGateKind } from "@pokemon-champions/protocol";
-import { useUepT, optionalUepKey, type UepMsgKey } from "./messages.ts";
+import { UEP_GATE_KINDS } from "@pokemon-champions/protocol";
+import { useKindLabel } from "../../components/session/SessionActivity.tsx";
 
-const KIND_KEYS: Record<UepGateKind, UepMsgKey> = {
-  "intake": "kind.intake",
-  "context": "kind.context",
-  "audit": "kind.audit",
-  "frame": "kind.frame",
-  "slate": "kind.slate",
-  "checkpoint": "kind.checkpoint",
-  "decision": "kind.decision",
-  "draft": "kind.draft",
-  "answer-audit": "kind.answer-audit",
-};
-
-const isGateKind = (kind: string): kind is UepGateKind =>
-  (UEP_GATE_KINDS as readonly string[]).includes(kind);
+const isGateKind = (kind: string) => (UEP_GATE_KINDS as readonly string[]).includes(kind);
 
 export function KindBadge({ kind }: { kind: string }) {
-  const t = useUepT();
-  const extra = optionalUepKey(`kind.${kind}`);
-  const label = isGateKind(kind) ? t(KIND_KEYS[kind]) : extra ? t(extra) : kind;
-  return <span className={`uep-kind uep-kind-${isGateKind(kind) ? kind : "other"}`}>{label}</span>;
+  const label = useKindLabel();
+  return <span className={`uep-kind uep-kind-${isGateKind(kind) ? kind : "other"}`}>{label(kind)}</span>;
 }
 
 /** Pretty-print a payload for DISPLAY only (the stored artifact stays verbatim). */

@@ -11,8 +11,8 @@ import { BOX_SLOTS, LIBRARY_START, LIBRARY_TIERS } from "./records.ts";
 import {
   addManyToBox, addToBox, addToTeam, boxById, deleteBox, closeTeamSlot, duplicateTeam, loadLibrary, moveBoxRecord,
   moveBoxGroup, moveTeam, addBox,
-  openTeamSlots, removeBoxRecord, restoreBoxRecord, saveTeam, setTeamMembers, startTeam,
-  teamDocOf, undoSaveTeam, type SaveTeamResult,
+  openTeamSlots, removeBoxRecord, restoreBoxRecord, reviseTeam, saveTeam, setTeamMembers, startTeam,
+  teamDocOf, undoReviseTeam, undoSaveTeam, updateTeam, type SaveTeamResult,
 } from "./repo.ts";
 
 const mon = (species: string, item: string | null = null): TeamMemberDoc => ({
@@ -40,6 +40,22 @@ afterEach(async () => {
 });
 
 describe("teams and the box", () => {
+  it("refuses a stale revision undo and preserves subsequent edits and slot placement", async () => {
+    const first = saved(await saveTeam(team("double", "Garchomp"), {origin:"manual", name:"original"}));
+    const revised = await reviseTeam(first.record.id, team("double", "Incineroar"), {origin:"session"}, "before");
+    if (revised.status !== "revised") throw new Error(revised.status);
+    await updateTeam(first.record.id, {name:"edited", notes:"keep this"});
+    expect(await undoReviseTeam(revised)).toBe(false);
+    expect((await loadLibrary()).teams.find(t => t.id === first.record.id))
+      .toMatchObject({name:"edited", notes:"keep this"});
+    await moveTeam(first.record.id, 2);
+    await saveTeam(team("double", "Whimsicott"), {origin:"manual"}, {slot:0});
+    expect(await undoReviseTeam(revised)).toBe(false);
+    const state = await loadLibrary();
+    expect(state.broken.teams).toEqual([]);
+    expect(state.teams.find(t => t.id === revised.previous.id)).toBeDefined();
+    expect(state.teams.filter(t => t.format === "double" && t.slot === 0)).toHaveLength(1);
+  });
   it("puts a team's Pokémon in the box, its format's box first, and reuses the same builds", async () => {
     const first = saved(await saveTeam(team("double", "Incineroar", "Rillaboom"), { origin: "manual", name: " Lanes " }));
     expect(first.record).toMatchObject({ name: "Lanes", format: "double", slot: 0 });
@@ -202,6 +218,46 @@ describe("teams and the box", () => {
     expect(state.teams).toHaveLength(1);
     expect(state.broken.teams).toHaveLength(1);
     expect((await exportAll()).teams).toHaveLength(2);
+  });
+});
+
+describe("revising a team from a session", () => {
+  it("gives the team new builds, keeps its old ones as a copy, and can take it back", async () => {
+    const source = saved(await saveTeam(team("double", "Incineroar", "Rillaboom"), { origin: "manual", name: "Lanes" }));
+    const result = await reviseTeam(source.record.id, team("double", "Incineroar", "Amoonguss"),
+      { origin: "session" }, "Lanes (before)");
+    if (result.status !== "revised") throw new Error(result.status);
+    const state = await loadLibrary();
+    const box = boxById(state);
+    const species = (id: string) => teamDocOf(state.teams.find((row) => row.id === id)!, box)?.pokemon.map((m) => m.species);
+    expect(result.record).toMatchObject({ id: source.record.id, slot: 0, name: "Lanes", origin: "session" });
+    expect(species(source.record.id)).toEqual(["Incineroar", "Amoonguss"]);
+    expect(result.previous).toMatchObject({ slot: 1, name: "Lanes (before)" });
+    expect(species(result.previous.id)).toEqual(["Incineroar", "Rillaboom"]);
+    expect(result.added).toHaveLength(1);                 // the shared Incineroar is reused
+
+    expect((await reviseTeam(source.record.id, team("double", "Incineroar", "Amoonguss"), { origin: "session" }, "x")).status)
+      .toBe("unchanged");
+    expect((await reviseTeam(source.record.id, team("single", "Garchomp"), { origin: "session" }, "x")).status)
+      .toBe("format");
+    expect((await reviseTeam(source.record.id, { format: "double", pokemon: [{}] } as never, { origin: "session" }, "x")).status)
+      .toBe("invalid");
+
+    await undoReviseTeam(result);
+    const after = await loadLibrary();
+    expect(after.teams.map((row) => row.id)).toEqual([source.record.id]);
+    expect(teamDocOf(after.teams[0]!, boxById(after))?.pokemon.map((m) => m.species)).toEqual(["Incineroar", "Rillaboom"]);
+    expect(after.box).toHaveLength(2);
+  });
+
+  it("changes nothing when there is no free slot for the old version", async () => {
+    for (let slot = 0; slot < LIBRARY_START.teamSlots; slot++) {
+      saved(await saveTeam(team("single", `Garchomp`, slot % 2 ? "Salamence" : "Dragonite"), { origin: "manual" },
+        { slot, allowDuplicate: true }));
+    }
+    const first = (await loadLibrary()).teams[0]!;
+    expect((await reviseTeam(first.id, team("single", "Kingambit"), { origin: "session" }, "old")).status).toBe("full");
+    expect((await loadLibrary()).box.map((record) => record.member.species)).not.toContain("Kingambit");
   });
 });
 

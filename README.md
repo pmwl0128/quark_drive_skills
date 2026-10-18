@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <b>Metagame snapshot</b> · M-7 / M-C · updated <b>2026-10-16</b>
+  <b>Metagame snapshot</b> · M-7 / M-C · updated <b>2026-10-18</b>
 </p>
 
 <p align="center">
@@ -269,12 +269,13 @@ follows the instructions in `AGENTS.md` / `CLAUDE.md` under "Local Visual Interf
 
 | Capability | Online | Local bundle |
 |---|---|---|
-| Singles/Doubles rankings, details, KO panels, and separate usage/KO histories | Yes | Yes |
+| Singles/Doubles rankings, details, KO panels, separate usage/KO histories, and Top Meta counts from real teams compared with official data | Yes | Yes |
 | Pokémon, move, item, and ability dex with zh/en/ja search | Yes | Yes |
 | Batch damage, rolls, KO ranges, and Speed lines | In-browser | In-browser |
 | Calculator search/filter drawer with observed builds, Meta fallback, and a blank Custom option | Yes | Yes |
 | Standard-set matrix and actual-team KO/CHECK grid | Yes | Yes |
 | Quick survival calculation | Yes | Yes |
+| My teams, Pokémon Box, and calculation history | Saved in this browser | Saved in the local workspace folder |
 | Exact `team.tune` cliff analysis | Enabled features and service workload limits | Yes |
 | One-shot Q&A, simplified builder, diagnosis, optional AI explanation | Enabled AI features and daily limits | Replaced by the complete local-agent workflow |
 | UEP session/artifact panel | Not supported | Yes, for collaboration with a local AI assistant already working on the task |
@@ -336,7 +337,17 @@ chmod +x start-local.sh
 
 Open the complete one-time `http://127.0.0.1:<port>/#bootstrap=...` URL printed by the launcher. The
 service listens on loopback by default. Set `PCUI_LOCAL_PORT` in
-`~/.pokemon-champions/pc.env` to change the default port.
+`~/.pokemon-champions/pc.env` to change the default port. Each sign-in link works once: for another
+browser, or after a restarted service disconnects an open page, run `python bridge/pcui open` in the
+unpacked folder for a fresh link without restarting.
+
+To let an AI assistant work on sessions created in the local UI, run `python bridge/pcui install-agent`
+once (add `--target codex` for Codex). The local home page's Get started card shows the exact command
+for your machine. Then send the handoff instruction from a session page to the assistant; its progress
+appears in the page as it works. Answer its questions and checkpoint decisions right on the session
+page; a waiting assistant picks them up and continues on its own. Assistants with MCP support can
+connect through `python bridge/pcui mcp` instead; `python bridge/pcui mcp --print-config` prints the
+registration for Claude Code and Codex.
 
 ### Build from source
 
@@ -357,13 +368,17 @@ On Linux/macOS use `frontend/build-ui.sh` and `frontend/start-ui.sh` after makin
 
 ### Privacy and updates
 
-- Local mode listens on `127.0.0.1`, stores session/artifact state under
-  `~/.pokemon-champions/`, and needs no hosted-model key for normal data and calculation tools.
+- Local mode listens on `127.0.0.1` and needs no hosted-model key for normal data and calculation tools.
+  Teams, Pokémon, results and AI sessions live in a workspace folder: `~/.pokemon-champions/workspace` for
+  the prebuilt bundle, `storage` under the launch directory for a source checkout. Change or move it on the
+  Storage page; to back it up, stop the local service and copy the whole folder.
 - Online Q&A, builder, diagnosis, actual-team matchup, or AI explanation sends the corresponding input
   to the online service. Keep private rosters and review notes in the local bundle if they should not be
   submitted.
 - To update the prebuilt edition, download the complete rolling zip into a new directory and verify it
-  before removing the previous copy. For a source checkout, pull and rerun the platform build/start
+  before removing the previous copy. The workspace is outside the unpacked folder, so removing the old
+  copy keeps your data; if you ever placed the workspace inside an old copy, move it on the Storage page
+  first. For a source checkout, pull and rerun the platform build/start
   scripts; do not overwrite only selected generated subdirectories.
 
 ## Installation
@@ -558,9 +573,9 @@ The release contains transformed, validated query data and scrubbed facts-only p
 
 | Source | Use |
 |---|---|
-| [Silph Scope](https://silph-scope.com/) | Primary metagame source: rankings, move/item/ability/nature/SP/partner details, and the KO relation lists (who knocks out whom) |
-| [GameWith](https://gamewith.jp/) Pokémon Champions | Independent metagame feed and cross-check |
-| [PokeChamp DB](https://pokechamdb.com/) | Independent metagame feed and cross-check |
+| [Silph Scope](https://silph-scope.com/) | Primary metagame source: rankings, move/item/ability/nature/SP/partner details, the KO relation lists (who knocks out whom), and KO move shares for both formats |
+| [GameWith](https://gamewith.jp/) Pokémon Champions | Fallback metagame feed and cross-check |
+| [PokeChamp DB](https://pokechamdb.com/) | Fallback metagame feed and cross-check |
 | [MetaRoll](https://metaroll.app/ladder) | Fallback source for doubles KO move shares. Usage data from MetaRoll (metaroll.app) |
 
 ### Battle Dex and Names
@@ -587,6 +602,7 @@ The release contains transformed, validated query data and scrubbed facts-only p
 | [GameWith](https://gamewith.jp/) / [Game8](https://game8.jp/) | Singles | Top-build facts from completed seasons |
 | [POCH](https://poch.ms/en) | Singles | Public team index and reviewed in-game export images |
 | [Limitless TCG](https://play.limitlesstcg.com/) | Doubles | Online event teams, records, and placings |
+| [Nimbasa City Post](https://www.nimbasacitypost.com/) | Doubles | Mirrored open team lists from official championship events |
 | [VGCPastes / Pokepaste](https://pokepast.es/) | Doubles | Community-curated complete teams and SP |
 
 Thank you to the projects, sites, tournament organizers, and community contributors who make these data and tools available. Rankings, records, and published teams are used as factual evidence only and do not imply a strength endorsement by this project.
@@ -597,7 +613,6 @@ Special thanks to [PokeChamp DB](https://pokechamdb.com/) for its strong support
 
 - **Workflow speed and compatibility:** reduce redundant tool calls and measure whether supported agents complete the required team workflow.
 - **Turn-simulation research:** investigate multi-turn behavior in a separate experimental pipeline. The released skills and Web continue to use their documented damage, Speed, and matchup calculations.
-- **Local MCP integration:** explore protocol access to the local bridge's existing skills, sessions, and artifacts.
 - **Online capacity:** improve delivery and response latency, and adjust service limits using observed workload.
 
 ## License

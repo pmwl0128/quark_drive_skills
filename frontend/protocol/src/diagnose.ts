@@ -163,3 +163,8 @@ export const DiagnoseReportDtoSchema = z.object({
   explanationError: z.string().optional(),
 });
 export type DiagnoseReportDto = z.infer<typeof DiagnoseReportDtoSchema>;
+
+/** The report's facts without the online call's allowance: what a local session's diagnosis
+ * (GET /api/sessions/{id}/diagnose) renders through the same report view. */
+export const DiagnoseFactsDtoSchema = DiagnoseReportDtoSchema.omit({ quota: true });
+export type DiagnoseFactsDto = z.infer<typeof DiagnoseFactsDtoSchema>;

@@ -24,6 +24,23 @@ export const LedgerEntryDtoSchema = z.object({
 });
 export type LedgerEntryDto = z.infer<typeof LedgerEntryDtoSchema>;
 
+/** What the daemon sees live and never stores: an operator it is running for the assistant
+ * (`pcui run --session`), kept a while after a failure so the reader sees it. */
+export const SessionActivityDtoSchema = z.object({
+  op: z.string().min(1),
+  state: z.enum(["running", "failed"]),
+  startedAt: z.string().min(1),
+});
+export type SessionActivityDto = z.infer<typeof SessionActivityDtoSchema>;
+
+/** An assistant blocked in `pcui session wait` for these panel artifact kinds; it counts as
+ * present until `until`, which each poll pushes forward. */
+export const SessionWaitingDtoSchema = z.object({
+  kinds: z.array(z.string().min(1)),
+  until: z.string().min(1),
+});
+export type SessionWaitingDto = z.infer<typeof SessionWaitingDtoSchema>;
+
 /** Session row: current state = heads (kind -> artifact hash) + revision, updated together
  * under the store's single-row optimistic lock. */
 export const SessionDtoSchema = z.object({
@@ -33,10 +50,29 @@ export const SessionDtoSchema = z.object({
   heads: z.record(z.string(), z.string()),
   meta: z.record(z.string(), z.unknown()),
   /** Evidence-derived summary; optional for compatibility with older local bridges. */
-  state: z.enum(["idle", "progress", "awaiting", "needs_changes", "review", "done"]).optional(),
+  state: z.enum(["idle", "progress", "awaiting", "questions", "needs_changes", "review", "done"]).optional(),
   updatedAt: z.string().min(1).optional(),
+  /** Kind of the newest ledger entry: who moved last (the panel's `decision`, or the agent). */
+  lastKind: z.string().min(1).optional(),
+  /** The reader's own bookkeeping, outside the ledger. */
+  title: z.string().min(1).optional(),
+  archived: z.boolean().optional(),
+  activity: SessionActivityDtoSchema.optional(),
+  waiting: SessionWaitingDtoSchema.optional(),
+  /** Sequence of the newest panel answer an assistant has collected through `pcui session wait`:
+   * the panel then says it was handed over instead of asking the reader to hand it over. */
+  pickedUp: z.number().int().nonnegative().optional(),
 });
 export type SessionDto = z.infer<typeof SessionDtoSchema>;
+
+/** Bounded Console home cards plus exact counts; full attached teams are sent for at most four. */
+export const SessionOverviewDtoSchema = z.object({
+  sessions: z.array(SessionDtoSchema).max(4),
+  totalCount: z.number().int().nonnegative(),
+  attentionCount: z.number().int().nonnegative(),
+  relatedCount: z.number().int().nonnegative(),
+});
+export type SessionOverviewDto = z.infer<typeof SessionOverviewDtoSchema>;
 
 /** GET /api/sessions/{id} — the session plus its full ledger. */
 export const SessionWithLedgerDtoSchema = SessionDtoSchema.extend({
@@ -68,3 +104,55 @@ export const CheckpointDecisionDtoSchema = z.object({
   message: "chooseCandidate requires candidateIndex",
 });
 export type CheckpointDecisionDto = z.infer<typeof CheckpointDecisionDtoSchema>;
+
+/** Named SSE events `session` (created, retitled, archived or deleted) and `activity` (an operator
+ * run or an assistant's wait began or ended): readers re-read; neither carries state itself. */
+export const SessionEventDtoSchema = z.object({
+  sessionId: z.string().min(1),
+  change: z.enum(["created", "updated", "deleted"]).optional(),
+});
+export type SessionEventDto = z.infer<typeof SessionEventDtoSchema>;
+
+export const SessionTitleRequestDtoSchema = z.object({ title: z.string().max(200).nullable() });
+export const SessionArchiveRequestDtoSchema = z.object({ archived: z.boolean() });
+
+/** GET /api/sessions/{id}/wait — the reader's next panel artifact, or a timeout to poll again. */
+export const SessionWaitResultDtoSchema = z.object({
+  status: z.enum(["ready", "timeout"]),
+  sequence: z.number().int().nonnegative().optional(),
+  kind: z.string().min(1).optional(),
+  artifactHash: z.string().min(1).optional(),
+  createdAt: z.string().min(1).optional(),
+});
+
+/** The reader's answers to an intake batch, written by the panel (kind="intake-answer"). The
+ * assistant applies each chosen option's `maps_to` exactly as for an answer given in conversation;
+ * a free-text answer is echoed back before it is committed, as the intake notes require. */
+export const IntakeAnswerDtoSchema = z.object({
+  gate: z.literal("intake"),
+  group: z.string().optional(),
+  answers: z.array(z.object({
+    id: z.string().min(1),
+    option: z.string().min(1).optional(),
+    text: z.string().max(2000).optional(),
+    skipped: z.boolean().optional(),
+  })).min(1),
+  note: z.string().max(2000).optional(),
+  answeredAt: z.string().min(1),
+});
+export type IntakeAnswerDto = z.infer<typeof IntakeAnswerDtoSchema>;
+
+/** GET /api/console — the local Console's setup card: whether an assistant can work on its
+ * sessions (the companion skill, judged against what `install-agent` would write now) and
+ * whether the static pages were built from the skill data being served. */
+export const CompanionStatusDtoSchema = z.object({
+  target: z.enum(["claude", "codex"]),
+  status: z.enum(["installed", "outdated", "missing"]),
+});
+export const ConsoleStatusDtoSchema = z.object({
+  /** A pcui invocation that works from any directory on this machine. */
+  pcuiCommand: z.string().min(1),
+  companion: z.array(CompanionStatusDtoSchema),
+  projectionStale: z.boolean(),
+});
+export type ConsoleStatusDto = z.infer<typeof ConsoleStatusDtoSchema>;

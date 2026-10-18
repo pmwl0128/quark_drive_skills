@@ -60,7 +60,7 @@ capability 注入能力（预留名 `mobile.teamcode`、`mobile.capture`、`mobi
 
 资料 repository 共用记录结构和业务规则，由 adapter 选择存储。在线版使用浏览器 IndexedDB，公开服务不保存用户资料和历史。本地版经已认证的 bridge 保存到用户工作区文件夹，不向在线服务上传。
 
-本地工作区默认是启动命令工作目录下的 `storage`；`pcui serve --workspace <目录>` 可指定位置，前端存储页可直接打开目录，或把当前资料复制到空目录后切换。所选绝对路径保存在统一的 `~/.pokemon-champions/pc.env` 的 `PCUI_WORKSPACE_DIR`。`library.json` 保存队伍、宝可梦和布局，`records.json` 保存历史结果，`sessions.db` 保存 AI 会话与工件。原目录与旧浏览器资料均保留；首次启动将旧的用户级会话库复制到工作区，浏览器资料由用户在前端迁移到空资料库。
+本地工作区默认是启动命令工作目录下的 `storage`；预构建包会随更新整体替换，其启动脚本经 `PCUI_DEFAULT_WORKSPACE` 把默认位置放到解压目录之外的 `~/.pokemon-champions/workspace`。`pcui serve --workspace <目录>` 可指定位置，前端存储页可直接打开目录，或把当前资料复制到空目录后切换；算子仍在运行时拒绝切换，完成后可重试。所选绝对路径保存在统一的 `~/.pokemon-champions/pc.env` 的 `PCUI_WORKSPACE_DIR`；记住的目录不存在时 bridge 拒绝启动（CLI 直写同样拒绝），不静默新建空资料库，只有显式 `--workspace` 才在该处重新创建。`library.json` 保存队伍、宝可梦和布局，`records.json` 保存历史结果，`sessions.db` 保存 AI 会话与工件。原目录与旧浏览器资料均保留；首次启动将旧的用户级会话库复制到工作区，浏览器资料由用户在前端迁移到空资料库。
 
 存储位置在同一行显示和修改：路径右侧的文件夹按钮调用本机系统目录选择器，初始位置固定为启动时打开的项目根目录，不随存储目录切换。空目标目录自动复制当前资料并切换；已有资料时需显式选择打开，避免覆盖。原生选择器在独立进程运行，不阻塞 bridge 事件循环或跨线程共享会话连接。
 
@@ -161,7 +161,10 @@ JSON 以临时文件加原子替换落盘，资料库写入以 revision 做比�
 
 `/` 按运行时选择首页，保持同一份 SPA 构建；两端的旧排名查询链接都重定向到 `/ranking`。在线首页使用 `HomePage` 与 `pages/home/`，按 capability 显示诊断、简化组队和问答。以下开屏、示例和插画约定适用于在线首页。
 
-本地 `LocalHomePage` 是独立工作台：当前资料库队伍、待决策优先的最近会话、新任务和确定性工具为主，近期队伍与环境入口为辅。复用资料库、名称/图片、控件和工具交接，不请求在线模型服务；请求创建前保留草稿，选择的队伍以配置快照附入会话。页面读取有界会话摘要并由 SSE 触发重读；数据块独立加载，失败不阻挡其他入口。详情与列表共享服务端状态投影。
+本地 `LocalHomePage` 是独立工作台：当前资料库队伍、待决策优先的最近会话、新任务和确定性工具为主，近期队伍与环境入口为辅。复用资料库、名称/图片、控件和工具交接，不请求在线模型服务；请求创建前保留草稿，选择的队伍以配置快照附入会话。页面读取至多四张会话卡与待处理、当前队伍相关会话的完整计数，并由 SSE 触发重读；服务端计数不加载全部会话附带的队伍快照。数据块独立加载，失败不阻挡其他入口。详情与列表共享服务端状态投影。
+
+- 待你决策或复核未通过的会话置顶。上手清单（导入队伍、连接 AI 助手、创建第一个任务）只在仍有未完成项时出现，助手一项以 bridge 报告的 companion 安装状态为准；静态 projection 与正在服务的 skill 数据不一致时单独提示。最近计算列出工作区运行记录中的实际对位结果，工作区路径与备份方式在页底。
+- 视觉沿用在线首页的语言但不做展示：开屏为紧凑的浅色 stage（品牌色晕染、细网格、展示字体品牌名与「本地工作台」胶囊标签），区块标题用与在线一致的「小标记 + 标题 + 细线」，没有插画、入场动画或循环动效。会话列表与会话页共用同一套面板、标记和 stage token。
 
 - 首屏只依赖握手：不发数据请求、不放 sprite（任何 `GameImage` 都会先拉图片索引）。环境速览位于首屏以下、接近视口时懒加载，以文本为主、各赛制列前十，失败只影响自身。首页在入口 chunk 中，其文案留在入口词表。
 - 任务区的面板叠放在同一格、按最高者定高，切换标签不移动页面；草稿保留在本次浏览器会话。交接只预填目标页、不代为提交：诊断交文本与赛制；组队交赛制、打法、核心与倾向战术（首页只列天气、顺风、戏法空间、强化，完整列表在向导）；问答只预填问题。首页问答示例与问答页共用同一组。
@@ -202,15 +205,15 @@ SQLite 是会话事实源。artifact 按 `kind + canonical payload` 内容寻址
 
 ### 4.3 本地安全边界
 
-bridge 默认只监听 loopback。浏览器用 URL fragment 中的一次性 bootstrap token 换取 HttpOnly、SameSite=Strict cookie；CLI 使用用户私有 daemon secret。服务端校验 Host、Origin、体积和时限。目录选择仅用于已认证的工作区切换，其余任意路径、命令与跨域调用均被拒绝。
+bridge 默认只监听 loopback。浏览器用 URL fragment 中的一次性 bootstrap token 换取 HttpOnly、SameSite=Strict cookie；CLI 使用用户私有 daemon secret。`pcui open` 凭 CLI secret 向 daemon 申请新的一次性 token（数分钟内未用即失效，浏览器 cookie 无权申请），用于第二个窗口、会话直达链接和 bridge 重启后的重新登录；cookie 仍只在单个进程内有效。服务端校验 Host、Origin、体积和时限。目录选择仅用于已认证的工作区切换，其余任意路径、命令与跨域调用均被拒绝。
 
 开放 LAN 必须显式指定 host 并确认风险；这不是多用户安全部署。
 
 ## §5 agent 集成
 
-`pcui` CLI 是本地协作的权威入口，提供 session/artifact 操作、白名单算子、环境诊断和 companion skill 安装。companion 只说明如何按 UEP 读写工件，必须显式安装，不能由 Web 或 pipx 偷偷注入 agent。
+`pcui` CLI 是本地协作的权威入口，提供 session/artifact 操作、白名单算子、环境诊断、登录链接和 companion skill 安装。companion 只说明如何按 UEP 读写工件，必须显式安装，不能由 Web 或 pipx 偷偷注入 agent；命令绑定当前解释器或已安装的 pcui 可执行文件，可在任意工作目录执行，`doctor` 与 Console 按「与当前安装模板逐字一致」判断已安装或需更新。agent 每条命令显式传 session id；`session use` 只供人手动操作，其共享快捷选择按工作区限定，`PCUI_SESSION` 是显式的 shell 覆盖。大体量输出用 `run --out` 保存可供后续 gate 直接读取的完整结果正文，终端保留退出码与工件摘要。`run <op> --session <S>` 在运行开始时绑定 revision，并在同一事务中提交输入与 gate 输出；冲突时拒绝提交，不自动合并。同一会话同时只接受一次算子调用。连续相同 gate 的重复调用不增加 ledger，新的草稿或回答之后再次应用相同工件仍记录新顺序。`session wait <S>` 长轮询面板的 decision / intake-answer，读者作答后 agent 自动继续，超时退出码 3。
 
-MCP 若启用，只是同一 API 的薄适配，不形成第二套会话协议。artifact append 必须提交 revision 并原样返回 CAS 冲突；适配层不得自动合并。首选本地 stdio，远程传输不与首版同时引入。
+`pcui mcp` 是同一 API 的薄适配，不形成第二套会话协议：stdio 上逐行 JSON-RPC，每次调用都转给正在运行的 daemon（重启后按 daemon.json 重新找到），自身不持会话事实。输入接收不等待工具执行，工具调用有界并发；坏参数或文件保存失败只影响该次调用，执行失败不伪装成成功。等待读者采用短轮询，可取消；取消已发出的算子调用会停止交付该次 MCP 响应，daemon 中已开始的计算及工件提交仍可能完成，应重读会话确认。工具与 CLI 一一对应（会话列表/详情/新建、读写工件、运行算子、等待读者作答、签发登录链接）；artifact append 必须提交 revision 并原样返回 CAS 冲突，适配层不得自动合并。实现不依赖 MCP SDK，以免发行包新增运行时依赖。注册由用户自行完成（`pcui mcp --print-config` 打印 Claude Code 与 Codex 的写法及显式工具超时），不由 Web 或 bridge 写入任何 agent 配置；远程传输不引入。
 
 ## §6 本地 UEP 会话面板
 
@@ -220,13 +223,20 @@ MCP 若启用，只是同一 API 的薄适配，不形成第二套会话协议�
 |---|---|
 | audit / frame / slate / answer-audit | 渲染 agent 写入的事实、候选和审计结果 |
 | checkpoint | 以当前 revision 写 decision；冲突后重读并重新确认 |
-| validate / diagnose / matchup / select / tune | 直接运行确定性工具 |
+| intake | 把 agent 当前的问题批次渲染为表单，以当前 revision 写 intake-answer |
+| matchup / tune | 交给计算页直接运行确定性工具；本地诊断由 agent 在会话中完成 |
 
 面板不重写或强校验 agent artifact；已知形状尽力摘要，不匹配则显示原文。SSE 只通知，事实仍从 SQLite/session API 重读。本地页面位于 capability 门控的动态 chunk，在线端不得请求。
 
+每个标签页只开一条事件流，由外壳保持，任何页面都能察觉断线：未命名消息是 artifact 追加，`session` 是会话新建、改名、归档或删除，`activity` 是算子运行或 agent 等待的开始与结束，`hello` 与每 15 秒的 `ping` 证明连接仍活；超过约 40 秒无消息即视为断开。断开后用有超时的健康探测区分 401（bridge 已重启、此页 cookie 失效，全站提示运行 `pcui open`）与无响应（服务停止），两者都持续重试；连接代际保护使前台切换和旧探测结果不能额外开启事件流。重新连上后发出 `resync`，各读者重读而不信任旧副本。
+
 快速计算是无会话工具；复杂调校和自然语言目标写入会话，由 agent 转成 benchmarks。agent-authored artifact 必须按不可信输入处理，renderer 宽容解析但不能执行内容。
 
-新建会话保留自然语言意图，并可附赛制、任务倾向、队伍配置与环境快照；这些是 intake 输入，不代替 agent 的名称归一和 UEP。旧的仅意图会话继续有效。交接说明绑定具体 session id，网页不启动 agent。状态由当前 artifact、pass 值与 ledger 顺序派生；空会话为待交接，收到产物不证明 agent 正在运行，新草稿或决策会使旧复核失效。摘要只读取当前状态所需的 artifact，不改写其原始字节。
+新建会话保留自然语言意图，并可附赛制、任务倾向、队伍配置与环境快照；这些是 intake 输入，不代替 agent 的名称归一和 UEP。首页与会话列表使用同一个新建表单，CLI 的 `session create` 写入同形状 meta，供对话先行时由 agent 建会话并给出直达链接。旧的仅意图会话继续有效。交接说明绑定具体 session id 并随状态变化（开始、面板决策后继续、复核未通过后修改、助手停下后接着做；待决策与复核通过时不显示），网页不启动 agent。会话摘要带最新 ledger 条目的 kind，用来区分「面板刚写入决策」与「agent 刚提交产物」。
+
+agent 尚未越过、读者也未在面板作答的 intake 批次使会话进入「待你回答」，与待决策、复核未通过同列为需要读者处理。daemon 另外报告它亲眼所见、不入 ledger 的实时状态：正在为该会话运行的算子（未产出结果的失败保留十分钟）、正在 `session wait` 的 agent（每次轮询续期，超时即消失），以及已被等待中的 agent 取走的最新面板作答序号。前两者让页面可以说「正在运行」「正在等你」，后者让交接卡改为「助手已收到」而不再要求读者转交；进程重启后这些状态清空，不影响 ledger 推导的状态。
+
+标题与归档是读者自己的记录，存在独立表中，不改 ledger、不改 revision，因此不会打断 agent 或面板的 CAS。删除移除会话、其 ledger 及不再被其他会话引用的工件。新建表单附带资料库队伍时一并记录 `meta.teamRef`，首页当前队伍据此链接到相关会话；会话结果可以写回这支队伍：队伍换上结果配置，原配置先复制到同赛制的空队伍位（「修改前」），没有空位或箱子空间不足时什么都不改。撤销只在当前记录与本次写回版本仍一致时执行，不能覆盖后续编辑或占用其他队伍的槽位；冲突时保留修改前版本。诊断类会话按 ledger 将 `diagnose` 配对到它之前最近的 `team`，不能与之后手动写入的 team 混用；旧会话可回退到 `meta.team`，报告缓存有界且包含实际队伍身份。bridge 合成与在线诊断页同一份报告，合法性在读取时按当前规则校验。状态由当前 artifact、pass 值与 ledger 顺序派生；空会话为待交接，收到产物不证明 agent 正在运行，新草稿、决策、问题或回答会使旧复核失效。摘要只读取当前状态所需的 artifact，不改写其原始字节。
 
 ## §7 在线版
 
@@ -541,7 +551,6 @@ resolver 返回 `exact`、`base_fallback` 或 `placeholder`。形态页不得把
 
 - 验证码只能在预算和端点防护完整后作为超额附加门。
 - session store 继续使用整会话 revision CAS；只有 artifact 依赖形成可验证契约后才评估细粒度合并。
-- MCP 等稳定 SDK，且必须直接复用 OpenAPI/protocol、鉴权、CAS 和事件语义。
 - team 常驻 worker 只有在固定基准证明冷启动是主要瓶颈、skill 先定义正式 `serve` 契约，并完成请求状态、数据代际、池宽与内存审计后才准入；builder 不能以自身长延迟作为理由。
 - 队伍/诊断中的计算器 hand-off 必须携带可复算 team、move、conditions 和 evidence；前端只预填，不将摘要升级为精确结论。
 - 拆分 Web 仓库须先满足 §11 的单向依赖与跨仓契约门。

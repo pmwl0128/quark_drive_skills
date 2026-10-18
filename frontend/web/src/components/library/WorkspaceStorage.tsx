@@ -20,7 +20,7 @@ export function WorkspaceStorage() {
     const code = error instanceof HttpError ? error.code : "";
     if (code === "workspace_changed" || code === "library_conflict") return t("conflict");
     if (code === "target_not_empty" || code === "workspace_in_use" || code === "absolute_path_required" || code === "workspace_file_unreadable") return t(code);
-    if (code === "folder_picker_unavailable" || code === "folder_picker_busy") return t(code);
+    if (code === "folder_picker_unavailable" || code === "folder_picker_busy" || code === "workspace_busy") return t(code);
     return t("error");
   };
   const change = async (path: string, migrate: boolean) => {

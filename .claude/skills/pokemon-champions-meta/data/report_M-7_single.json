@@ -2,7 +2,7 @@
   "season": "M-7",
   "rule": "M-C",
   "format": "single",
-  "generated_at": "2026-10-16T01:30:58+00:00",
+  "generated_at": "2026-10-18T10:00:52+00:00",
   "thresholds": {
     "tiers": [
       {
@@ -50,31 +50,14 @@
   },
   "baseline": {
     "kind": "git-HEAD",
-    "ranking_updated_at": "2026-10-14T03:30:51+00:00",
-    "details_updated_at": "2026-10-14T03:30:51+00:00"
-  },
-  "current": {
     "ranking_updated_at": "2026-10-16T01:30:58+00:00",
     "details_updated_at": "2026-10-16T01:30:58+00:00"
   },
-  "rank_moves": [
-    {
-      "slug": "golisopod",
-      "name": "具甲武者",
-      "old": 8,
-      "new": 5,
-      "delta": 3,
-      "tier": "S"
-    },
-    {
-      "slug": "archaludon",
-      "name": "铝钢桥龙",
-      "old": 5,
-      "new": 8,
-      "delta": -3,
-      "tier": "S"
-    }
-  ],
+  "current": {
+    "ranking_updated_at": "2026-10-18T10:00:52+00:00",
+    "details_updated_at": "2026-10-18T10:00:52+00:00"
+  },
+  "rank_moves": [],
   "new_entries": [],
   "dropped": [],
   "config_changes": []

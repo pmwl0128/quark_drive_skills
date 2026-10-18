@@ -3,8 +3,8 @@
   "$id": "urn:pokemon-champions:protocol:0.1.0",
   "title": "Quark Drive Web Protocol",
   "description": "Generated from @pokemon-champions/protocol Zod schemas; do not edit by hand.",
-  "x-schema-count": 129,
-  "x-export-fingerprint": "e793dcbaa6a2072213acb882b840c01c6127c4368200ba17c32eaf41f6f4a676",
+  "x-schema-count": 140,
+  "x-export-fingerprint": "0cb108b865ce35d83d1c12a374821340c59601ef4deb683d5119394b6c10cdee",
   "$defs": {
     "AbilityDtoSchema": {
       "type": "object",
@@ -4193,6 +4193,77 @@
         }
       }
     },
+    "CompanionStatusDtoSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "installed",
+            "outdated",
+            "missing"
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "ConsoleStatusDtoSchema": {
+      "type": "object",
+      "properties": {
+        "pcuiCommand": {
+          "type": "string",
+          "minLength": 1
+        },
+        "companion": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "enum": [
+                  "claude",
+                  "codex"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "installed",
+                  "outdated",
+                  "missing"
+                ]
+              }
+            },
+            "required": [
+              "target",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "projectionStale": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "pcuiCommand",
+        "companion",
+        "projectionStale"
+      ],
+      "additionalProperties": false
+    },
     "DailyQuotaDtoSchema": {
       "type": "object",
       "properties": {
@@ -5343,6 +5414,949 @@
       ],
       "additionalProperties": false
     },
+    "DiagnoseFactsDtoSchema": {
+      "type": "object",
+      "properties": {
+        "team": {},
+        "legality": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "minLength": 1
+            },
+            "confidence": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "issues": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "error",
+                      "warning",
+                      "skipped"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "params": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "severity",
+                  "code",
+                  "params"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "status",
+            "errors",
+            "warnings",
+            "issues"
+          ],
+          "additionalProperties": false
+        },
+        "defense": {
+          "type": "object",
+          "properties": {
+            "byAttackType": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "weak": {
+                    "$ref": "#/$defs/DiagnoseFactsDtoSchema/$defs/__schema0"
+                  },
+                  "resist": {
+                    "$ref": "#/$defs/DiagnoseFactsDtoSchema/$defs/__schema0"
+                  },
+                  "immune": {
+                    "$ref": "#/$defs/DiagnoseFactsDtoSchema/$defs/__schema0"
+                  },
+                  "neutralCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "type",
+                  "weak",
+                  "resist",
+                  "immune",
+                  "neutralCount"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "byAttackType"
+          ],
+          "additionalProperties": false
+        },
+        "offense": {
+          "type": "object",
+          "properties": {
+            "hardGaps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "stabTypes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "otherTypes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "gapsConfirmed": {
+              "default": true,
+              "type": "boolean"
+            },
+            "incompleteMembers": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "species": {
+                    "type": "string"
+                  },
+                  "completeness": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "species",
+                  "completeness"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "hardGaps",
+            "stabTypes",
+            "otherTypes",
+            "gapsConfirmed",
+            "incompleteMembers"
+          ],
+          "additionalProperties": false
+        },
+        "speed": {
+          "type": "object",
+          "properties": {
+            "order": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "species": {
+                    "type": "string"
+                  },
+                  "speed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "species"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "orderUnderTrickRoom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "species": {
+                    "type": "string"
+                  },
+                  "speed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "species"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "species": {
+                    "type": "string"
+                  },
+                  "baseSpeed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "speed": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "speSp": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nature": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "assumedNeutral": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "species"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "order",
+            "orderUnderTrickRoom",
+            "members"
+          ],
+          "additionalProperties": false
+        },
+        "roles": {
+          "type": "object",
+          "properties": {
+            "coverage": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "present": {
+                    "type": "boolean"
+                  },
+                  "expectation": {
+                    "type": "string",
+                    "enum": [
+                      "priority",
+                      "situational"
+                    ]
+                  },
+                  "expectationReason": {
+                    "type": "string"
+                  },
+                  "bearers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "species": {
+                          "type": "string"
+                        },
+                        "via": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "species"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "key",
+                  "label",
+                  "present",
+                  "bearers"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "species": {
+                    "type": "string"
+                  },
+                  "signals": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "species",
+                  "signals"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "coverageConfirmed": {
+              "default": true,
+              "type": "boolean"
+            },
+            "incompleteMembers": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "species": {
+                    "type": "string"
+                  },
+                  "completeness": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "species",
+                  "completeness"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "attentionCalibration": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "reviewed",
+                    "carried_over",
+                    "unreviewed"
+                  ]
+                },
+                "measuredOn": {
+                  "type": "string"
+                },
+                "expiresAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rule",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "coverage",
+            "members",
+            "coverageConfirmed",
+            "incompleteMembers"
+          ],
+          "additionalProperties": false
+        },
+        "checks": {
+          "type": "object",
+          "properties": {
+            "topK": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "confidence": {
+              "type": "string"
+            },
+            "byOpponent": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "opponent": {
+                    "type": "string"
+                  },
+                  "usageRank": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "observedFloor": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "witnessVariantIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "floorBy": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "representativeGrade": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "representedCoverage": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "calculationComplete": {
+                    "type": "boolean"
+                  },
+                  "cells": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "member": {
+                          "type": "string"
+                        },
+                        "variantId": {
+                          "type": "string"
+                        },
+                        "coverage": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "offense": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DiagnoseFactsDtoSchema/$defs/__schema1"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "incoming": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/$defs/DiagnoseFactsDtoSchema/$defs/__schema1"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "speed": {
+                          "type": "object",
+                          "properties": {
+                            "member": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "opponent": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "faster": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "check": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "grade": {
+                                  "type": "string",
+                                  "enum": [
+                                    "C2",
+                                    "C1",
+                                    "C0"
+                                  ]
+                                },
+                                "c1Mode": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "c0Kind": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "loss",
+                                        "wall_no_ko"
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "resolvability": {
+                                  "type": "string",
+                                  "enum": [
+                                    "clean",
+                                    "contested"
+                                  ]
+                                },
+                                "caveatDetails": {
+                                  "default": [],
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "code": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "params": {
+                                        "type": "object",
+                                        "propertyNames": {
+                                          "type": "string"
+                                        },
+                                        "additionalProperties": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "code",
+                                      "params"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "caveats": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "grade",
+                                "c1Mode",
+                                "c0Kind",
+                                "resolvability",
+                                "caveatDetails",
+                                "caveats"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "member",
+                        "variantId",
+                        "speed"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "opponent",
+                  "witnessVariantIds",
+                  "floorBy",
+                  "calculationComplete",
+                  "cells"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "topK",
+            "confidence",
+            "byOpponent"
+          ],
+          "additionalProperties": false
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "explanationError": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "team",
+        "legality",
+        "defense",
+        "offense",
+        "speed",
+        "roles"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "__schema1": {
+          "type": "object",
+          "properties": {
+            "move": {
+              "type": "string"
+            },
+            "minPercent": {
+              "type": "number"
+            },
+            "maxPercent": {
+              "type": "number"
+            },
+            "koPossible": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "koGuaranteed": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ko": {
+              "type": "string"
+            },
+            "koExact": {
+              "type": "boolean"
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "Physical",
+                "Special",
+                "Status"
+              ]
+            },
+            "koChance": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "n": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "guaranteed": {
+                      "type": "boolean"
+                    },
+                    "chancePct": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "koCaveats": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "type": "string"
+                      },
+                      "cause": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "direction"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "disguiseAdjusted": {
+              "type": "object",
+              "properties": {
+                "effectiveKoPossible": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "effectiveKoGuaranteed": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "note": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "effectiveKoPossible",
+                "effectiveKoGuaranteed",
+                "note"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "move",
+            "minPercent",
+            "maxPercent",
+            "koPossible",
+            "koGuaranteed",
+            "ko",
+            "koExact",
+            "category",
+            "koChance"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
     "DiagnoseReportDtoSchema": {
       "type": "object",
       "properties": {
@@ -6467,6 +7481,65 @@
         "single",
         "double"
       ]
+    },
+    "IntakeAnswerDtoSchema": {
+      "type": "object",
+      "properties": {
+        "gate": {
+          "type": "string",
+          "const": "intake"
+        },
+        "group": {
+          "type": "string"
+        },
+        "answers": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IntakeAnswerDtoSchema/$defs/__schema0"
+          }
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "answeredAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "gate",
+        "answers",
+        "answeredAt"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "option": {
+              "type": "string",
+              "minLength": 1
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "skipped": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      }
     },
     "ItemDtoSchema": {
       "type": "object",
@@ -12401,6 +13474,44 @@
       ],
       "additionalProperties": false
     },
+    "SessionActivityDtoSchema": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "running",
+            "failed"
+          ]
+        },
+        "startedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "op",
+        "state",
+        "startedAt"
+      ],
+      "additionalProperties": false
+    },
+    "SessionArchiveRequestDtoSchema": {
+      "type": "object",
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "archived"
+      ],
+      "additionalProperties": false
+    },
     "SessionDtoSchema": {
       "type": "object",
       "properties": {
@@ -12439,6 +13550,7 @@
             "idle",
             "progress",
             "awaiting",
+            "questions",
             "needs_changes",
             "review",
             "done"
@@ -12447,6 +13559,69 @@
         "updatedAt": {
           "type": "string",
           "minLength": 1
+        },
+        "lastKind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "activity": {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "minLength": 1
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "running",
+                "failed"
+              ]
+            },
+            "startedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "op",
+            "state",
+            "startedAt"
+          ],
+          "additionalProperties": false
+        },
+        "waiting": {
+          "type": "object",
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "until": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kinds",
+            "until"
+          ],
+          "additionalProperties": false
+        },
+        "pickedUp": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -12455,6 +13630,258 @@
         "revision",
         "heads",
         "meta"
+      ],
+      "additionalProperties": false
+    },
+    "SessionEventDtoSchema": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "change": {
+          "type": "string",
+          "enum": [
+            "created",
+            "updated",
+            "deleted"
+          ]
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "additionalProperties": false
+    },
+    "SessionOverviewDtoSchema": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionOverviewDtoSchema/$defs/__schema0"
+          }
+        },
+        "totalCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "attentionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "relatedCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "sessions",
+        "totalCount",
+        "attentionCount",
+        "relatedCount"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "createdAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "heads": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "meta": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "idle",
+                "progress",
+                "awaiting",
+                "questions",
+                "needs_changes",
+                "review",
+                "done"
+              ]
+            },
+            "updatedAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "lastKind": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "archived": {
+              "type": "boolean"
+            },
+            "activity": {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "failed"
+                  ]
+                },
+                "startedAt": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "op",
+                "state",
+                "startedAt"
+              ],
+              "additionalProperties": false
+            },
+            "waiting": {
+              "type": "object",
+              "properties": {
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "until": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "kinds",
+                "until"
+              ],
+              "additionalProperties": false
+            },
+            "pickedUp": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "createdAt",
+            "revision",
+            "heads",
+            "meta"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "SessionTitleRequestDtoSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "SessionWaitingDtoSchema": {
+      "type": "object",
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "until": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kinds",
+        "until"
+      ],
+      "additionalProperties": false
+    },
+    "SessionWaitResultDtoSchema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "timeout"
+          ]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "createdAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "status"
       ],
       "additionalProperties": false
     },
@@ -12496,6 +13923,7 @@
             "idle",
             "progress",
             "awaiting",
+            "questions",
             "needs_changes",
             "review",
             "done"
@@ -12504,6 +13932,69 @@
         "updatedAt": {
           "type": "string",
           "minLength": 1
+        },
+        "lastKind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "activity": {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "minLength": 1
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "running",
+                "failed"
+              ]
+            },
+            "startedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "op",
+            "state",
+            "startedAt"
+          ],
+          "additionalProperties": false
+        },
+        "waiting": {
+          "type": "object",
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "until": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kinds",
+            "until"
+          ],
+          "additionalProperties": false
+        },
+        "pickedUp": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "ledger": {
           "type": "array",

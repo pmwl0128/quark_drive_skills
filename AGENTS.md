@@ -96,7 +96,8 @@ Recommended path — the prebuilt bundle (no Node.js needed):
 2. Extract it into the project directory (or a sibling folder the user designates). Verify the extracted folder contains `dist/`, `projection/`, `bridge/`, `skills/`, `requirements-runtime.txt`, and a platform start script.
 3. Install the locked runtime deps with `python -m pip install -r requirements-runtime.txt` (Python 3.10+; no Node.js).
 4. Launch the platform start script — `start-local.ps1` on Windows, `start-local.sh` on Linux/macOS (mark it executable first). Do not pass `--port`; read `~/.pokemon-champions/pc.env` for `PCUI_LOCAL_PORT` if the user has set one.
-5. Surface the full URL printed by the launcher, including its `#bootstrap=...` fragment — a bare `/` is rejected by the local auth check. Tell the user to open that complete URL once.
+5. Surface the full URL printed by the launcher, including its `#bootstrap=...` fragment — a bare `/` is rejected by the local auth check. Tell the user to open that complete URL once. Each link signs in once; for another browser, or after a restart disconnected an open page, run `python <bundle>/bridge/pcui open --no-browser` and surface the new link instead of restarting.
+6. When the user wants you to work on sessions created in the local UI, install the companion skill once with `python <bundle>/bridge/pcui install-agent --yes` (add `--target codex` for Codex) — only at the user's request. It teaches the session workflow: a handoff naming a Quark Drive local session id means read that session through `pcui` and submit each UEP gate artifact back so the page shows progress live.
 
 From a source checkout (when the user wants to build or modify the SPA), run
 `frontend/build-ui.ps1` / `frontend/build-ui.sh`, then the matching `frontend/start-ui.*`;

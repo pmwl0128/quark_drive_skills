@@ -1,5 +1,5 @@
 .session-state { display: inline-flex; align-items: center; gap: 7px; color: var(--sub); font-size: 12px; font-weight: 600; line-height: 1.5; }
 .session-state > i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
-.session-state.state-awaiting, .session-state.state-needs_changes { color: var(--warning); }
+.session-state:is(.state-awaiting, .state-questions, .state-needs_changes) { color: var(--warning); }
 .session-state.state-done { color: var(--success); }
 .session-state.state-review, .session-state.state-progress { color: var(--brand); }

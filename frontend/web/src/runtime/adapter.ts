@@ -3,12 +3,12 @@
  * interface. Both implementations validate at the boundary with the protocol package. */
 import type {
   ActualMatchupRequestDto, ActualMatchupResponseDto, ArtifactAppendEventDto, BuilderJobDto,
-  BuilderRequestDto, BuilderStartDto, Capabilities,
-  DamageBatchResultDto, DamageRequestDto, DamageResultDto, DiagnoseReportDto,
+  BuilderRequestDto, BuilderStartDto, Capabilities, ConsoleStatusDto,
+  DamageBatchResultDto, DamageRequestDto, DamageResultDto, DiagnoseFactsDto, DiagnoseReportDto,
   DiagnoseRequestDto, FormatId, LearnersDto, MetaDetailDto, MetaFacetsDto, MetaKoDto,
   OppCheckGridDto, OppDetailsDto, OppKoGridDto, OppSetCatalogDto,
   PokemonCardDto,
-  OnlineQuotaDto, QaAnswerDto, QaProgressDto, QaRequestDto, RankingDto, ResolveEntryDto, SessionDto, SessionWithLedgerDto,
+  OnlineQuotaDto, QaAnswerDto, QaProgressDto, QaRequestDto, RankingDto, ResolveEntryDto, SessionDto, SessionWithLedgerDto, SessionOverviewDto,
   MetaKoTrendDto, SpeedBatchResultDto, SpeedInputDto, TopMetaDetailDto, TopMetaRankingDto,
   TopMetaScopeId, TrendDto, TuneResultDto, UsageTrendDto,
   WorkspaceInfoDto, WorkspaceLibraryDto,
@@ -35,17 +35,44 @@ export interface DexIndexEntry {
  * and never re-serializes. Only the LocalAdapter provides this — the interface member stays
  * optional so the OnlineAdapter never carries reject-stubs for a surface it cannot have. */
 export interface SessionApi {
-  list(options?: { limit?: number; prioritizeDecisions?: boolean }): Promise<SessionDto[]>;
+  overview(teamId?: string): Promise<SessionOverviewDto>;
+  list(options?: { limit?: number; prioritizeDecisions?: boolean;
+    archived?: "exclude" | "include" | "only" }): Promise<SessionDto[]>;
   create(meta?: Record<string, unknown>): Promise<SessionDto>;
+  /** The reader's bookkeeping, outside the ledger: a display title (null clears it), archiving,
+   * and deleting a session with its ledger. */
+  rename(id: string, title: string | null): Promise<SessionDto>;
+  /** The session's latest `diagnose` artifact as the online diagnose page's report. */
+  diagnosis(id: string): Promise<DiagnoseFactsDto>;
+  archive(id: string, archived: boolean): Promise<SessionDto>;
+  remove(id: string): Promise<void>;
   get(id: string): Promise<SessionWithLedgerDto>;
   /** Raw artifact payload, verbatim (kind comes from the X-Artifact-Kind header). */
   artifact(hash: string): Promise<{ kind: string; text: string }>;
   /** CAS append under the revision the caller saw; a 409 HttpError means re-read and retry. */
   putArtifact(sessionId: string, kind: string, payload: string,
               revision: number): Promise<ArtifactAppendEventDto>;
-  /** SSE feed of committed appends (all sessions); returns the unsubscribe function. */
-  subscribe(onEvent: (e: ArtifactAppendEventDto) => void): () => void;
+  /** One shared SSE feed per tab: committed appends (all sessions), new sessions, and `resync`
+   * after a reconnect, when events may have been missed and readers should look again. Returns
+   * the unsubscribe function. */
+  subscribe(onChange: (change: SessionChange) => void): () => void;
+  /** The feed's health, as a useSyncExternalStore pair: the live badge and the signed-out notice. */
+  liveStatus(): LiveStatus;
+  onLiveStatus(listener: () => void): () => void;
+  /** Assistant link and projection status for the Console's setup card. */
+  consoleStatus(): Promise<ConsoleStatusDto>;
 }
+
+export type SessionChange =
+  | { type: "artifact"; event: ArtifactAppendEventDto }
+  | { type: "session"; sessionId: string; change?: "created" | "updated" | "deleted" }
+  /** An operator run or an assistant's wait began or ended (live state, not the ledger). */
+  | { type: "activity"; sessionId: string }
+  | { type: "resync" };
+
+/** `signedOut`: the bridge answers but no longer knows this tab (it restarted, so its cookie is
+ * gone); `offline`: the bridge does not answer at all. Both keep retrying. */
+export type LiveStatus = "connecting" | "live" | "offline" | "signedOut";
 
 /** Online-only builder wizard (llm.builder, design §7.3): one form -> a queued server-side
  * job -> one confirmed team. The client holds only the job id and read-only progress. */

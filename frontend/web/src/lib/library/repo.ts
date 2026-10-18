@@ -299,6 +299,71 @@ export function undoSaveTeam(result: Extract<SaveTeamResult, { status: "saved" }
   });
 }
 
+export type ReviseTeamResult =
+  | { status: "revised"; record: TeamRecord; original: TeamRecord; previous: TeamRecord; added: BoxRecord[] }
+  /** The team is gone, the new builds are for another format, or the library cannot hold them
+   * (a Pokémon or entry the dex does not know). */
+  | { status: "missing" } | { status: "format" } | { status: "invalid" }
+  /** The new builds are exactly the team's own: nothing to revise. */
+  | { status: "unchanged" }
+  /** No free slot of the format for the version being replaced. */
+  | { status: "full" }
+  | { status: "no-room"; needed: number; free: number };
+
+/** Give a team new builds and keep what it was: the current members are first copied into the
+ * format's first free slot under `previousName`, then the team itself takes the new builds (same
+ * slot, name and notes). All or nothing: without a free slot or box room, nothing changes. */
+export function reviseTeam(teamId: string, doc: TeamDoc, meta: SaveMeta, previousName: string)
+  : Promise<ReviseTeamResult> {
+  return rw(async (db, state) => {
+    const team = state.teams.find((record) => record.id === teamId);
+    if (!team) return { status: "missing" } as const;
+    const next = toTeamDoc(doc, doc.format, state.vocabulary);
+    if (!next) return { status: "invalid" } as const;
+    if (next.format !== team.format) return { status: "format" } as const;
+    const plan = planTeamSave(state, next);
+    if (plan.duplicate?.id === team.id) return { status: "unchanged" } as const;
+    const slot = freeTeamSlots(state, team.format)[0];
+    if (slot === undefined) return { status: "full" } as const;
+    if (plan.needed > plan.free) return { status: "no-room", needed: plan.needed, free: plan.free } as const;
+    const previous = buildTeamRecord(team.format, team.members, {
+      origin: team.origin, snapshot: team.snapshot, notes: team.notes, tags: team.tags, name: previousName,
+    }, slot);
+    await db.teams.add(previous);
+    const placed = await placeMembers(db, state, next, meta);
+    if (!placed) throw new Error("box room changed during the revision");
+    const record = TeamRecordSchema.parse({
+      ...team, members: placed.ids, origin: meta.origin, snapshot: meta.snapshot ?? team.snapshot, updatedAt: Date.now(),
+    });
+    await db.teams.put(record);
+    return { status: "revised", record, original: team, previous, added: placed.added } as const;
+  });
+}
+
+/** Take back a revision: the team gets its old builds again, the copy of them goes, and the Pokémon
+ * the revision added go unless another team took them up since. */
+export function undoReviseTeam(result: Extract<ReviseTeamResult, { status: "revised" }>): Promise<boolean> {
+  return rw(async (db, state) => {
+    const current = state.teams.find(team => team.id === result.record.id);
+    const previous = state.teams.find(team => team.id === result.previous.id);
+    const box = boxById(state);
+    if (JSON.stringify(current) !== JSON.stringify(result.record)
+        || JSON.stringify(previous) !== JSON.stringify(result.previous)
+        || result.original.members.some(id => !box.has(id))
+        || state.teams.some(team => team.id !== result.record.id && team.format === result.original.format
+          && team.slot === result.original.slot)) return false;
+    await db.teams.delete(result.previous.id);
+    await db.teams.put(TeamRecordSchema.parse(result.original));
+    const stillUsed = new Set(state.teams
+      .filter((team) => team.id !== result.record.id && team.id !== result.previous.id)
+      .flatMap((team) => team.members));
+    for (const id of result.original.members) stillUsed.add(id);
+    await db.box.bulkDelete(result.added.filter(record => !stillUsed.has(record.id)
+      && JSON.stringify(box.get(record.id)) === JSON.stringify(record)).map(record => record.id));
+    return true;
+  });
+}
+
 export function updateTeam(id: string, patch: { name?: string; notes?: string; tags?: string[] })
   : Promise<TeamRecord | null> {
   return rw(async (db, state) => {

@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <b>环境快照</b> · M-7 / M-C · 截至 <b>2026-10-16</b>
+  <b>环境快照</b> · M-7 / M-C · 截至 <b>2026-10-18</b>
 </p>
 
 <p align="center">
@@ -265,12 +265,13 @@ team 技能内部使用一套流程化约束来减少“先凭印象生成，再
 
 | 功能 | 在线版 | 本地运行包 |
 |---|---|---|
-| 单打／双打排名、详情、KO 面板及分别采集的使用率／KO 历史 | 支持 | 支持 |
+| 单打／双打排名、详情、KO 面板、分别采集的使用率／KO 历史，以及按真实队伍统计并与官方数据对照的竞技环境 | 支持 | 支持 |
 | 宝可梦、招式、道具、特性图鉴与中／英／日名称检索 | 支持 | 支持 |
 | 伤害批量计算、完整乱数、击倒线与速度线 | 浏览器本地计算 | 浏览器本地计算 |
 | 计算页搜索筛选抽屉、真实配置、Meta 回填与空白自定义配置 | 支持 | 支持 |
 | 环境标准配置对位矩阵、自定义队伍 KO／CHECK 表 | 支持 | 支持 |
 | 快速耐久试算 | 支持 | 支持 |
+| 我的队伍、宝可梦箱与计算记录 | 保存在当前浏览器 | 保存在本地工作区文件夹 |
 | 精确 `team.tune` 耐久调校 | 按当前开放功能与服务工作量额度提供 | 支持 |
 | 单次事实问答、简化建队向导、队伍诊断与可选 AI 解读 | 按在线部署和每日额度开放 | 由本地 AI 助手运行完整流程 |
 | UEP 会话与 artifact 面板 | 不支持 | 支持，与正在工作的本地 AI 助手协作 |
@@ -324,6 +325,10 @@ chmod +x start-local.sh
 
 启动成功后，终端会打印一个形如 `http://127.0.0.1:1025/#bootstrap=...` 的一次性地址。首次打开时请使用终端打印的完整地址；页面换取本地会话 cookie 后会自动移除 URL 中的 token。服务默认只监听本机回环地址，按 `Ctrl+C` 停止。
 
+登录地址只能使用一次。需要在另一个浏览器打开、或服务重启后页面提示已断开时，在解压目录运行 `python bridge/pcui open`，即可获得新的登录地址，无需重启服务。
+
+要让 AI 助手处理本地界面里创建的会话，先运行一次 `python bridge/pcui install-agent`（Codex 加 `--target codex`）。本地首页的「开始使用」会显示本机可直接复制的完整命令；之后把会话页里的交接说明发给助手即可，进展会实时显示在页面上；助手提出的问题和需要你决定的检查点可以直接在会话页回答，正在等待的助手收到后会自动继续。支持 MCP 的助手也可以改用 `python bridge/pcui mcp` 接入，`python bridge/pcui mcp --print-config` 会打印 Claude Code 与 Codex 的注册写法。
+
 如需修改默认端口，在 `~/.pokemon-champions/pc.env` 中写入：
 
 ```dotenv
@@ -360,13 +365,13 @@ chmod +x frontend/build-ui.sh frontend/start-ui.sh
 ### 本地数据与在线隐私边界
 
 - 本地运行包默认只监听 `127.0.0.1`，不需要账号或模型 API Key；安装依赖并取得发行包后，普通图鉴、环境、计算、对位、调校与会话操作读取本机数据。
-- 本地会话和 artifact 状态写入 `~/.pokemon-champions/`，不会写回解压后的不可变发行目录。
+- 队伍、宝可梦、计算结果与 AI 会话保存在本机工作区：预构建包默认是 `~/.pokemon-champions/workspace`，源码版默认是启动目录下的 `storage`，可在存储页更改或迁移。工作区不在解压目录内，更新时不受影响；备份时先停止本地服务，再复制整个工作区文件夹。
 - 在线环境浏览与伤害／速度计算使用公开 projection 和浏览器内计算引擎；事实问答、建队、队伍诊断、自定义实际对位或 AI 解读等服务端功能会把对应输入发送到在线服务。
 - 不希望提交到在线服务的私人队伍、复盘或持有信息，应留在本地运行包或本地 AI 助手项目中处理。
 
 ### 更新本地界面
 
-`Quark_Drive_Web.zip` 使用固定文件名，在 `data-latest` Release 中随发行滚动替换。更新预构建版时，请重新下载整个压缩包并解压到新目录，确认新版本可启动后再删除旧目录；不要只覆盖其中几个子目录。
+`Quark_Drive_Web.zip` 使用固定文件名，在 `data-latest` Release 中随发行滚动替换。更新预构建版时，请重新下载整个压缩包并解压到新目录，确认新版本可启动后再删除旧目录；不要只覆盖其中几个子目录。工作区在发行目录之外，删除旧目录不会删除你的资料；若曾把工作区放在旧发行目录里，请先在存储页迁移。
 
 源码版更新后运行：
 
@@ -568,9 +573,9 @@ my-champions/
 
 | 来源 | 用途 |
 |---|---|
-| [Silph Scope](https://silph-scope.com/) | 主数据源：环境排名，招式、道具、特性、性格、SP、队友详情，以及 KO 关系列表（谁能击倒谁） |
-| [GameWith](https://gamewith.jp/) Pokémon Champions | 独立环境 feed 与交叉验证 |
-| [PokeChamp DB](https://pokechamdb.com/) | 独立环境 feed 与交叉验证 |
+| [Silph Scope](https://silph-scope.com/) | 主数据源：环境排名，招式、道具、特性、性格、SP、队友详情，KO 关系列表（谁能击倒谁），以及单双打的击倒／被击倒招式占比 |
+| [GameWith](https://gamewith.jp/) Pokémon Champions | 备用环境 feed 与交叉验证 |
+| [PokeChamp DB](https://pokechamdb.com/) | 备用环境 feed 与交叉验证 |
 | [MetaRoll](https://metaroll.app/ladder) | 双打击倒／被击倒招式占比的备用源。Usage data from MetaRoll (metaroll.app) |
 
 ### 对战图鉴与名称
@@ -597,6 +602,7 @@ my-champions/
 | [GameWith](https://gamewith.jp/) / [Game8](https://game8.jp/) | 单打 | 已结束赛季的上位构筑事实 |
 | [POCH](https://poch.ms/en) | 单打 | 公开队伍索引与经审阅的游戏内导出图片 |
 | [Limitless TCG](https://play.limitlesstcg.com/) | 双打 | 线上赛事队伍、战绩与名次 |
+| [Nimbasa City Post](https://www.nimbasacitypost.com/) | 双打 | 官方锦标赛公开队伍表（OTL）的镜像 |
 | [VGCPastes / Pokepaste](https://pokepast.es/) | 双打 | 社区整理的完整队伍与 SP |
 
 感谢这些项目、站点、赛事组织者和社区贡献者公开数据与工具。来源中的排名、战绩和队伍只作为事实证据使用，不代表本项目对其强度作背书。
@@ -607,7 +613,6 @@ my-champions/
 
 - **流程效率与兼容性：**减少重复工具调用，实测各类 AI 助手能否完整执行建队流程。
 - **回合模拟研究：**在独立实验管线中研究多回合行为。已发布的技能和 Web 仍按各自契约进行伤害、速度与对位计算。
-- **本地 MCP 接入：**探索通过协议调用本地 bridge 已有的技能、会话和产物。
 - **在线服务容量：**改善资源交付与响应延迟，依据实际工作量调整服务额度。
 
 ## 许可

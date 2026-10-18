@@ -5,11 +5,10 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-16T03:33:35Z"
+  "built_at": "2026-10-18T11:16:30Z"
  },
  "counts": {
-  "history": 1,
-  "partners": 12
+  "partners": 11
  },
  "anchors": {
   "Aegislash-Shield|": {
@@ -25,26 +24,26 @@
    "source": "partners",
    "partners": [
     "Basculegion",
-    "Rillaboom"
+    "Aegislash"
    ],
-   "teams": 18
+   "teams": 10
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
+    "Gengar",
     "Salamence",
-    "Snorlax",
-    "Gengar"
+    "Snorlax"
    ],
    "teams": 3
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Skeledirge",
-    "Tyranitar"
+    "Hydreigon",
+    "Metagross"
    ],
-   "teams": 5
+   "teams": 20
   },
   "Hydrapple|": {
    "source": "partners",
@@ -54,22 +53,14 @@
    ],
    "teams": 16
   },
-  "Lycanroc-Dusk|": {
-   "source": "history",
-   "seasons": [
-    "M-1",
-    "M-4",
-    "M-5"
-   ],
-   "teams": 4
-  },
   "Meowstic-F|": {
    "source": "partners",
    "partners": [
     "Meowscarada",
-    "Cinderace"
+    "Indeedee",
+    "Sneasler"
    ],
-   "teams": 17
+   "teams": 5
   },
   "Morpeko-Hangry|": {
    "source": "partners",
@@ -77,39 +68,33 @@
     "Corviknight",
     "Indeedee"
    ],
-   "teams": 31
+   "teams": 33
   },
   "Oranguru|": {
    "source": "partners",
    "partners": [
     "Feraligatr",
-    "Gardevoir"
+    "Dragonite"
    ],
    "teams": 6
   },
   "Passimian|": {
    "source": "partners",
    "partners": [
-    "Scizor",
+    "Hatterene",
+    "Hippowdon",
     "Hydreigon"
    ],
-   "teams": 6
+   "teams": 4
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
+    "Salamence",
     "Rillaboom",
     "Cinderace"
    ],
-   "teams": 19
-  },
-  "Tauros-Paldea-Aqua|": {
-   "source": "partners",
-   "partners": [
-    "Aegislash",
-    "Rillaboom"
-   ],
-   "teams": 18
+   "teams": 4
   },
   "Tauros-Paldea-Combat|": {
    "source": "partners",

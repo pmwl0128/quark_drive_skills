@@ -9,8 +9,9 @@ import {
   CheckpointDecisionDtoSchema, UEP_GATE_KINDS,
   type CheckpointDecisionDto, type LedgerEntryDto, type SessionWithLedgerDto,
 } from "@pokemon-champions/protocol";
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { IconArrowLeft } from "@tabler/icons-react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAsync } from "../../hooks.ts";
 import { useLang } from "../../i18n.ts";
 import { useUepT, optionalUepKey } from "./messages.ts";
@@ -23,6 +24,19 @@ import { renderArtifactCard } from "./artifacts.tsx";
 import { KindBadge, localTime, prettyPayload, shortHash } from "./kinds.tsx";
 import { SessionState, sessionState } from "../../components/session/SessionState.tsx";
 import { SessionHandoff } from "../../components/session/SessionHandoff.tsx";
+import { SessionActivity } from "../../components/session/SessionActivity.tsx";
+import { LiveBadge } from "../../components/session/LiveBadge.tsx";
+import { useSessionChanges } from "../../components/session/live.ts";
+import { SessionChips } from "./SessionsPage.tsx";
+import { IntakeForm } from "./IntakeForm.tsx";
+import { SessionActions } from "./SessionActions.tsx";
+import { SessionLive, waitingNow } from "../../components/session/SessionLive.tsx";
+import { sessionTeamId, sessionTitle } from "../../components/session/title.ts";
+import { ReviseSourceTeam } from "./ReviseSourceTeam.tsx";
+
+// The report and its stylesheet load only for a session that holds a diagnosis.
+const SessionDiagnosis = lazy(() => import("./SessionDiagnosis.tsx"));
+import "../../styles.local.css";
 import { TeamCard } from "../../components/team/TeamCard.tsx";
 import { AdaptiveSelect } from "../../components/AdaptiveSelect.tsx";
 import { useTransferT } from "../../lib/library/transferMessages.ts";
@@ -84,30 +98,33 @@ interface GateReads {
   draft: Record<string, unknown> | null;
   answerAudit: Record<string, unknown> | null;
   checkpoint: Record<string, unknown> | null;
+  intake: Record<string, unknown> | null;
 }
 
 function useGateReads(sessions: SessionApi, session: SessionWithLedgerDto | null): GateReads {
   const heads = session?.heads ?? {};
-  const keys = [heads["draft"], heads["answer-audit"], heads["checkpoint"]];
+  const keys = [heads["draft"], heads["answer-audit"], heads["checkpoint"], heads["intake"]];
   const state = useAsync(async () => {
     const fetch1 = (h: string | undefined) =>
       h ? sessions.artifact(h).then((a) => asObj(JSON.parse(a.text))).catch(() => null)
         : Promise.resolve(null);
-    const [draft, answerAudit, checkpoint] = await Promise.all(
-      [fetch1(keys[0]), fetch1(keys[1]), fetch1(keys[2])]);
-    return { draft, answerAudit, checkpoint };
+    const [draft, answerAudit, checkpoint, intake] = await Promise.all(keys.map(fetch1));
+    return { draft: draft ?? null, answerAudit: answerAudit ?? null, checkpoint: checkpoint ?? null,
+             intake: intake ?? null };
   }, keys);
   return state.status === "ready" ? state.data
-    : { draft: null, answerAudit: null, checkpoint: null };
+    : { draft: null, answerAudit: null, checkpoint: null, intake: null };
 }
 
 // -- decision card (panel-authored write-back) ----------------------------------------------
 
-function DecisionForm({ sessions, session, checkpoint, onCommitted }: {
+function DecisionForm({ sessions, session, checkpoint, onCommitted, waiting }: {
   sessions: SessionApi;
   session: SessionWithLedgerDto;
   checkpoint: Record<string, unknown> | null;
   onCommitted: () => void;
+  /** An assistant is blocked in `pcui session wait`: it continues as soon as this is submitted. */
+  waiting: boolean;
 }) {
   const t = useUepT();
   const { lang } = useLang();
@@ -171,6 +188,7 @@ function DecisionForm({ sessions, session, checkpoint, onCommitted }: {
     <div className="panel uep-checkpoint">
       <h2>{t("uep.checkpoint.title")}</h2>
       <p className="muted">{t("uep.checkpoint.hint")}</p>
+      {waiting ? <p><SessionLive session={session} /></p> : null}
       {questions.length > 0 && (
         <ul className="uep-questions">
           {questions.map((q, i) => <li key={i}>{q}</li>)}
@@ -222,8 +240,10 @@ function DecisionForm({ sessions, session, checkpoint, onCommitted }: {
 
 // -- final result (draft.recommended → party strips + honest disclosures) --------------------
 
-function ResultSection({ draft, intent, sessionId, provisional }: {
+function ResultSection({ draft, intent, sessionId, provisional, teamRef }: {
   draft: Record<string, unknown>; intent?: string; sessionId?: string;
+  /** The library team the session started from, which a result can update. */
+  teamRef?: string | null;
   /** true when this draft is NOT covered by a current passing answer-audit — show it as a
    * work-in-progress draft, never as the certified final team. */
   provisional?: boolean;
@@ -297,6 +317,7 @@ function ResultSection({ draft, intent, sessionId, provisional }: {
               {can("team.matchup") && <button className="second-btn" onClick={() => sendToMatchup(o.team)}>
                 {t("actual.sendMatchup")} →
               </button>}
+              {teamRef ? <ReviseSourceTeam teamId={teamRef} team={o.team} provisional={!!provisional} /> : null}
             </div>
           </div>
         );
@@ -364,12 +385,11 @@ export function SessionPage() {
     : last && last.id === id ? last : null;
   const reads = useGateReads(sessions!, session);
 
-  useEffect(() => {
-    if (!sessions) return;
-    return sessions.subscribe((e) => {
-      if (e.sessionId === id) bump();
-    });
-  }, [sessions, id]);
+  // An append to this session, its live activity, its title or archive state, or a reconnect that
+  // may have missed any of them, means: read it again.
+  useSessionChanges((change) => {
+    if (change.type === "resync" || (change.type === "artifact" ? change.event.sessionId === id : change.sessionId === id)) bump();
+  });
 
   if (!sessions) return <div className="notice">{t("uep.unavailable")}</div>;
   if (state.status === "error") {
@@ -380,45 +400,61 @@ export function SessionPage() {
   if (!session) return <div className="spinner">{t("state.loading")}</div>;
 
   const stage = sessionState(session);
-  const doneStep = new Set(Object.keys(session.heads));
-  const extraKinds = Object.keys(session.heads)
-    .filter((k) => !(UEP_GATE_KINDS as readonly string[]).includes(k));
+  const kinds = [...UEP_GATE_KINDS, ...Object.keys(session.heads)
+    .filter((k) => !(UEP_GATE_KINDS as readonly string[]).includes(k))];
   const slateHash = session.heads["slate"];
 
   return (
-    <main className="session-page">
-      <section className="session-hero">
-        <h1 className="page-title">
-          {typeof session.meta.intent === "string" && session.meta.intent !== ""
-            ? session.meta.intent : session.id}
-        </h1>
-        <div className="session-card-head session-meta">
-          <span className="mono muted">{session.id}</span>
-          <span className="muted num">{localTime(session.createdAt)}</span>
-          <span className="muted num">{t("uep.revision")} {session.revision}</span>
+    <main className="session-page stage-tokens">
+      <section className={`session-hero state-${stage}`}>
+        <div className="session-hero-top">
+          <Link className="session-back" to="/sessions"><IconArrowLeft size={16} aria-hidden />{t("uep.back")}</Link>
+          <div className="session-hero-tools">
+            <SessionActions sessions={sessions} session={session} onChanged={bump} />
+            <LiveBadge />
+          </div>
         </div>
-
-        <div className={`uep-banner ${stage}`}>
+        <h1 className="session-title">{sessionTitle(session)}</h1>
+        <div className="session-hero-meta">
           <SessionState session={session} />
+          {session.archived ? <span className="session-chip">{t("uep.archived")}</span> : null}
+          <SessionChips session={session} />
+          <SessionActivity session={session} />
+          <SessionLive session={session} />
         </div>
-
-        <div className="gate-stepper">
-          {[...UEP_GATE_KINDS, ...extraKinds].map((k) => (
-            <span key={k} className={`gate-step${doneStep.has(k) ? " on" : ""}`}>
-              <KindBadge kind={k} />
-            </span>
+        <ol className="gate-track" aria-label={t("uep.stages")}>
+          {kinds.map((k) => (
+            <li key={k} className={`${session.heads[k] ? "on" : ""}${session.lastKind === k ? " last" : ""}`}>
+              <i aria-hidden /><KindBadge kind={k} />
+            </li>
           ))}
-        </div>
+        </ol>
+        <p className="session-ids mono">
+          {t("uep.sessionId").replace("{id}", session.id)} · {t("uep.revision")} {session.revision} · {localTime(session.createdAt)}
+        </p>
       </section>
 
-      {stage !== "done" && <SessionHandoff key={session.id} session={session} />}
+      <SessionHandoff key={session.id} session={session} />
+
+      {stage === "questions" && (
+        <IntakeForm key={session.heads["intake"]} sessions={sessions} session={session}
+          intake={reads.intake} onCommitted={bump} />
+      )}
 
       {stage === "awaiting" && (
-        <DecisionForm sessions={sessions} session={session} checkpoint={reads.checkpoint} onCommitted={bump} />
+        <DecisionForm sessions={sessions} session={session} checkpoint={reads.checkpoint} onCommitted={bump}
+          waiting={waitingNow(session)} />
+      )}
+
+      {session.heads["diagnose"] && (
+        <Suspense fallback={<div className="spinner">{t("state.loading")}</div>}>
+          <SessionDiagnosis sessions={sessions} sessionId={session.id} artifactHash={session.heads["diagnose"]} />
+        </Suspense>
       )}
 
       {reads.draft && (
         <ResultSection draft={reads.draft} sessionId={session.id} provisional={stage !== "done"}
+          teamRef={sessionTeamId(session)}
           intent={typeof session.meta.intent === "string" ? session.meta.intent : undefined} />
       )}
 

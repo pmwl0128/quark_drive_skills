@@ -721,55 +721,11 @@ button.speed-row-marker:active:not(:disabled) { transform: translateY(-50%); opa
 .tc-line { font-size: 12px; color: var(--sub); font-family: var(--font-mono); }
 .tc-assume { font-size: 11px; color: var(--sub); line-height: 1.4; }
 
-/* -- UEP session panel (local-only chunk) -------------------------------------------------- */
-.sessions-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 22px;
-  align-items: start;
-}
-.uep-create { margin: 0; overflow: hidden; }
-.uep-create-head { padding: 20px 22px 0; }
-.uep-create-head h2 { margin: 0; font-size: 18px; }
-.uep-form { padding: 16px 22px 20px; display: grid; gap: 18px; }
-.uep-form label { display: grid; gap: 8px; font-size: 13px; font-weight: 650; color: var(--ink); }
-.uep-form textarea, .uep-checkpoint textarea {
+/* -- UEP session panel (local-only chunk; page layout in styles.local.css) ------------------ */
+.uep-checkpoint textarea {
   width: 100%; padding: 13px 15px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--panel); color: var(--ink); font: inherit; resize: vertical;
 }
-.uep-form textarea { min-height: 126px; line-height: 1.6; }
-.uep-form textarea:focus { border-color: var(--brand); outline: 3px solid var(--brand-soft); }
-.uep-form-actions { display: flex; justify-content: flex-end; margin-top: -2px; }
-.sessions-index { display: block; min-width: 0; overflow: hidden; padding: 0; }
-.sessions-section-head {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  padding: 18px 22px; border-bottom: 1px solid var(--line);
-}
-.sessions-section-head h2 { margin: 0; font-size: 18px; }
-.sessions-empty { min-height: 150px; display: grid; place-items: center; padding: 24px; text-align: center; }
-.session-table-head, .session-card {
-  display: grid; grid-template-columns: 120px minmax(240px, 1fr) 250px minmax(220px, .85fr);
-  gap: 20px; align-items: center;
-}
-.session-table-head {
-  padding: 10px 22px; background: var(--panel-2); color: var(--sub);
-  font-size: 11px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase;
-}
-.session-list { display: grid; }
-.session-card {
-  min-height: 72px; padding: 13px 22px; color: var(--ink); background: var(--panel);
-  border: 0; border-top: 1px solid var(--line); border-radius: 0;
-}
-.session-card:first-child { border-top: 0; }
-.sessions-index .session-card:hover { text-decoration: none; background: var(--brand-soft); transform: none; }
-.sessions-index .session-card:active { transform: none; }
-.session-status { min-width: 0; }
-.session-card-head { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-.session-card-head .session-id { margin-left: auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
-.session-intent { margin: 0; min-width: 0; font-size: 14px; font-weight: 650; line-height: 1.5; }
-.session-info { display: grid; gap: 3px; min-width: 0; font-size: 11px; }
-.session-info .session-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-kinds { display: flex; gap: 5px; flex-wrap: wrap; margin: 0; }
 .uep-kind {
   font-size: 12px; border-radius: 5px; padding: 1px 8px; background: var(--panel-2);
   color: var(--sub); white-space: nowrap;
@@ -810,30 +766,7 @@ button.speed-row-marker:active:not(:disabled) { transform: translateY(-50%); opa
 .uep-slate-cand { display: grid; gap: 5px; border-top: 1px solid var(--line); padding-top: 7px; }
 .uep-slate-cand:first-child { border-top: 0; padding-top: 0; }
 
-/* UEP status view: banner, stepper, party strip */
-.uep-banner {
-  margin: 14px 0; padding: 12px 18px; border-radius: 10px; font-weight: 600; font-size: 14.5px;
-  border-left: 4px solid var(--sub); background: var(--panel);
-}
-.uep-banner.done { border-left-color: #2b7a2b; background: color-mix(in srgb, #2b7a2b 8%, var(--panel)); }
-.uep-banner.awaiting { border-left-color: #dda005; background: color-mix(in srgb, #dda005 10%, var(--panel)); }
-.uep-banner.working { border-left-color: var(--brand); }
-.session-page { display: grid; gap: 16px; }
-.session-hero {
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-.session-hero .page-title { margin: 0 0 8px; max-width: 860px; }
-.session-meta { padding-bottom: 2px; }
-.session-hero .uep-banner { margin: 16px 0 12px; box-shadow: none; }
-.session-hero .gate-stepper { margin-bottom: 0; padding-top: 2px; }
-.gate-stepper { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin: 0 0 16px; }
-.gate-step { opacity: 0.35; display: flex; align-items: center; }
-.gate-step.on { opacity: 1; }
-.gate-step:not(:last-child)::after { content: "›"; color: var(--sub); margin-left: 4px; opacity: 0.6; }
+/* UEP status view: result and party strip */
 .uep-result { margin: 14px 0; }
 /* an unaudited draft is flagged with an amber rail so it never reads as the certified final team */
 .uep-result.provisional { border-left: 3px solid #dda005; }
@@ -1047,7 +980,7 @@ button.speed-row-marker:active:not(:disabled) { transform: translateY(-50%); opa
    auto-disabled under prefers-reduced-motion (the !important reset above wins). */
 
 /* smooth state changes on every interactive surface */
-a, button, .topbar nav a, .seg button, .subtab, .speed-presets button, .session-card, .dex-card, .data-table tbody tr, .uep-species-chip, .party-card, .type-badge, .uep-chip, .uep-kind, .grade-pill, .vchip {
+a, button, .topbar nav a, .seg button, .subtab, .speed-presets button, .dex-card, .data-table tbody tr, .uep-species-chip, .party-card, .type-badge, .uep-chip, .uep-kind, .grade-pill, .vchip {
   transition: background-color 130ms ease, border-color 130ms ease, color 130ms ease,
     box-shadow 150ms ease, transform 150ms cubic-bezier(0.22, 1, 0.36, 1), opacity 130ms ease;
 }
@@ -1055,7 +988,7 @@ a, button, .topbar nav a, .seg button, .subtab, .speed-presets button, .session-
 /* hover HIGHLIGHT — the pointed element steps out of the page a touch */
 .topbar nav a:hover:not(.active) { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
 .ghost-btn:hover { background: color-mix(in srgb, var(--brand) 8%, transparent); }
-.session-card:hover, .dex-card:hover {
+.dex-card:hover {
   box-shadow: 0 4px 16px rgb(16 24 32 / 0.11); transform: translateY(-2px);
 }
 .dex-card img.sprite { transition: transform 170ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -1085,11 +1018,10 @@ a, button, .topbar nav a, .seg button, .subtab, .speed-presets button, .session-
 :root[data-theme="dark"] .calc-matrix td:not(.miss):hover { box-shadow: 0 4px 14px rgb(0 0 0 / 0.5); }
 
 /* press feedback — surfaces dip when clicked (defined AFTER :hover so it wins mid-press) */
-button:active:not(:disabled), .session-card:active, .dex-card:active {
+button:active:not(:disabled), .dex-card:active {
   transform: translateY(1px) scale(0.99);
 }
 
-:root[data-theme="dark"] .session-card:hover,
 :root[data-theme="dark"] .dex-card:hover,
 :root[data-theme="dark"] .party-card:hover { box-shadow: 0 4px 16px rgb(0 0 0 / 0.42); }
 
@@ -1103,7 +1035,7 @@ button:active:not(:disabled), .session-card:active, .dex-card:active {
    would still snap the element into a new position. Drop the positional movement entirely for
    these users — the non-moving highlights (shadow / background / outline) stay, the shifts go. */
 @media (prefers-reduced-motion: reduce) {
-  .session-card:hover, .dex-card:hover, .party-card:hover, .uep-species-chip:hover, .type-badge:hover, .uep-chip:hover, .uep-kind:hover, .vchip:hover, .grade-pill:hover, .dex-card:hover img.sprite, .calc-matrix td:not(.miss):hover, button:active:not(:disabled), .session-card:active, .dex-card:active { transform: none; }
+  .dex-card:hover, .party-card:hover, .uep-species-chip:hover, .type-badge:hover, .uep-chip:hover, .uep-kind:hover, .vchip:hover, .grade-pill:hover, .dex-card:hover img.sprite, .calc-matrix td:not(.miss):hover, button:active:not(:disabled), .dex-card:active { transform: none; }
   .mon-hover { animation: none; }
 }
 
@@ -1555,7 +1487,7 @@ input:focus, .adaptive-select:focus, textarea:focus {
 }
 /* Popovers portalled to <body> (lists, build picker, hover cards) sit above the modal layer (2000):
    a dialog's own inputs and pickers open over it, never behind it. Toasts stay on top (2100). */
-.form-panel input:not([type="checkbox"]):not([type="radio"]), .form-panel .adaptive-select, .builder-field > input, .builder-field > textarea, .uep-form textarea, .uep-checkpoint textarea {
+.form-panel input:not([type="checkbox"]):not([type="radio"]), .form-panel .adaptive-select, .builder-field > input, .builder-field > textarea, .uep-checkpoint textarea {
   min-height: 38px; border-radius: var(--radius-sm); border-color: var(--line);
   background: color-mix(in srgb, var(--panel) 97%, var(--bg));
 }
@@ -1675,7 +1607,7 @@ input:focus, .adaptive-select:focus, textarea:focus {
 .tune-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-raised); }
 
 /* online AI workflows + local sessions */
-.builder-form, .builder-result, .diag-section, .uep-create {
+.builder-form, .builder-result, .diag-section {
   border-radius: 13px; box-shadow: var(--shadow);
 }
 .qa-example, .builder-tactics label { min-height: 30px; display: inline-flex; align-items: center; }
@@ -1687,11 +1619,7 @@ input:focus, .adaptive-select:focus, textarea:focus {
 .party-sprite { transition: transform 180ms var(--ease-out), filter 150ms ease; }
 .diag-section { border-left: 1px solid var(--line); }
 .diag-table tbody tr.diag-row-click:hover { background: var(--brand-soft); }
-.session-list { gap: 0; }
-.sessions-index .session-card { border-radius: 0; padding: 13px 22px; }
-.sessions-index .session-card:hover { border-color: var(--line); box-shadow: none; }
-.uep-banner { border: 1px solid var(--line); box-shadow: var(--shadow); }
-.artifact-row, .gate-step, .uep-card { transition: background-color 140ms ease, transform 140ms var(--ease-out); }
+.artifact-row, .uep-card { transition: background-color 140ms ease, transform 140ms var(--ease-out); }
 .artifact-row:hover, .uep-card:hover { background: var(--brand-soft); }
 .ehover-pop, .mon-hover { border-color: var(--line-strong); border-radius: 11px; box-shadow: var(--shadow-raised); }
 
@@ -1699,8 +1627,7 @@ input:focus, .adaptive-select:focus, textarea:focus {
 :root[data-theme="dark"] .primary-btn { color: #fff; }
 :root[data-theme="dark"] .dex-card:hover,
 :root[data-theme="dark"] .tune-card:hover,
-:root[data-theme="dark"] .party-card:hover,
-:root[data-theme="dark"] .session-card:hover { box-shadow: var(--shadow-raised); }
+:root[data-theme="dark"] .party-card:hover { box-shadow: var(--shadow-raised); }
 
 @media (max-width: 720px) {
   .topbar { min-height: auto; gap: 8px 10px; padding: 9px 10px 7px; }
@@ -1716,34 +1643,11 @@ input:focus, .adaptive-select:focus, textarea:focus {
   .dex-card { min-height: 126px; padding: 16px 6px 11px; }
   .dex-card img.sprite { width: 54px; height: 54px; }
   .form-panel { padding: 14px; }
-  .sessions-layout { grid-template-columns: 1fr; }
-  .session-table-head { display: none; }
-  .sessions-index .session-card {
-    grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; padding: 14px 16px;
-  }
-  .session-intent { align-self: center; }
-  .session-info, .session-kinds { grid-column: 1 / -1; }
-  .session-info { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
-  .uep-create-head { padding: 18px 16px 0; }
-  .uep-form { padding: 15px 16px 18px; }
-  .session-card-head .session-id { width: 100%; max-width: 100%; margin-left: 0; }
-  .session-hero { padding: 16px; }
   .diag-checks-table thead th { top: var(--topbar-offset); }
 }
 
-@media (max-width: 1080px) {
-  .session-table-head { display: none; }
-  .sessions-index .session-card {
-    grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; padding: 14px 16px;
-  }
-  .session-intent { align-self: center; }
-  .session-info, .session-kinds { grid-column: 1 / -1; }
-  .session-info { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
-}
-
 @media (max-width: 900px) {
-  .session-page { grid-template-columns: minmax(0, 1fr); }
-  .session-page, .uep-card, .uep-result, .artifact-row { min-width: 0; max-width: 100%; }
+  .uep-card, .uep-result, .artifact-row { min-width: 0; max-width: 100%; }
   .uep-card, .uep-slate-cand, .uep-frame-row { grid-template-columns: minmax(0, 1fr); }
   .uep-flag { min-width: 0; max-width: 100%; flex-wrap: wrap; }
   .matchup-grid th.col-head { width: 40px; min-width: 40px; padding: 3px; }
@@ -1759,7 +1663,6 @@ input:focus, .adaptive-select:focus, textarea:focus {
 }
 
 @media (max-width: 420px) {
-  .uep-form-actions .primary-btn { width: 100%; }
   .dex-grid.dense { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dex-card .nm { font-size: 12.5px; }
   .page-heading-actions { overflow-x: auto; max-width: 100%; padding-bottom: 2px; flex-wrap: nowrap; }

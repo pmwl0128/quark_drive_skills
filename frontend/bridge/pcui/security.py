@@ -2,7 +2,9 @@
 
 - Browser channel: a ONE-TIME bootstrap token printed in the launch URL's #fragment
   (fragments never hit history/logs/Referer); POST /api/bootstrap exchanges it for a
-  short-lived HttpOnly SameSite=Strict cookie. The token dies on first use.
+  short-lived HttpOnly SameSite=Strict cookie. The token dies on first use. `pcui open` asks the
+  daemon (CLI secret only) for further one-time tokens, so a second window or a reopened tab can
+  sign in without restarting the bridge; each expires unused after a few minutes.
 - CLI channel: a per-daemon secret written to daemon.json (0600 best-effort), sent as
   the X-PCUI-Secret header — same-machine file-system trust.
 - Host/Origin gate: only localhost hosts; when an Origin header is present it must be a
@@ -15,11 +17,13 @@ import json
 import os
 import secrets
 import tempfile
+import time
 from pathlib import Path
 
 from .paths import data_dir
 
 COOKIE_NAME = "pcui_session"
+MINTED_TOKEN_TTL = 600.0
 _ALLOWED_HOSTNAMES = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -32,25 +36,46 @@ def _host_only(host: str | None) -> str:
     return h.split(":", 1)[0].lower()          # hostname/ipv4, drop :port
 
 
+def _same(left: str, right: str) -> bool:
+    # compare_digest refuses non-ASCII str; compare bytes so hostile input is a plain mismatch.
+    return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
+
+
 class Security:
     def __init__(self) -> None:
         self.bootstrap_token: str | None = secrets.token_urlsafe(24)
         self.cli_secret = secrets.token_urlsafe(24)
         self._cookie_value = secrets.token_urlsafe(24)
+        self._minted: dict[str, float] = {}       # token -> monotonic expiry
 
     # -- browser bootstrap ------------------------------------------------------
 
+    def mint_bootstrap(self) -> str:
+        """Another one-time token for `pcui open`, with the same exchange as the launch token."""
+        now = time.monotonic()
+        self._minted = {token: expiry for token, expiry in self._minted.items() if expiry > now}
+        token = secrets.token_urlsafe(24)
+        self._minted[token] = now + MINTED_TOKEN_TTL
+        return token
+
     def consume_bootstrap(self, token: str) -> str | None:
-        """Exchange the one-time token for the session cookie value (None = reject)."""
-        if self.bootstrap_token is None or not hmac.compare_digest(token, self.bootstrap_token):
-            return None
-        self.bootstrap_token = None
-        return self._cookie_value
+        """Exchange a one-time token for the session cookie value (None = reject)."""
+        if self.bootstrap_token is not None and _same(token, self.bootstrap_token):
+            self.bootstrap_token = None
+            return self._cookie_value
+        for candidate, expiry in list(self._minted.items()):
+            if _same(token, candidate):
+                del self._minted[candidate]
+                return self._cookie_value if expiry > time.monotonic() else None
+        return None
+
+    def is_cli(self, secret_header: str | None) -> bool:
+        return secret_header is not None and _same(secret_header, self.cli_secret)
 
     def is_authenticated(self, cookie: str | None, secret_header: str | None) -> bool:
-        if cookie is not None and hmac.compare_digest(cookie, self._cookie_value):
+        if cookie is not None and _same(cookie, self._cookie_value):
             return True
-        return secret_header is not None and hmac.compare_digest(secret_header, self.cli_secret)
+        return self.is_cli(secret_header)
 
     # -- host / origin gate -------------------------------------------------------
 

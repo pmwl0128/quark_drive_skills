@@ -98,6 +98,8 @@ _RESOLVE_BATCH = _object(
 )
 _TEAM_SESSION = _object(
     properties={
+        "session": {"type": "string", "minLength": 1,
+                    "description": "Submit the gate operators' artifacts to this session"},
         "ops": {
             "type": "array",
             "minItems": 1,
@@ -141,6 +143,12 @@ LOCAL_ROUTES: dict[RouteKey, dict[str, Any]] = {
     ("POST", "/api/bootstrap"): _route(
         "Exchange one-time bootstrap token", "system", _HEALTH, request=_BOOTSTRAP,
         security=[]),
+    ("POST", "/api/bootstrap/mint"): _route(
+        "Mint another one-time bootstrap token (CLI secret only)", "system", _BOOTSTRAP,
+        request=_object(), request_required=False, security=[{"PcuiSecret": []}]),
+    ("GET", "/api/console"): _route(
+        "Read the local Console's assistant and projection status", "system",
+        _ref("ConsoleStatusDtoSchema")),
     ("GET", "/api/capabilities"): _route(
         "Read runtime capabilities", "system", _ref("CapabilitiesSchema")),
     ("POST", "/api/dex/{kind}"): _route(
@@ -201,11 +209,26 @@ LOCAL_ROUTES: dict[RouteKey, dict[str, Any]] = {
         request=_SESSION_CREATE, request_required=False),
     ("GET", "/api/sessions"): _route(
         "List UEP sessions", "sessions", _array(_ref("SessionDtoSchema"))),
+    ("GET", "/api/sessions/overview"): _route(
+        "Read bounded Console home cards and session counts", "sessions", _ref("SessionOverviewDtoSchema")),
     ("GET", "/api/sessions/{session_id}"): _route(
         "Read a UEP session and ledger", "sessions", _ref("SessionWithLedgerDtoSchema")),
     ("POST", "/api/sessions/{session_id}/artifacts"): _route(
         "Append a content-addressed artifact", "sessions",
         _ref("ArtifactAppendEventDtoSchema"), request=_ARTIFACT_APPEND),
+    ("POST", "/api/sessions/{session_id}/title"): _route(
+        "Set or clear a session's display title", "sessions", _ref("SessionDtoSchema"),
+        request=_ref("SessionTitleRequestDtoSchema")),
+    ("POST", "/api/sessions/{session_id}/archive"): _route(
+        "Archive or restore a session", "sessions", _ref("SessionDtoSchema"),
+        request=_ref("SessionArchiveRequestDtoSchema")),
+    ("DELETE", "/api/sessions/{session_id}"): _route(
+        "Delete a session and its ledger", "sessions", _HEALTH),
+    ("GET", "/api/sessions/{session_id}/diagnose"): _route(
+        "Read a session's latest diagnosis as a report", "sessions", _ref("DiagnoseFactsDtoSchema")),
+    ("GET", "/api/sessions/{session_id}/wait"): _route(
+        "Long-poll for the reader's next panel artifact", "sessions",
+        _ref("SessionWaitResultDtoSchema")),
     ("GET", "/api/artifacts/{artifact_hash}"): _route(
         "Read an artifact payload", "sessions", {},
         response_headers={

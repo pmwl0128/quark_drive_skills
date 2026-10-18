@@ -1,7 +1,19 @@
-.session-handoff { margin: 20px 0; padding: 20px 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
-.session-handoff h2 { margin: 0 0 5px; font-size: 16px; }
-.session-handoff > div > p { color: var(--sub); font-size: 12px; margin: 0; }
-.session-handoff-instruction { display: flex; align-items: center; gap: 20px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
-.session-handoff-instruction p { flex: 1; margin: 0; font-size: 13px; line-height: 1.8; }
-.session-handoff-instruction button { display: inline-flex; align-items: center; gap: 7px; flex: none; }
-@media (max-width: 720px) { .session-handoff { padding: 18px; } .session-handoff-instruction { flex-direction: column; align-items: stretch; } .session-handoff-instruction button { justify-content: center; } }
+.session-handoff { display: flex; gap: 14px; padding: 18px 22px; border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  border-radius: var(--radius); background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 5%, var(--panel)), var(--panel));
+  box-shadow: var(--shadow); }
+.session-handoff.handoff-fix { border-color: color-mix(in srgb, var(--warning) 38%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--warning) 7%, var(--panel)), var(--panel)); }
+.session-handoff.handoff-resume { border-color: var(--line); background: var(--panel); box-shadow: none; }
+.session-handoff-icon { display: grid; flex: none; place-items: center; width: 36px; height: 36px; border-radius: 10px;
+  background: var(--brand-soft); color: var(--brand); }
+.handoff-fix .session-handoff-icon { background: color-mix(in srgb, var(--warning) 14%, var(--panel)); color: var(--warning); }
+.handoff-resume .session-handoff-icon { background: var(--panel-2); color: var(--sub); }
+.session-handoff-body { display: grid; flex: 1; gap: 6px; min-width: 0; }
+.session-handoff h2 { margin: 0; padding: 0; border: 0; font-size: 15px; line-height: 1.5; text-transform: none; letter-spacing: 0; }
+.session-handoff-body > p { margin: 0 0 4px; color: var(--sub); font-size: 12.5px; line-height: 1.65; }
+.session-handoff-setup { display: grid; gap: 6px; margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.session-handoff-setup p { margin: 0; color: var(--sub); font-size: 12px; }
+@media (max-width: 720px) { .session-handoff { padding: 16px; } .session-handoff-icon { display: none; } }
+.session-handoff.handoff-collected { border-color: color-mix(in srgb, var(--success) 32%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--success) 6%, var(--panel)), var(--panel)); }
+.handoff-collected .session-handoff-icon { background: color-mix(in srgb, var(--success) 14%, var(--panel)); color: var(--success); }

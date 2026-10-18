@@ -30,6 +30,8 @@ const loadAssistantPage = () => import("./pages/AssistantPage.tsx");
 const loadTeamsPage = () => import("./pages/TeamsPage.tsx");
 const loadUepPages = () => import("./pages/uep/index.ts");
 const LocalHomePage = lazy(() => import("./pages/LocalHomePage.tsx").then(m => ({ default: m.LocalHomePage })));
+// Only a runtime with a session feed can lose it; the online entry never loads this.
+const ConnectionNotice = lazy(() => import("./components/session/ConnectionNotice.tsx").then(m => ({ default: m.ConnectionNotice })));
 
 const RankingPage = lazy(() => loadRankingPage().then((m) => ({ default: m.RankingPage })));
 const DexPage = lazy(() => loadDexPage().then((m) => ({ default: m.DexPage })));
@@ -236,6 +238,7 @@ function Shell({ theme, setTheme }: { theme: ThemePreference; setTheme: (theme: 
       <FallbackSearch />
       <main id="main-content" className="content" tabIndex={-1}>
         <StorageFailureNotice />
+        {can("team.uep") && adapter.sessions ? <Suspense fallback={null}><ConnectionNotice /></Suspense> : null}
         <Suspense fallback={<RouteLoading />}>
           <Routes>
           <Route path="/" element={adapter.runtime === "local" ? <LocalHomePage /> : <HomePage />} />

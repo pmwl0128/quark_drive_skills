@@ -3,11 +3,11 @@
  * via the vite proxy instead. Zod-validates every response at the boundary (design §3). */
 import {
   ActualMatchupResponseDtoSchema, ArtifactAppendEventDtoSchema, CapabilitiesSchema,
-  DamageBatchResultDtoSchema,
+  ConsoleStatusDtoSchema, DamageBatchResultDtoSchema, DiagnoseFactsDtoSchema,
   DamageResultDtoSchema, MetaDetailDtoSchema,
   OppCheckGridDtoSchema, OppDetailsDtoSchema, OppKoGridDtoSchema, OppSetCatalogDtoSchema,
   PokemonCardDtoSchema,
-  RankingDtoSchema, ResolveEntryDtoSchema, SessionDtoSchema, SessionWithLedgerDtoSchema,
+  RankingDtoSchema, ResolveEntryDtoSchema, SessionDtoSchema, SessionWithLedgerDtoSchema, SessionOverviewDtoSchema,
   LearnersDtoSchema, MetaFacetsDtoSchema, MetaKoDtoSchema,
   MetaKoTrendDtoSchema, SpeedBatchResultDtoSchema, TrendDtoSchema, TuneResultDtoSchema,
   TopMetaDetailDtoSchema, TopMetaRankingDtoSchema, UsageTrendDtoSchema,
@@ -21,6 +21,7 @@ import {
   type DexIndexEntry, type RuntimeAdapter, type RuntimeConfig, type SessionApi, type WorkspaceApi,
 } from "./adapter.ts";
 import { loadProjectionDexIndex } from "./online.ts";
+import { SessionFeed } from "./sessionFeed.ts";
 
 export class LocalAdapter implements RuntimeAdapter {
   readonly runtime = "local" as const;
@@ -185,17 +186,37 @@ export class LocalAdapter implements RuntimeAdapter {
     return ActualMatchupResponseDtoSchema.parse(await this.post("/team/matchup", req));
   }
 
+  private feedInstance: SessionFeed | null = null;
+  private get feed(): SessionFeed {
+    return this.feedInstance ??= new SessionFeed(`${this.cfg.apiBase}/events`, async signal =>
+      (await fetch(`${this.cfg.apiBase}/health`, { cache: "no-store", signal })).status);
+  }
+
   /** UEP session surface (team.uep). Artifact payloads travel as verbatim text — the store's
    * round-trip guarantee ends the moment anyone re-serializes, so no JSON.parse here. */
   readonly sessions: SessionApi = {
+    overview: async teamId => SessionOverviewDtoSchema.parse(await this.get(
+      `/sessions/overview${teamId ? `?team_id=${encodeURIComponent(teamId)}` : ""}`)),
     list: async (options) => {
       const query = new URLSearchParams();
       if (options?.limit) query.set("limit", String(options.limit));
       if (options?.prioritizeDecisions) query.set("prioritize_decisions", "true");
+      if (options?.archived) query.set("archived", options.archived);
       return z.array(SessionDtoSchema).parse(await this.get(`/sessions?${query}`));
     },
     create: async (meta) =>
       SessionDtoSchema.parse(await this.post("/sessions", { meta: meta ?? {} })),
+    diagnosis: async (id) =>
+      DiagnoseFactsDtoSchema.parse(await this.get(`/sessions/${encodeURIComponent(id)}/diagnose`)),
+    rename: async (id, title) =>
+      SessionDtoSchema.parse(await this.post(`/sessions/${encodeURIComponent(id)}/title`, { title })),
+    archive: async (id, archived) =>
+      SessionDtoSchema.parse(await this.post(`/sessions/${encodeURIComponent(id)}/archive`, { archived })),
+    remove: async (id) => {
+      await fetchJson(`${this.cfg.apiBase}/sessions/${encodeURIComponent(id)}`, {
+        method: "DELETE", headers: this.workspaceId ? { "X-PCUI-Workspace": this.workspaceId } : {},
+      });
+    },
     get: async (id) =>
       SessionWithLedgerDtoSchema.parse(await this.get(`/sessions/${encodeURIComponent(id)}`)),
     artifact: async (hash) => {
@@ -206,16 +227,10 @@ export class LocalAdapter implements RuntimeAdapter {
     putArtifact: async (sessionId, kind, payload, revision) =>
       ArtifactAppendEventDtoSchema.parse(await this.post(
         `/sessions/${encodeURIComponent(sessionId)}/artifacts`, { kind, payload, revision })),
-    subscribe: (onEvent) => {
-      const es = new EventSource(`${this.cfg.apiBase}/events`);
-      // Default (unnamed) messages only — the server's `event: hello` greeting has a name and
-      // never reaches onmessage. EventSource auto-reconnects on drop.
-      es.onmessage = (ev) => {
-        const parsed = ArtifactAppendEventDtoSchema.safeParse(JSON.parse(ev.data));
-        if (parsed.success) onEvent(parsed.data);
-      };
-      return () => es.close();
-    },
+    subscribe: (onChange) => this.feed.subscribe(onChange),
+    liveStatus: () => this.feed.liveStatus(),
+    onLiveStatus: (listener) => this.feed.onLiveStatus(listener),
+    consoleStatus: async () => ConsoleStatusDtoSchema.parse(await this.get("/console")),
   };
 
   async tune(team: unknown, benchmarks: unknown[]) {

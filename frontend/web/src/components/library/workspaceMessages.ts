@@ -23,6 +23,7 @@ export const useWorkspaceT = defineMessages({
   error: { zh: "操作失败，请检查目录权限和连接后重试。", en: "The operation failed. Check folder permissions and the connection, then retry.", ja: "操作できませんでした。フォルダの権限と接続を確認して再試行してください。" },
   conflict: { zh: "资料已在其他窗口中改变，请刷新后重试。", en: "Data changed in another window. Reload and retry.", ja: "別のウィンドウでデータが変更されました。再読み込みして再試行してください。" },
   target_not_empty: { zh: "目标目录已有资料。可用“打开此目录”读取，或换一个空目录进行复制。", en: "The destination has data. Open it to read that data, or choose an empty folder for copying.", ja: "保存先にデータがあります。そのフォルダを開くか、コピー用に空のフォルダを選んでください。" },
+  workspace_busy: { zh: "助手仍在运行，请等当前任务结束后再切换目录。", en: "The assistant is still running. Wait for the current task before switching folders.", ja: "アシスタントが実行中です。現在の処理が終わってから保存先を変更してください。" },
   workspace_in_use: { zh: "此目录正由另一实例使用，请先关闭该实例。", en: "Another instance is using this folder. Close it first.", ja: "別のインスタンスがこのフォルダを使用中です。先に終了してください。" },
   absolute_path_required: { zh: "请输入完整的绝对路径。", en: "Enter a full absolute path.", ja: "完全な絶対パスを入力してください。" },
   workspace_file_unreadable: { zh: "目录中的资料文件无法读取。原文件已保留，请检查文件或从备份恢复。", en: "A data file cannot be read. The original is preserved; check the file or restore a backup.", ja: "データファイルを読み込めません。元のファイルは保持されています。内容を確認するか、バックアップから復元してください。" },

@@ -15,6 +15,20 @@ DIAGNOSE_TIMEOUT = 150.0
 DIAGNOSE_TOP_K = 30
 
 
+def validate_team(pool, team: dict) -> dict:
+    """The legality facts a diagnosis report pairs with an already-diagnosed team."""
+    with tempfile.TemporaryDirectory(prefix="pcui-validate-") as tmp:
+        team_json = Path(tmp) / "team.json"
+        team_json.write_text(json.dumps(team, ensure_ascii=False), encoding="utf-8")
+        spec = Path(tmp) / "spec.json"
+        spec.write_text(json.dumps([{"op": "validate", "file": str(team_json)}]), encoding="utf-8")
+        rows = pool.request_json("team", ["session", str(spec)], None, DIAGNOSE_TIMEOUT)
+    row = rows[0] if isinstance(rows, list) and rows else None
+    if not isinstance(row, dict) or not isinstance(row.get("result"), dict):
+        raise RuntimeError("validate failed")
+    return row["result"]
+
+
 def run_team_diagnose(pool, text: str, fmt: str) -> dict:
     """Parse structured/share text, then fill genuine gaps with observed species only."""
     norm = normalize_team_text(text)

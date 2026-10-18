@@ -7,6 +7,10 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
+import hashlib
+import math
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -21,7 +25,9 @@ from .capabilities import assemble
 from .openapi import install_openapi
 from .paths import META_DATA
 from .security import COOKIE_NAME, Security
+from .session_gates import gate_artifacts
 from .store import Conflict, NotFound, Store
+from .team_diagnose import validate_team
 from .team_matchup import MatchupInputError, run_actual_matchup
 from .team_tune import TuneInputError, run_team_tune
 from .worker import WorkerError, WorkerPool
@@ -29,6 +35,19 @@ from .worker import WorkerError, WorkerPool
 MAX_BODY = 2 * 1024 * 1024
 QUERY_TIMEOUT = 60.0
 TEAM_TIMEOUT = 600.0
+SSE_PING_SECONDS = 15.0
+SSE_RETRY_MS = 3000
+# One wait poll stays well under the CDN-free loopback's limits and the CLI's own read timeout; the
+# CLI polls again at once, so a waiter counts as present for a poll plus this grace.
+WAIT_POLL_SECONDS = 25.0
+WAIT_GRACE_SECONDS = 15.0
+# A failed operator run stays on the session for this long, so the reader sees what went wrong.
+FAILED_RUN_SECONDS = 600.0
+PANEL_KINDS = ("decision", "intake-answer")
+
+
+def _iso(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, timezone.utc).isoformat(timespec="seconds")
 _DEPLOYMENT_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{2,80}\Z")
 
 DEX_KINDS = ("pokemon", "move", "item", "ability", "nature")
@@ -164,14 +183,46 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
             raise HTTPException(502, {"error": {"code": "bad_input",
                                      "message": f"{cli_id} produced no parseable output"}})
 
-    def on_event(event: dict) -> None:
+    def publish(name: str | None, payload: dict) -> None:
+        """Queue one SSE message for every open stream; unnamed messages are artifact appends."""
         loop = loop_ref.get("loop")
         if loop is None:
             return
         for q in list(subscribers):
-            loop.call_soon_threadsafe(q.put_nowait, event)
+            loop.call_soon_threadsafe(q.put_nowait, (name, payload))
+
+    # What the daemon itself sees happening in a session, never stored: an operator it is running
+    # for the assistant (`pcui run --session`), and an assistant blocked in `pcui session wait`.
+    # Both are live observations, so they may say "running" or "waiting" where the ledger cannot.
+    activity: dict[str, dict] = {}
+    waiters: dict[str, dict] = {}
+    picked: dict[str, int] = {}         # session -> newest panel answer sequence a wait handed over
+    wakers: dict[str, set[asyncio.Event]] = {}
+    active_runs: set[object] = set()
+
+    def on_event(event: dict) -> None:
+        publish(None, event)
+        loop = loop_ref.get("loop")
+        for waker in list(wakers.get(event["sessionId"], ())):
+            if loop is not None:
+                loop.call_soon_threadsafe(waker.set)
 
     store.subscribe(on_event)
+
+    def live_view(view: dict) -> dict:
+        now = time.time()
+        run = activity.get(view["id"])
+        if run and run["state"] == "failed" and now - run["ended"] > FAILED_RUN_SECONDS:
+            activity.pop(view["id"], None)
+            run = None
+        if run:
+            view["activity"] = {key: value for key, value in run.items() if key not in ("started", "ended")}
+        wait = waiters.get(view["id"])
+        if wait and wait["until"] > now:
+            view["waiting"] = {"kinds": wait["kinds"], "until": _iso(wait["until"])}
+        if view["id"] in picked:
+            view["pickedUp"] = picked[view["id"]]
+        return view
 
     def close_workspace():
         if workspace is not None:
@@ -217,6 +268,9 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
         nonlocal workspace, store
         def switch():
             workspace.check(body.get("workspaceId"))
+            if active_runs:
+                from .workspace import WorkspaceError
+                raise WorkspaceError("workspace_busy")
             if not isinstance(body.get("path"), str) or not isinstance(body.get("migrate"), bool):
                 from .workspace import WorkspaceError
                 raise WorkspaceError("bad_input", 400)
@@ -227,6 +281,10 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
             workspace, store = next_workspace, next_store
             store.subscribe(on_event)
             old_store.close(); old_workspace.close()
+            activity.clear(); waiters.clear(); picked.clear(); diagnosis_reports.clear()
+            for events in wakers.values():
+                for event in events:
+                    event.set()
         return workspace.info()
 
     @app.get("/api/workspace/library")
@@ -320,13 +378,34 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
         response.set_cookie(COOKIE_NAME, cookie, httponly=True, samesite="strict")
         return {"ok": True}
 
-    @app.get("/api/capabilities")
-    async def capabilities():
+    @app.post("/api/bootstrap/mint")
+    async def mint_bootstrap(request: Request):
+        # Same-machine file trust only: a browser cookie cannot mint sign-in links for others.
+        if not security.is_cli(request.headers.get("x-pcui-secret")):
+            raise HTTPException(403, "the CLI secret is required")
+        return {"token": security.mint_bootstrap()}
+
+    async def assembled_capabilities() -> dict:
         async with caps_lock:                  # assembled once; the lock stops two concurrent
             if state["capabilities"] is None:  # first requests from each running the full pass
+                report: dict[str, Any] = {}
                 state["capabilities"] = await asyncio.to_thread(
-                    assemble, pool, deployment_id)
+                    assemble, pool, deployment_id, None, report)
+                state["projection_stale"] = bool(report.get("projectionStale"))
         return state["capabilities"]
+
+    @app.get("/api/capabilities")
+    async def capabilities():
+        return await assembled_capabilities()
+
+    @app.get("/api/console")
+    async def console_status():
+        """What the Console's setup card shows: whether an assistant can reach this bridge, and
+        whether the static pages were built from the skill data being served."""
+        from .agent_setup import companion_report, pcui_command
+        await assembled_capabilities()
+        return {"pcuiCommand": pcui_command(), "companion": companion_report(),
+                "projectionStale": state.get("projection_stale", False)}
 
     # -- dex ---------------------------------------------------------------------------
 
@@ -771,35 +850,81 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
         ops = body.get("ops")
         if not isinstance(ops, list) or not ops:
             raise HTTPException(400, "ops required")
-        import tempfile
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_dir = Path(tmp)
-            spec_ops: list[dict] = []
-            for i, op in enumerate(ops):
-                if not isinstance(op, dict) or op.get("op") not in TEAM_OPS:
-                    raise HTTPException(400, f"op not allowed: "
-                                        f"{op.get('op') if isinstance(op, dict) else op}")
-                out = dict(op)
-                for field in TEAM_FILE_FIELDS:
-                    value = out.get(field)
-                    if value is None:
-                        continue
-                    if not isinstance(value, (dict, list)):
-                        # a client string here would be a local path handed to team.py —
-                        # arbitrary-file read. Inline JSON only.
-                        raise HTTPException(
-                            400, f"ops[{i}].{field} must be inline JSON, not a path")
-                    path = tmp_dir / f"op{i}-{field}.json"
-                    path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
-                    out[field] = str(path)
-                spec_ops.append(out)
-            spec = tmp_dir / "session.json"
-            # cmd_session expects the spec's TOP LEVEL to be the command array itself.
-            spec.write_text(json.dumps(spec_ops, ensure_ascii=False), encoding="utf-8")
-            doc = await asyncio.to_thread(
-                pool.request_json, "team", ["session", str(spec)], None, TEAM_TIMEOUT)
-        return doc
+        session_id = body.get("session")
+        run_store = store
+        revision = None
+        if session_id is not None:
+            if not isinstance(session_id, str) or not session_id:
+                raise HTTPException(400, "session must be a session id")
+            try:
+                revision = run_store.get_session(session_id)["revision"]
+            except NotFound:
+                raise HTTPException(404, "session not found")
+            if activity.get(session_id, {}).get("state") == "running":
+                raise HTTPException(409, "an operator is already running for this session")
+        for op in ops:
+            if not isinstance(op, dict) or not isinstance(op.get("op"), str) or op["op"] not in TEAM_OPS:
+                raise HTTPException(400, "op not allowed")
+        label = " + ".join(str(op["op"]) for op in ops)
+        run = {"op": label, "state": "running", "startedAt": _iso(time.time()), "started": time.time()}
+        lease = object()
+        active_runs.add(lease)
+        ok = False
+        try:
+            if session_id:
+                activity[session_id] = run
+                publish("activity", {"sessionId": session_id})
+            import tempfile
+            inputs: list[dict[str, bytes]] = []
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_dir = Path(tmp)
+                spec_ops: list[dict] = []
+                for i, op in enumerate(ops):
+                    out = dict(op)
+                    materialized: dict[str, bytes] = {}
+                    for field in TEAM_FILE_FIELDS:
+                        value = out.get(field)
+                        if value is None:
+                            continue
+                        if not isinstance(value, (dict, list)):
+                            raise HTTPException(400, f"ops[{i}].{field} must be inline JSON, not a path")
+                        path = tmp_dir / f"op{i}-{field}.json"
+                        materialized[field] = json.dumps(value, ensure_ascii=False).encode("utf-8")
+                        path.write_bytes(materialized[field])
+                        out[field] = str(path)
+                    spec_ops.append(out)
+                    inputs.append(materialized)
+                spec = tmp_dir / "session.json"
+                spec.write_text(json.dumps(spec_ops, ensure_ascii=False), encoding="utf-8")
+                doc = await asyncio.to_thread(
+                    pool.request_json, "team", ["session", str(spec)], None, TEAM_TIMEOUT)
+            if not isinstance(doc, list) or len(doc) != len(ops):
+                raise HTTPException(502, "operator returned an incomplete batch")
+            if session_id:
+                groups = [gate_artifacts(op, materialized, row) for op, materialized, row in zip(ops, inputs, doc)]
+                events = iter(run_store.append_artifacts(
+                    session_id, [pair for group in groups for pair in group], revision, deduplicate=True))
+                for group, row in zip(groups, doc):
+                    appended = [event for _ in group if (event := next(events, None)) is not None]
+                    if appended and isinstance(row, dict):
+                        row["artifacts"] = [{key: event[key] for key in ("kind", "artifactHash", "revision")}
+                                            for event in appended]
+            ok = all(isinstance(row, dict) and row.get("error") is None and row.get("result") is not None for row in doc)
+            return doc
+        except NotFound as exc:
+            raise HTTPException(404, "session not found") from exc
+        except Conflict as exc:
+            raise HTTPException(409, {"expected": exc.expected, "actual": exc.actual,
+                                      "message": "session changed while the operator ran; re-read before running again"}) from exc
+        finally:
+            active_runs.discard(lease)
+            # A deleted session has already removed its activity; never resurrect it or read it by id.
+            if session_id and activity.get(session_id) is run:
+                if ok:
+                    activity.pop(session_id, None)
+                else:
+                    run.update(state="failed", ended=time.time())
+                publish("activity", {"sessionId": session_id})
 
     @app.post("/api/team/matchup")
     async def actual_team_matchup(body: dict):
@@ -829,13 +954,24 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
 
     @app.post("/api/sessions")
     async def create_session(body: dict | None = None):
-        return store.create_session((body or {}).get("meta"))
+        session = store.create_session((body or {}).get("meta"))
+        publish("session", {"sessionId": session["id"], "change": "created"})
+        return session
 
     @app.get("/api/sessions")
-    async def list_sessions(limit: int | None = None, prioritize_decisions: bool = False):
+    async def list_sessions(limit: int | None = None, prioritize_decisions: bool = False,
+                            archived: str = "exclude"):
         if limit is not None and not 1 <= limit <= 50:
             raise HTTPException(400, "limit must be between 1 and 50")
-        return store.list_session_views(limit, prioritize_decisions)
+        if archived not in ("exclude", "include", "only"):
+            raise HTTPException(400, "archived must be exclude, include or only")
+        return [live_view(view) for view in store.list_session_views(limit, prioritize_decisions, archived)]
+
+    @app.get("/api/sessions/overview")
+    async def session_overview(team_id: str | None = None):
+        overview = store.session_overview(team_id)
+        overview["sessions"] = [live_view(view) for view in overview["sessions"]]
+        return overview
 
     @app.get("/api/sessions/{session_id}")
     async def get_session(session_id: str):
@@ -843,7 +979,130 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
             out = store.get_session_view(session_id)
         except NotFound:
             raise HTTPException(404, "session not found")
-        return out
+        return live_view(out)
+
+    @app.post("/api/sessions/{session_id}/title")
+    async def rename_session(session_id: str, body: dict):
+        title = body.get("title")
+        if title is not None and (not isinstance(title, str) or len(title) > 200):
+            raise HTTPException(400, "title must be a string of at most 200 characters")
+        try:
+            store.set_title(session_id, title)
+        except NotFound:
+            raise HTTPException(404, "session not found")
+        publish("session", {"sessionId": session_id, "change": "updated"})
+        return live_view(store.get_session_view(session_id))
+
+    @app.post("/api/sessions/{session_id}/archive")
+    async def archive_session(session_id: str, body: dict):
+        if not isinstance(body.get("archived"), bool):
+            raise HTTPException(400, "archived (bool) required")
+        try:
+            store.set_archived(session_id, body["archived"])
+        except NotFound:
+            raise HTTPException(404, "session not found")
+        publish("session", {"sessionId": session_id, "change": "updated"})
+        return live_view(store.get_session_view(session_id))
+
+    @app.delete("/api/sessions/{session_id}")
+    async def delete_session(session_id: str):
+        try:
+            store.delete_session(session_id)
+        except NotFound:
+            raise HTTPException(404, "session not found")
+        activity.pop(session_id, None)
+        waiters.pop(session_id, None)
+        picked.pop(session_id, None)
+        publish("session", {"sessionId": session_id, "change": "deleted"})
+        return {"ok": True}
+
+    diagnosis_reports: OrderedDict[tuple[str, str], dict] = OrderedDict()
+
+    @app.get("/api/sessions/{session_id}/diagnose")
+    async def session_diagnosis(session_id: str):
+        """The session's latest diagnosis as the same report the online diagnose page renders:
+        the operator's facts, the team it read, and that team's legality checked now."""
+        try:
+            source_store = store
+            pair = source_store.artifact_pair(session_id, "diagnose", "team")
+        except NotFound:
+            raise HTTPException(404, "session not found")
+        if pair is None:
+            raise HTTPException(404, "this session has no diagnosis")
+        try:
+            raw = json.loads(pair["output"]["raw_payload"])
+            team = json.loads(pair["input"]["raw_payload"]) if pair["input"] else pair["meta"].get("team")
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, "the diagnosis artifact is not readable") from exc
+        if not isinstance(raw, dict) or not isinstance(team, dict):
+            raise HTTPException(422, "the diagnosis has no team to report on")
+        team_hash = hashlib.sha256(json.dumps(team, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        key = (pair["output"]["hash"], team_hash)
+        if key not in diagnosis_reports:
+            legality = await asyncio.to_thread(validate_team, pool, team)
+            if source_store is not store:
+                raise HTTPException(409, "workspace changed while validating the diagnosis")
+            diagnosis_reports[key] = mappers.map_diagnose_report(team, legality, raw)
+        report = diagnosis_reports[key]
+        diagnosis_reports.move_to_end(key)
+        while len(diagnosis_reports) > 32:
+            diagnosis_reports.popitem(last=False)
+        return report
+
+    @app.get("/api/sessions/{session_id}/wait")
+    async def wait_for_reader(session_id: str, kinds: str = ",".join(PANEL_KINDS), after: int = 0,
+                              timeout: float = WAIT_POLL_SECONDS):
+        """Long-poll for the reader's next move: return once an artifact of `kinds` has sequence
+        >= `after`, or `timeout` after up to one poll. While an assistant polls, its session shows
+        it waiting, so the panel can say the assistant will continue on its own."""
+        wanted = [kind for kind in kinds.split(",") if kind]
+        if not wanted or any(kind not in PANEL_KINDS for kind in wanted):
+            raise HTTPException(400, "kinds must be decision and/or intake-answer")
+        if not math.isfinite(timeout):
+            raise HTTPException(400, "timeout must be finite")
+        timeout = max(1.0, min(float(timeout), WAIT_POLL_SECONDS))
+        source_store = store
+
+        def ready() -> dict | None:
+            if source_store is not store:
+                raise HTTPException(409, "workspace changed while waiting")
+            store.get_session(session_id)
+            rows = store.changes_since_revision(session_id, after)
+            return next((row for row in reversed(rows) if row["kind"] in wanted), None)
+
+        def settle(hit: dict | None):
+            if hit:
+                picked[session_id] = max(picked.get(session_id, -1), hit["sequence"])
+                waiters.pop(session_id, None)
+                publish("activity", {"sessionId": session_id})
+            return {"status": "ready", **hit} if hit else {"status": "timeout"}
+
+        try:
+            hit = ready()
+        except NotFound:
+            raise HTTPException(404, "session not found")
+        if hit:
+            return settle(hit)
+        now = time.time()
+        previous = waiters.get(session_id, {})
+        announce = previous.get("until", 0) <= now or now - previous.get("notified", 0) >= 10
+        waiters[session_id] = {"kinds": wanted, "until": now + timeout + WAIT_GRACE_SECONDS,
+                               "notified": now if announce else previous["notified"]}
+        if announce:
+            publish("activity", {"sessionId": session_id})
+        loop_ref.setdefault("loop", asyncio.get_running_loop())
+        waker = asyncio.Event()
+        wakers.setdefault(session_id, set()).add(waker)
+        try:
+            await asyncio.wait_for(waker.wait(), timeout)
+        except asyncio.TimeoutError:
+            pass
+        finally:
+            wakers.get(session_id, set()).discard(waker)
+        try:
+            return settle(ready())
+        except NotFound:
+            raise HTTPException(404, "session not found")
 
     @app.post("/api/sessions/{session_id}/artifacts")
     async def append_artifact(session_id: str, body: dict):
@@ -883,10 +1142,17 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
 
         async def stream():
             try:
-                yield "event: hello\ndata: {}\n\n"
+                yield f"retry: {SSE_RETRY_MS}\nevent: hello\ndata: {{}}\n\n"
                 while True:
-                    event = await q.get()
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                    try:
+                        name, event = await asyncio.wait_for(q.get(), SSE_PING_SECONDS)
+                    except asyncio.TimeoutError:
+                        # Named so the page sees it: a stream that stops pinging is dead even when
+                        # the browser has not noticed, and the page reconnects and re-reads.
+                        yield "event: ping\ndata: {}\n\n"
+                        continue
+                    head = f"event: {name}\n" if name else ""
+                    yield f"{head}data: {json.dumps(event, ensure_ascii=False)}\n\n"
             finally:
                 subscribers.discard(q)
 

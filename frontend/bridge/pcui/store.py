@@ -5,6 +5,8 @@
 - session_artifacts: append-only ledger (session_id, sequence).
 - sessions: heads (kind -> artifact hash) + revision in ONE row — optimistic locking is a
   single-row compare-and-swap; a stale writer gets a Conflict with the current state.
+- session_flags: the reader's own bookkeeping (a display title, archived). It never touches the
+  ledger or the revision, so it cannot invalidate an agent's or the panel's CAS.
 
 Listeners registered via `subscribe` receive every committed artifact append (the SSE feed).
 """
@@ -54,6 +56,11 @@ create table if not exists sessions(
   revision integer not null default 0,
   heads_json text not null default '{}',
   meta_json text not null default '{}'
+);
+create table if not exists session_flags(
+  session_id text primary key,
+  title text,
+  archived_at text
 );
 """
 
@@ -110,12 +117,16 @@ class Store:
 
     # -- artifacts -----------------------------------------------------------------
 
-    def list_session_views(self, limit: int | None = None, prioritize_decisions: bool = False) -> list[dict]:
-        from .session_views import SESSION_VIEW_SQL, session_view
+    def list_session_views(self, limit: int | None = None, prioritize_decisions: bool = False,
+                           archived: str = "exclude") -> list[dict]:
+        """`archived`: exclude (default), include, or only the archived sessions."""
+        from .session_views import NEEDS_READER, SESSION_VIEW_SQL, session_view
         with self._lock:
             rows = self._conn.execute(SESSION_VIEW_SQL).fetchall()
         views = [session_view(row) for row in rows]
-        views.sort(key=lambda row: (prioritize_decisions and row["state"] == "awaiting",
+        if archived != "include":
+            views = [row for row in views if row["archived"] == (archived == "only")]
+        views.sort(key=lambda row: (prioritize_decisions and row["state"] in NEEDS_READER,
                                     row["updatedAt"], row["createdAt"], row["id"]), reverse=True)
         return views if limit is None else views[:limit]
 
@@ -136,9 +147,17 @@ class Store:
 
     def append_artifact(self, session_id: str, kind: str, payload: bytes,
                         expected_revision: int) -> dict:
-        """CAS append: store the immutable artifact, extend the ledger, and move the
-        session head — all in one transaction guarded by the revision the writer saw."""
-        h = artifact_hash(kind, payload)
+        return self.append_artifacts(session_id, [(kind, payload)], expected_revision)[0]
+
+    def append_artifacts(self, session_id: str, artifacts: list[tuple[str, bytes]],
+                         expected_revision: int, *, deduplicate: bool = False) -> list[dict]:
+        """Commit a gate's inputs and outputs together against the revision it actually read.
+
+        Content is reusable, but ledger order is evidence: only an identical *suffix* is a rerun.
+        After an intervening draft/decision the same bytes must be recorded as a new application.
+        """
+        pairs = [(kind, artifact_hash(kind, payload), payload) for kind, payload in artifacts]
+        events = []
         with self._lock, self._conn:
             row = self._conn.execute(
                 "select revision, heads_json from sessions where id=?", (session_id,)).fetchone()
@@ -146,25 +165,97 @@ class Store:
                 raise NotFound(session_id)
             if row["revision"] != expected_revision:
                 raise Conflict(session_id, expected_revision, row["revision"])
-            self._conn.execute(
-                "insert or ignore into artifacts(hash, kind, raw_payload, created_at) "
-                "values(?,?,?,?)", (h, kind, payload, _now()))
+            if not pairs:
+                return []
+            if deduplicate:
+                tail = self._conn.execute(
+                    "select kind, artifact_hash from session_artifacts where session_id=? "
+                    "order by sequence desc limit ?", (session_id, len(pairs))).fetchall()
+                if [(r["kind"], r["artifact_hash"]) for r in reversed(tail)] == [(k, h) for k, h, _ in pairs]:
+                    return []
             seq = self._conn.execute(
                 "select coalesce(max(sequence), -1) + 1 from session_artifacts "
                 "where session_id=?", (session_id,)).fetchone()[0]
-            self._conn.execute(
-                "insert into session_artifacts(session_id, sequence, kind, artifact_hash, "
-                "created_at) values(?,?,?,?,?)", (session_id, seq, kind, h, _now()))
             heads = json.loads(row["heads_json"])
-            heads[kind] = h
-            new_rev = row["revision"] + 1
+            new_rev = row["revision"]
+            for kind, h, payload in pairs:
+                self._conn.execute(
+                    "insert or ignore into artifacts(hash, kind, raw_payload, created_at) "
+                    "values(?,?,?,?)", (h, kind, payload, _now()))
+                self._conn.execute(
+                    "insert into session_artifacts(session_id, sequence, kind, artifact_hash, "
+                    "created_at) values(?,?,?,?,?)", (session_id, seq, kind, h, _now()))
+                heads[kind] = h
+                new_rev += 1
+                events.append({"sessionId": session_id, "kind": kind, "artifactHash": h,
+                               "revision": new_rev, "sequence": seq})
+                seq += 1
             self._conn.execute("update sessions set heads_json=?, revision=? where id=?",
                                (json.dumps(heads, ensure_ascii=False), new_rev, session_id))
-        event = {"sessionId": session_id, "kind": kind, "artifactHash": h,
-                 "revision": new_rev, "sequence": seq}
-        for fn in list(self._listeners):
-            fn(event)
-        return event
+        for event in events:
+            for fn in list(self._listeners):
+                fn(event)
+        return events
+
+    def artifact_pair(self, session_id: str, output_kind: str, input_kind: str) -> dict | None:
+        """Latest output and the input preceding that ledger application, in one consistent read."""
+        with self._lock:
+            session = self._conn.execute("select meta_json from sessions where id=?", (session_id,)).fetchone()
+            if session is None:
+                raise NotFound(session_id)
+            output = self._conn.execute(
+                "select l.sequence, a.* from session_artifacts l join artifacts a on a.hash=l.artifact_hash "
+                "where l.session_id=? and l.kind=? order by l.sequence desc limit 1",
+                (session_id, output_kind)).fetchone()
+            if output is None:
+                return None
+            source = self._conn.execute(
+                "select a.* from session_artifacts l join artifacts a on a.hash=l.artifact_hash "
+                "where l.session_id=? and l.kind=? and l.sequence<? order by l.sequence desc limit 1",
+                (session_id, input_kind, output["sequence"])).fetchone()
+        return {"output": dict(output), "input": dict(source) if source else None,
+                "meta": json.loads(session["meta_json"])}
+
+    def session_overview(self, team_id: str | None = None, limit: int = 4) -> dict:
+        """Bounded home cards and exact counts, without loading every attached team snapshot."""
+        from .session_views import NEEDS_READER, SESSION_SUMMARY_SQL, SESSION_VIEW_SQL, session_view
+        with self._lock:
+            rows = self._conn.execute(SESSION_SUMMARY_SQL).fetchall()
+            views = [(session_view(row), row["team_ref"]) for row in rows if row["archived_at"] is None]
+            views.sort(key=lambda pair: (pair[0]["state"] in NEEDS_READER,
+                                        pair[0]["updatedAt"], pair[0]["createdAt"], pair[0]["id"]), reverse=True)
+            ids = [view["id"] for view, _ in views[:limit]]
+            full = self._conn.execute(SESSION_VIEW_SQL + " where s.id in (" + ",".join("?" for _ in ids) + ")",
+                                      ids).fetchall() if ids else []
+        cards = {row["id"]: session_view(row) for row in full}
+        return {"sessions": [cards[sid] for sid in ids], "totalCount": len(views),
+                "attentionCount": sum(view["state"] in NEEDS_READER for view, _ in views),
+                "relatedCount": sum(ref == team_id for _, ref in views) if team_id else 0}
+
+    # -- the reader's bookkeeping ------------------------------------------------------
+
+    def _flag(self, session_id: str, column: str, value: str | None) -> None:
+        with self._lock, self._conn:
+            if self._conn.execute("select 1 from sessions where id=?", (session_id,)).fetchone() is None:
+                raise NotFound(session_id)
+            self._conn.execute("insert or ignore into session_flags(session_id) values(?)", (session_id,))
+            self._conn.execute(f"update session_flags set {column}=? where session_id=?", (value, session_id))
+
+    def set_title(self, session_id: str, title: str | None) -> None:
+        self._flag(session_id, "title", (title or "").strip() or None)
+
+    def set_archived(self, session_id: str, archived: bool) -> None:
+        self._flag(session_id, "archived_at", _now() if archived else None)
+
+    def delete_session(self, session_id: str) -> None:
+        """Remove a session and its ledger; artifacts no other session references go with it."""
+        with self._lock, self._conn:
+            if self._conn.execute("delete from sessions where id=?", (session_id,)).rowcount == 0:
+                raise NotFound(session_id)
+            self._conn.execute("delete from session_artifacts where session_id=?", (session_id,))
+            self._conn.execute("delete from session_flags where session_id=?", (session_id,))
+            self._conn.execute("delete from artifacts where hash not in "
+                               "(select artifact_hash from session_artifacts)")
 
     def get_artifact(self, h: str) -> dict:
         with self._lock:

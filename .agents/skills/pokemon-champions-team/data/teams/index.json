@@ -69,19 +69,19 @@
     "season": "M-6",
     "rule": "M-C",
     "format": "single",
-    "count": 1986
+    "count": 1987
   },
   "M-7_double": {
     "season": "M-7",
     "rule": "M-C",
     "format": "double",
-    "count": 2212
+    "count": 2892
   },
   "M-7_single": {
     "season": "M-7",
     "rule": "M-C",
     "format": "single",
-    "count": 236
+    "count": 319
   },
   "M-A-events_double": {
     "partition": "M-A-events",
