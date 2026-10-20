@@ -97,31 +97,59 @@ const asObj = (v: unknown): Record<string, unknown> | null =>
 interface GateReads {
   draft: Record<string, unknown> | null;
   answerAudit: Record<string, unknown> | null;
-  checkpoint: Record<string, unknown> | null;
   intake: Record<string, unknown> | null;
 }
 
 function useGateReads(sessions: SessionApi, session: SessionWithLedgerDto | null): GateReads {
   const heads = session?.heads ?? {};
-  const keys = [heads["draft"], heads["answer-audit"], heads["checkpoint"], heads["intake"]];
+  const keys = [heads["draft"], heads["answer-audit"], heads["intake"]];
   const state = useAsync(async () => {
     const fetch1 = (h: string | undefined) =>
       h ? sessions.artifact(h).then((a) => asObj(JSON.parse(a.text))).catch(() => null)
         : Promise.resolve(null);
-    const [draft, answerAudit, checkpoint, intake] = await Promise.all(keys.map(fetch1));
-    return { draft: draft ?? null, answerAudit: answerAudit ?? null, checkpoint: checkpoint ?? null,
+    const [draft, answerAudit, intake] = await Promise.all(keys.map(fetch1));
+    return { draft: draft ?? null, answerAudit: answerAudit ?? null,
              intake: intake ?? null };
   }, keys);
   return state.status === "ready" ? state.data
-    : { draft: null, answerAudit: null, checkpoint: null, intake: null };
+    : { draft: null, answerAudit: null, intake: null };
 }
 
 // -- decision card (panel-authored write-back) ----------------------------------------------
 
+/** A decision belongs to the checkpoint AND revision the reader actually saw. Do not mount a
+ * writable form until that snapshot is loaded; a head/revision change also clears local choices. */
+function CheckpointDecision({ sessions, session, onCommitted }: {
+  sessions: SessionApi; session: SessionWithLedgerDto; onCommitted: () => void;
+}) {
+  const t = useUepT();
+  const [retry, setRetry] = useState(0);
+  const hash = session.heads["checkpoint"];
+  const state = useAsync(async () => {
+    if (!hash) throw new Error("missing checkpoint");
+    const checkpoint = asObj(JSON.parse((await sessions.artifact(hash)).text));
+    if (!checkpoint) throw new Error("checkpoint must be an object");
+    return checkpoint;
+  }, [sessions, session.id, session.revision, hash, retry]);
+  if (state.status !== "ready") return (
+    <section className="panel uep-checkpoint" aria-busy={state.status === "loading"}>
+      <h2>{t("uep.checkpoint.title")}</h2>
+      {state.status === "loading" ? <div className="spinner">{t("state.loading")}</div> : (
+        <div className="notice" role="alert">
+          <p>{t("state.errorDetail")}</p>
+          <button className="linkish" onClick={() => setRetry(n => n + 1)}>{t("uep.checkpoint.retry")}</button>
+        </div>
+      )}
+    </section>
+  );
+  return <DecisionForm key={`${session.id}:${hash}:${session.revision}`} sessions={sessions}
+    session={session} checkpoint={state.data} onCommitted={onCommitted} waiting={waitingNow(session)} />;
+}
+
 function DecisionForm({ sessions, session, checkpoint, onCommitted, waiting }: {
   sessions: SessionApi;
   session: SessionWithLedgerDto;
-  checkpoint: Record<string, unknown> | null;
+  checkpoint: Record<string, unknown>;
   onCommitted: () => void;
   /** An assistant is blocked in `pcui session wait`: it continues as soon as this is submitted. */
   waiting: boolean;
@@ -147,30 +175,22 @@ function DecisionForm({ sessions, session, checkpoint, onCommitted, waiting }: {
     .filter((f): f is Record<string, unknown> => !!f && f.survivor === true && typeof f.index === "number")
     .map((f) => f.index as number);
   const [candidateIndex, setCandidateIndex] = useState(() => survivorOpts[0] ?? 0);
-  // The checkpoint loads async: while it is null the form still mounts (stage stays "awaiting"),
-  // so candidateIndex seeds to 0. When the real survivor set arrives (or later changes), snap an
-  // out-of-range pick onto the first survivor — otherwise an untouched <select value={0}> whose
-  // options are #1/#2 submits 0, an ELIMINATED candidate.
-  useEffect(() => {
-    if (survivorOpts.length > 0 && !survivorOpts.includes(candidateIndex)) {
-      setCandidateIndex(survivorOpts[0]!);
-    }
-  }, [survivorOpts.join(","), candidateIndex]);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const submit = async () => {
+    if (submitting) return;
     setSubmitting(true);
     setError("");
-    const decision: CheckpointDecisionDto = CheckpointDecisionDtoSchema.parse({
-      gate: "checkpoint",
-      action,
-      ...(action === "chooseCandidate" ? { candidateIndex } : {}),
-      ...(note.trim() ? { note: note.trim() } : {}),
-      decidedAt: new Date().toISOString(),
-    });
     try {
+      const decision: CheckpointDecisionDto = CheckpointDecisionDtoSchema.parse({
+        gate: "checkpoint",
+        action,
+        ...(action === "chooseCandidate" ? { candidateIndex } : {}),
+        ...(note.trim() ? { note: note.trim() } : {}),
+        decidedAt: new Date().toISOString(),
+      });
       await sessions.putArtifact(
         session.id, "decision", JSON.stringify(decision), session.revision);
       onCommitted();
@@ -442,8 +462,7 @@ export function SessionPage() {
       )}
 
       {stage === "awaiting" && (
-        <DecisionForm sessions={sessions} session={session} checkpoint={reads.checkpoint} onCommitted={bump}
-          waiting={waitingNow(session)} />
+        <CheckpointDecision sessions={sessions} session={session} onCommitted={bump} />
       )}
 
       {session.heads["diagnose"] && (

@@ -137,7 +137,8 @@ export function MonEditor({
         <MonPortrait entry={entry} name={name} member={member} />
         <MonNameRow slug={mon.slug} item={mon.item} dex={dex} items={items}
           actions={editorActions}
-          onSpecies={(slug) => setMon((s) => (s.slug === slug ? s : makeMon(slug)))}
+          // An unresolved edit claims even an initially empty slot before the demo arrives.
+          onSpecies={(slug) => setMon((s) => (slug && s.slug === slug ? s : makeMon(slug)))}
           // A Mega picked here is stored as the Mega species; its stone is pinned by the effect
           // above, so the two controls can never disagree again.
           onForme={(slug, dropStone) => setMon((s) => ({ ...s, slug, ...(dropStone ? { item: "" } : {}) }))} />

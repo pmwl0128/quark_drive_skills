@@ -85,6 +85,8 @@ class Store:
     # -- sessions ------------------------------------------------------------------
 
     def create_session(self, meta: dict | None = None) -> dict:
+        if meta is not None and not isinstance(meta, dict):
+            raise ValueError("meta must be an object")
         sid = uuid.uuid4().hex[:12]
         with self._lock, self._conn:
             self._conn.execute(
@@ -94,8 +96,10 @@ class Store:
 
     @staticmethod
     def _row_to_session(row: sqlite3.Row) -> dict:
+        # Legacy malformed metadata must not poison every session list. Preserve stored bytes.
+        meta = json.loads(row["meta_json"])
         return {"id": row["id"], "createdAt": row["created_at"], "revision": row["revision"],
-                "heads": json.loads(row["heads_json"]), "meta": json.loads(row["meta_json"])}
+                "heads": json.loads(row["heads_json"]), "meta": meta if isinstance(meta, dict) else {}}
 
     def get_session(self, session_id: str) -> dict:
         # Reads take the lock too: the connection is shared (check_same_thread=False), so an

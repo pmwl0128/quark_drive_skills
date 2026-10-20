@@ -25,6 +25,7 @@ const UEP_MESSAGES = {
                        en: "Sessions are not available in this runtime.",
                        ja: "このランタイムではセッションを利用できません。" },
   "uep.notFound": { zh: "会话不存在。", en: "Session not found.", ja: "セッションが見つかりません。" },
+  "uep.checkpoint.retry": { zh: "重新加载检查点", en: "Reload checkpoint", ja: "チェックポイントを再読み込み" },
   "uep.submitError": { zh: "提交失败，请稍后重试。", en: "Submission failed. Please try again.",
                        ja: "送信できませんでした。しばらくしてから再度お試しください。" },
   "uep.revision": { zh: "版本", en: "revision", ja: "リビジョン" },

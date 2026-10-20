@@ -8,14 +8,14 @@ import { IconArrowForwardUp, IconChecks, IconRobot, IconTool } from "@tabler/ico
 import { CopyLine } from "./CopyLine.tsx";
 import { companionReady, useConsoleStatus } from "./live.ts";
 import { useSessionCopyT } from "./messages.ts";
-import { waitingNow } from "./SessionLive.tsx";
+import { useWaitingNow, waitingNow } from "./SessionLive.tsx";
 import { sessionState } from "./SessionState.tsx";
 import "./session-handoff.css";
 
 type Handoff = "start" | "decided" | "answered" | "collected" | "fix" | "resume";
 const PANEL_KINDS = new Set(["decision", "intake-answer"]);
 
-export function handoffFor(session: SessionDto): Handoff | null {
+export function handoffFor(session: SessionDto, waiting = waitingNow(session)): Handoff | null {
   const state = sessionState(session);
   if (state === "done" || state === "awaiting" || state === "questions") return null;
   if (state === "idle") return "start";
@@ -25,14 +25,14 @@ export function handoffFor(session: SessionDto): Handoff | null {
     if (session.pickedUp !== undefined && session.pickedUp >= session.revision - 1) return "collected";
     return session.lastKind === "intake-answer" ? "answered" : "decided";
   }
-  if (session.activity?.state === "running" || waitingNow(session)) return null;
+  if (session.activity?.state === "running" || waiting) return null;
   return "resume";
 }
 
 export function SessionHandoff({ session }: { session: SessionDto }) {
   const t = useSessionCopyT();
   const status = useConsoleStatus();
-  const kind = handoffFor(session);
+  const kind = handoffFor(session, useWaitingNow(session));
   if (!kind) return null;
   const Icon = kind === "start" ? IconRobot : kind === "fix" ? IconTool : kind === "collected" ? IconChecks : IconArrowForwardUp;
   const needsSetup = kind === "start" && companionReady(status) === false;

@@ -5,7 +5,7 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-18T11:16:30Z"
+  "built_at": "2026-10-20T04:04:18Z"
  },
  "counts": {
   "partners": 11
@@ -31,27 +31,27 @@
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
-    "Gengar",
-    "Salamence",
-    "Snorlax"
+    "Basculegion",
+    "Dragonite",
+    "Raichu"
    ],
    "teams": 3
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Hydreigon",
-    "Metagross"
+    "Metagross",
+    "Gengar"
    ],
-   "teams": 20
+   "teams": 9
   },
   "Hydrapple|": {
    "source": "partners",
    "partners": [
-    "Charizard",
-    "Gyarados"
+    "Toxapex",
+    "Corviknight"
    ],
-   "teams": 16
+   "teams": 24
   },
   "Meowstic-F|": {
    "source": "partners",
@@ -65,27 +65,27 @@
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
-    "Corviknight",
-    "Indeedee"
+    "Gholdengo",
+    "Corviknight"
    ],
-   "teams": 33
+   "teams": 15
   },
   "Oranguru|": {
    "source": "partners",
    "partners": [
     "Feraligatr",
-    "Dragonite"
+    "Gardevoir"
    ],
-   "teams": 6
+   "teams": 7
   },
   "Passimian|": {
    "source": "partners",
    "partners": [
-    "Hatterene",
-    "Hippowdon",
-    "Hydreigon"
+    "Greninja",
+    "Staraptor",
+    "Hippowdon"
    ],
-   "teams": 4
+   "teams": 3
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",

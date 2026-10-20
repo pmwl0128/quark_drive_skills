@@ -25,7 +25,9 @@ The pcui command for this machine (works from any directory): `{{PCUI_CMD}}`
                                                         # block until the reader answers in the panel;
                                                         # prints that artifact (rc 3 on timeout)
 {{PCUI_CMD}} artifact get --session <S> --kind <kind>    # latest artifact of that kind (verbatim)
-{{PCUI_CMD}} artifact put --session <S> --kind <kind> --file out.json # for what no operator produces
+{{PCUI_CMD}} artifact put --session <S> --kind <kind> --revision <R> --file out.json
+                                                        # for what no operator produces; R is the
+                                                        # session revision read BEFORE doing the work
 {{PCUI_CMD}} session create --intent "<request>" [--format double] [--kind build] [--team team.json]
 {{PCUI_CMD}} open --no-browser [--session <S>]          # a fresh one-time link to the panel
 ```
@@ -114,8 +116,9 @@ produced. Everything you submit is shown live; the panel also shows which operat
 9. **Conflicts**: a gate commits all its artifacts against the revision it read before running.
    A 409 means the inputs are stale or another run is active: re-read the session and reader's
    answers, decide what is still applicable, then rerun. Never blindly repeat an old write.
-   MCP `artifact_put` takes the revision you read; CLI `artifact put` reads the current revision
-   immediately before its append. Both require reviewing the current session before writing.
+   Both MCP `artifact_put` and CLI `artifact put --revision <R>` require the revision read before
+   doing the work. On conflict, review the newer artifacts and revise your output as needed;
+   do not merely fetch a newer revision and retry the old output. The CLI never chooses a baseline.
 
 When the user started in conversation rather than the panel and wants to follow along there, create
 the session yourself (`session create --intent … [--team team.json]`), keep its id explicit, and hand the

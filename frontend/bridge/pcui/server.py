@@ -954,7 +954,10 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
 
     @app.post("/api/sessions")
     async def create_session(body: dict | None = None):
-        session = store.create_session((body or {}).get("meta"))
+        try:
+            session = store.create_session((body or {}).get("meta"))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         publish("session", {"sessionId": session["id"], "change": "created"})
         return session
 

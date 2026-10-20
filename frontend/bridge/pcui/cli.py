@@ -25,7 +25,7 @@ from .config import (CONFIG_ENV_NAME, EnvFileError, env_file_values,
                      load_runtime_config)
 from .paths import CLIS, META_DATA, PROJECT_ROOT, SKILLS_ROOT, data_dir
 from .security import pid_alive, read_daemon_file
-from .store import Store
+from .store import Conflict, Store
 
 
 class DaemonUnreachable(SystemExit):
@@ -518,16 +518,27 @@ def cmd_artifact(ns) -> int:
     daemon = _daemon()
     ns.session = _session_id(ns.session)
     if ns.action == "put":
+        if ns.revision is None or ns.revision < 0:
+            raise SystemExit(i18n.t("artifact_revision_required"))
         payload = Path(ns.file).read_text(encoding="utf-8") if ns.file else sys.stdin.read()
         if daemon:
-            session = _http(daemon, "GET", f"/api/sessions/{ns.session}")
-            out = _http(daemon, "POST", f"/api/sessions/{ns.session}/artifacts",
-                        {"kind": ns.kind, "payload": payload,
-                         "revision": session["revision"]})
+            try:
+                out = _http(daemon, "POST", f"/api/sessions/{ns.session}/artifacts",
+                            {"kind": ns.kind, "payload": payload, "revision": ns.revision})
+            except urllib.error.HTTPError as exc:
+                if exc.code != 409:
+                    raise
+                detail = json.loads(exc.read())["detail"]
+                raise SystemExit(i18n.t("artifact_conflict", expected=detail["expected"],
+                                        actual=detail["actual"])) from exc
         else:
             s = _store()
-            revision = s.get_session(ns.session)["revision"]
-            out = s.append_artifact(ns.session, ns.kind, payload.encode("utf-8"), revision)
+            try:
+                out = s.append_artifact(ns.session, ns.kind, payload.encode("utf-8"), ns.revision)
+            except Conflict as exc:
+                raise SystemExit(i18n.t("artifact_conflict", expected=exc.expected, actual=exc.actual)) from exc
+            finally:
+                s.close()
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0
     # get: latest artifact of the kind via session heads. Resolve heads once (either channel),
@@ -725,6 +736,7 @@ def main(argv: list[str] | None = None) -> int:
     artifact.add_argument("--session", help=i18n.t("artifact_session_help"))
     artifact.add_argument("--kind", required=True)
     artifact.add_argument("--file")
+    artifact.add_argument("--revision", type=int, help=i18n.t("artifact_revision_help"))
     artifact.set_defaults(fn=cmd_artifact)
 
     run = sub.add_parser("run", help=i18n.t("run_help"))

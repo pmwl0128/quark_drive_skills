@@ -159,7 +159,7 @@ export function SpeedCard({
               </button>
             </>
           )}
-          onSpecies={(slug) => setMon((s) => (s.slug === slug ? s : makeMon(slug)))}
+          onSpecies={(slug) => setMon((s) => (slug && s.slug === slug ? s : makeMon(slug)))}
           onForme={(slug, dropStone) => setMon((s) => ({ ...s, slug, ...(dropStone ? { item: "" } : {}) }))} />
       </div>
 

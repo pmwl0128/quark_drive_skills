@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "vite build && node scripts/check-dist.mjs",
     "preview": "vite preview",
-    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

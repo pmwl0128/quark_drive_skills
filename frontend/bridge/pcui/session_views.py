@@ -43,7 +43,7 @@ def session_view(row) -> dict:
         state = "progress" if row["revision"] else "idle"
     view = {"id": row["id"], "createdAt": row["created_at"], "updatedAt": row["updated_at"],
             "revision": row["revision"], "heads": heads,
-            "meta": json.loads(row["meta_json"]), "state": state,
+            "meta": _document(row["meta_json"]), "state": state,
             "archived": row["archived_at"] is not None}
     if row["last_kind"]:
         view["lastKind"] = row["last_kind"]

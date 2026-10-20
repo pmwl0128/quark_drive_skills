@@ -723,7 +723,7 @@ button.speed-row-marker:active:not(:disabled) { transform: translateY(-50%); opa
 
 /* -- UEP session panel (local-only chunk; page layout in styles.local.css) ------------------ */
 .uep-checkpoint textarea {
-  width: 100%; padding: 13px 15px; border: 1px solid var(--line); border-radius: 10px;
+  width: calc(100% - 32px); padding: 13px 15px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--panel); color: var(--ink); font: inherit; resize: vertical;
 }
 .uep-kind {
@@ -747,6 +747,7 @@ button.speed-row-marker:active:not(:disabled) { transform: translateY(-50%); opa
 .uep-checkpoint { margin: 14px 0; }
 .uep-checkpoint > p, .uep-checkpoint > .decision-actions, .uep-checkpoint > textarea,
 .uep-checkpoint > label, .uep-checkpoint > div { margin: 8px 16px; }
+.decision-actions { flex-wrap: wrap; max-width: calc(100% - 32px); }
 .uep-timeline-empty { padding: 4px 16px 12px; }
 .decision-field { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--sub); }
 .decision-submit-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

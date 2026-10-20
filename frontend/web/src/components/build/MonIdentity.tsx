@@ -80,7 +80,7 @@ export function MonNameRow({ slug, item, dex, items, actions, identityShown = fa
           {!formes.length && actionBox}
         </span>
         <MonPicker slug={slug} dex={dex} ariaLabel={t("calc.name")}
-          onSlug={(next) => { if (next !== slug) onSpecies(next); }} />
+          onSlug={onSpecies} />
       </div>
       {formes.length > 0 && (
         <div className="mon-editor-namefield">

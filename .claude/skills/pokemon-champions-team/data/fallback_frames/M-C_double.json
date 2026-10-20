@@ -5,7 +5,7 @@
   "format": "double",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-18T11:16:35Z"
+  "built_at": "2026-10-20T04:04:24Z"
  },
  "counts": {
   "history": 6,
@@ -19,7 +19,7 @@
     "Indeedee",
     "Salamence"
    ],
-   "teams": 228
+   "teams": 232
   },
   "Avalugg|": {
    "source": "history",
@@ -34,35 +34,35 @@
    "partners": [
     "Tyranitar",
     "Excadrill",
-    "Salamence"
+    "Indeedee"
    ],
-   "teams": 448
+   "teams": 267
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
     "Kingambit",
-    "Farigiraf",
-    "Tyranitar"
+    "Gengar",
+    "Milotic"
    ],
-   "teams": 4
+   "teams": 3
   },
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
     "Milotic",
-    "Ceruledge",
-    "Staraptor"
+    "Golisopod",
+    "Indeedee"
    ],
-   "teams": 87
+   "teams": 4
   },
   "Palafin-Hero|": {
    "source": "partners",
    "partners": [
-    "Gengar",
-    "Salamence"
+    "Rillaboom",
+    "Gengar"
    ],
-   "teams": 8
+   "teams": 482
   },
   "Qwilfish|": {
    "source": "history",

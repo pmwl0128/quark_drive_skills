@@ -10,17 +10,31 @@ export function waitingNow(session: SessionDto, now = Date.now()): boolean {
   return !!session.waiting && Date.parse(session.waiting.until) > now;
 }
 
+/** Expiry need not produce an SSE event. Every view using this state must wake at the deadline. */
+export function useWaitingNow(session: SessionDto): boolean {
+  const [, refresh] = useState(0);
+  const until = session.waiting?.until;
+  useEffect(() => {
+    if (!until) return;
+    const remaining = Date.parse(until) - Date.now();
+    if (!Number.isFinite(remaining) || remaining <= 0) return;
+    const timer = window.setTimeout(() => refresh(n => n + 1), remaining + 1);
+    return () => window.clearTimeout(timer);
+  }, [until]);
+  return waitingNow(session);
+}
+
 export function SessionLive({ session }: { session: SessionDto }) {
   const t = useSessionCopyT();
   const [now, setNow] = useState(Date.now);
   const running = session.activity?.state === "running";
-  const waiting = waitingNow(session, now);
-  // Tick only while something is live: the elapsed time, and a wait that lapses with no event.
+  const waiting = useWaitingNow(session);
+  // Elapsed operator time ticks only while running; the shared waiting hook owns expiry.
   useEffect(() => {
-    if (!running && !waiting) return;
+    if (!running) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [running, waiting]);
+  }, [running]);
   const { activity } = session;
   if (activity) {
     const seconds = Math.max(0, Math.round((now - Date.parse(activity.startedAt)) / 1000));

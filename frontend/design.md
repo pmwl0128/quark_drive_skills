@@ -199,7 +199,7 @@ FastAPI 使用单主进程。dex、meta、calc 和 speedline 走通用 NDJSON wo
 
 ### 4.2 会话与 artifact
 
-SQLite 是会话事实源。artifact 按 `kind + canonical payload` 内容寻址、不可变并可复用；ledger 只追加，session head/revision 在同一事务中 CAS。原始 artifact 文本逐字节保存，用于 receipt、frame 和 slate 重放。
+SQLite 是会话事实源。artifact 按 `kind + canonical payload` 内容寻址、不可变并可复用；ledger 只追加，session head/revision 在同一事务中 CAS。原始 artifact 文本逐字节保存，用于 receipt、frame 和 slate 重放。新会话的 meta 必须是对象；读取旧版非对象 meta 时按空对象展示，保留数据库原始内容。
 
 目录导入导出只是兼容层。daemon 存活但不可达时，CLI 禁止直写 SQLite，以免 split-brain；只有确认 daemon 未运行时才能离线访问。
 
@@ -213,11 +213,13 @@ bridge 默认只监听 loopback。浏览器用 URL fragment 中的一次性 boot
 
 `pcui` CLI 是本地协作的权威入口，提供 session/artifact 操作、白名单算子、环境诊断、登录链接和 companion skill 安装。companion 只说明如何按 UEP 读写工件，必须显式安装，不能由 Web 或 pipx 偷偷注入 agent；命令绑定当前解释器或已安装的 pcui 可执行文件，可在任意工作目录执行，`doctor` 与 Console 按「与当前安装模板逐字一致」判断已安装或需更新。agent 每条命令显式传 session id；`session use` 只供人手动操作，其共享快捷选择按工作区限定，`PCUI_SESSION` 是显式的 shell 覆盖。大体量输出用 `run --out` 保存可供后续 gate 直接读取的完整结果正文，终端保留退出码与工件摘要。`run <op> --session <S>` 在运行开始时绑定 revision，并在同一事务中提交输入与 gate 输出；冲突时拒绝提交，不自动合并。同一会话同时只接受一次算子调用。连续相同 gate 的重复调用不增加 ledger，新的草稿或回答之后再次应用相同工件仍记录新顺序。`session wait <S>` 长轮询面板的 decision / intake-answer，读者作答后 agent 自动继续，超时退出码 3。
 
+手写工件通过 `pcui artifact put --revision <R>` 提交，R 是开始工作时从 `session show` 读到的版本；不允许 CLI 自动选择最新版本号。发生冲突后先审阅新状态及原结果，再决定是否重新生成和提交，不能只换版本号重试旧内容。
+
 `pcui mcp` 是同一 API 的薄适配，不形成第二套会话协议：stdio 上逐行 JSON-RPC，每次调用都转给正在运行的 daemon（重启后按 daemon.json 重新找到），自身不持会话事实。输入接收不等待工具执行，工具调用有界并发；坏参数或文件保存失败只影响该次调用，执行失败不伪装成成功。等待读者采用短轮询，可取消；取消已发出的算子调用会停止交付该次 MCP 响应，daemon 中已开始的计算及工件提交仍可能完成，应重读会话确认。工具与 CLI 一一对应（会话列表/详情/新建、读写工件、运行算子、等待读者作答、签发登录链接）；artifact append 必须提交 revision 并原样返回 CAS 冲突，适配层不得自动合并。实现不依赖 MCP SDK，以免发行包新增运行时依赖。注册由用户自行完成（`pcui mcp --print-config` 打印 Claude Code 与 Codex 的写法及显式工具超时），不由 Web 或 bridge 写入任何 agent 配置；远程传输不引入。
 
 ## §6 本地 UEP 会话面板
 
-会话面板是 UEP 工件的只读透镜和 checkpoint 输入面：
+会话面板是 UEP 工件的只读透镜和 checkpoint 输入面。checkpoint 正文与会话 revision 组成同一决策快照：加载或读取失败时不接受提交，快照改变时清空原选择并重新确认；等待到期时，即使没有新事件，交接提示也重新计算。
 
 | 环节 | 页面职责 |
 |---|---|
