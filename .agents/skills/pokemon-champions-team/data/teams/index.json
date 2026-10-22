@@ -75,13 +75,13 @@
     "season": "M-7",
     "rule": "M-C",
     "format": "double",
-    "count": 3384
+    "count": 3687
   },
   "M-7_single": {
     "season": "M-7",
     "rule": "M-C",
     "format": "single",
-    "count": 353
+    "count": 395
   },
   "M-A-events_double": {
     "partition": "M-A-events",

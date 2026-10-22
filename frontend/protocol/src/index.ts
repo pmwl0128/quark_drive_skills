@@ -17,4 +17,5 @@ export * from "./llm.ts";
 export * from "./diagnose.ts";
 export * from "./assets.ts";
 export * from "./team.ts";
+export * from "./team-code.ts";
 export * from "./storage.ts";

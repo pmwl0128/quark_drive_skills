@@ -11,12 +11,19 @@ import { boxById, teamDocOf } from "../../lib/library/repo.ts";
 import { fill, useLibraryT } from "./messages.ts";
 import { SpriteRow, useTeamLabel } from "./shared.tsx";
 import "./styles.team-import.css";
+import { TeamCodeImport } from "./TeamCodeImport.tsx";
 
-export default function TeamImportList({ format, onPick, autoFocus = false, initialLimit = Infinity }: {
+export default function TeamImportList(props: Parameters<typeof SavedTeams>[0]) {
+  return <div className="team-import-list"><TeamCodeImport format={props.format} replaceCurrent={props.replaceCurrent}
+    onPick={doc => props.onPick(doc, "")} /><SavedTeams {...props} /></div>;
+}
+
+function SavedTeams({ format, onPick, autoFocus = false, initialLimit = Infinity }: {
   format: FormatId;
   onPick: (doc: TeamDoc, name: string) => void;
   autoFocus?: boolean;
   initialLimit?: number;
+  replaceCurrent?: boolean;
 }) {
   const t = useLibraryT();
   const { lang } = useLang();

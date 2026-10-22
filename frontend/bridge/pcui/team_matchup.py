@@ -144,6 +144,9 @@ def run_actual_matchup(pool: Any, body: dict[str, Any],
         raise MatchupInputError("provide text or team, not both")
     if isinstance(text, str) and len(text) > MATCHUP_TEXT_MAX:
         raise MatchupInputError(f"text exceeds {MATCHUP_TEXT_MAX} characters")
+    if isinstance(text, str):
+        from .team_code import resolve_text
+        text = resolve_text(text, fmt)
 
     with tempfile.TemporaryDirectory(prefix="pcweb-matchup-") as tmp:
         tmp_dir = Path(tmp)

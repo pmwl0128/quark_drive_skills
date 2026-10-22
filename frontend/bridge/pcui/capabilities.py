@@ -37,7 +37,7 @@ _LOCAL_ID_PREFIX = "local-"
 LOCAL_CAPABILITIES = [
     "dex.query", "meta.rank", "meta.detail", "meta.trend",
     "calc.damage", "calc.speedline",
-    "team.validate", "team.matchup", "team.tune", "team.uep",
+    "team.validate", "team.matchup", "team.tune", "team.uep", "team.code",
 ]
 
 # Shipped data trees per fingerprint id (calc's "data" is the vendored engine+tables).

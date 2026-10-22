@@ -49,6 +49,7 @@ class QaLimitConfig:
     # Team diagnose has a separate allowance from QA. A thinking explanation consumes two
     # units; the ordinary deterministic/quick path consumes one.
     diagnose_daily_limit: int = 4
+    team_code_daily_limit: int = 30  # Cache misses only; never projected into public quota UI.
     # CPU-heavy actual-set batteries use workload units, not a flat request count. One unit is
     # 30 source-set x Top-K pairs; 24 units lets a client run the full 6 x 60 battery twice while
     # allowing proportionally more small reads. Device and IP both consume the same units.

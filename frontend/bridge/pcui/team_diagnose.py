@@ -31,6 +31,8 @@ def validate_team(pool, team: dict) -> dict:
 
 def run_team_diagnose(pool, text: str, fmt: str) -> dict:
     """Parse structured/share text, then fill genuine gaps with observed species only."""
+    from .team_code import resolve_text
+    text = resolve_text(text, fmt)
     norm = normalize_team_text(text)
     with tempfile.TemporaryDirectory(prefix="pcui-diag-") as tmp:
         tmp_dir = Path(tmp)

@@ -11,6 +11,12 @@ Web 共用一份 SPA，提供两种运行时：
 
 运行时差异只来自 capabilities、部署配置和 adapter。Web 不改变 skill 的 canonical JSON；在线版不提供自由连续对话或用户历史。本地网页不负责唤醒或遥控 agent。
 
+公开队伍码作为现有队伍导入方式，由 `team.code` capability 和共享 adapter 提供单码接口。文本框只在显式提交时查询，
+成功取得完整队伍后才更新内容；失败保留原配置。问答只能读取当前问题明确提供的一个码。联网缓存、身份、预算、
+熔断和批量策略统一由 team skill 管理，前端不展示策略数值，也不提供独立公开查询页或批量入口。
+
+已有队伍的计算器、实配对位导入在查询前确认整队替换；资料库保留读取预览与保存覆盖步骤。确认或预览之前不改写队伍。
+
 规划中的 Android 应用是**第三个运行时**，不是另一套前端：WebView 承载同一份 `dist`，原生部分只以新增
 capability 注入能力（预留名 `mobile.teamcode`、`mobile.capture`、`mobile.overlay`、`storage.secure`），
 组件仍不判断 runtime。对战 HUD 若需原生界面，也只宿主同一份 JS 计算引擎，不重写公式（§7.1 的

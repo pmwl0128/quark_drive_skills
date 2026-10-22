@@ -68,19 +68,21 @@ export function PasteDialog({ state, target, onSaved, onClose }: {
   const vocabReady = dex.status === "ready" && items.status === "ready" && natures.status === "ready";
 
   const read = async () => {
-    if (!vocabReady || !text.trim()) return;
+    if (busy || !vocabReady || !text.trim()) return;
     setBusy(true);
     try {
       const limit = teamMode ? TEAM_SIZE : BOX_PASTE_LIMIT;
       const result = await membersFromPaste(text, {
         dex: dex.data, items: items.data, natures: natures.data, adapter,
-      }, limit);
+      }, limit, format);
       result.members = result.members.map((row) => ({ ...row,
         member: toTeamMember(row.member, state.vocabulary) ?? row.member }));
       const overflow = teamMode && parsePokepaste(text).mons.length > limit;
       const doc = teamMode && result.members.length
         ? toTeamDoc({ format, pokemon: result.members.map(({ member }) => member) }, format, state.vocabulary) : null;
       setReading({ ...result, overflow, doc });
+    } catch {
+      toast({ text: t("lib.code.failed") });
     } finally {
       setBusy(false);
     }
@@ -181,7 +183,7 @@ export function PasteDialog({ state, target, onSaved, onClose }: {
                 <span>{t("lib.formatPick")}</span>
                 <SegmentedControl kind="radio" value={format} className="seg" ariaLabel={t("lib.formatPick")}
                   onChange={(next) => { setFormat(next); setSlot(null); }}
-                  items={(["single", "double"] as const).map((id) => ({ id, label: t(`format.${id}`) }))} />
+                  items={(["single", "double"] as const).map((id) => ({ id, label: t(`format.${id}`), disabled: busy }))} />
               </label>
               <label className="grow">
                 <span>{t("lib.field.name")}</span>
@@ -192,9 +194,9 @@ export function PasteDialog({ state, target, onSaved, onClose }: {
           )}
           <label>
             <span>{t("lib.paste.text")}</span>
-            <textarea className="lib-paste-text" rows={12} value={text} autoFocus spellCheck={false}
+            <textarea className="lib-paste-text" rows={12} value={text} autoFocus spellCheck={false} disabled={busy}
                       onChange={(event) => setText(event.target.value)}
-                      placeholder={"Garchomp @ Choice Scarf\nAbility: Rough Skin\nJolly Nature\n- Earthquake\n- Dragon Claw"} />
+                      placeholder={t("lib.paste.hint")} />
           </label>
         </div>
       ) : (

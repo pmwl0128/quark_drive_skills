@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import io
 import re
 import sys
+import zipfile
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -1471,6 +1473,22 @@ def _build_report_sheet(wb, season: str, reports: dict[str, Any], lang: str) -> 
     _write_tier_panel(ws, top, 17, 26, lang, thresholds)         # Q:Z
 
 
+def save_workbook(workbook, destination: Path) -> None:
+    """Canonical package metadata makes identical report inputs produce identical bytes."""
+    workbook.properties.created = datetime(2000, 1, 1)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    with zipfile.ZipFile(buffer) as source, zipfile.ZipFile(destination, 'w') as output:
+        for name in sorted(source.namelist()):
+            data = source.read(name)
+            if name == 'docProps/core.xml':
+                data = re.sub(rb'(<dcterms:(?:created|modified)[^>]*>).*?(</dcterms:(?:created|modified)>)',
+                              rb'\g<1>2000-01-01T00:00:00Z\g<2>', data)
+            info = zipfile.ZipInfo(name, date_time=(2000, 1, 1, 0, 0, 0))
+            info.external_attr = 0o100644 << 16
+            output.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+
+
 def command_export_excel(args: argparse.Namespace) -> None:
     try:
         from openpyxl import Workbook
@@ -1506,7 +1524,7 @@ def command_export_excel(args: argparse.Namespace) -> None:
             _style_data_sheet(ws, rows_by_fmt[fmt], lang)
         _build_report_sheet(wb, args.season, reports, lang)
         out = default_excel_path(args.season, lang, output_dir)
-        wb.save(out)
+        save_workbook(wb, out)
         files.append({
             "lang": lang,
             "output_file": str(out),

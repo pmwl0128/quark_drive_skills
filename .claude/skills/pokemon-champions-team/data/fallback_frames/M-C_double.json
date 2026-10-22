@@ -5,11 +5,11 @@
   "format": "double",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-20T04:04:24Z"
+  "built_at": "2026-10-22T06:13:20Z"
  },
  "counts": {
-  "history": 6,
-  "partners": 6
+  "history": 5,
+  "partners": 5
  },
  "anchors": {
   "Aegislash-Shield|": {
@@ -51,18 +51,10 @@
    "source": "partners",
    "partners": [
     "Milotic",
-    "Golisopod",
-    "Indeedee"
+    "Ceruledge",
+    "Staraptor"
    ],
-   "teams": 4
-  },
-  "Palafin-Hero|": {
-   "source": "partners",
-   "partners": [
-    "Rillaboom",
-    "Gengar"
-   ],
-   "teams": 482
+   "teams": 93
   },
   "Qwilfish|": {
    "source": "history",
@@ -91,25 +83,13 @@
    ],
    "teams": 12
   },
-  "Slowbro-Galar|": {
-   "source": "history",
-   "seasons": [
-    "M-1",
-    "M-2",
-    "M-3",
-    "M-4",
-    "M-5"
-   ],
-   "teams": 26
-  },
   "Tauros-Paldea-Combat|": {
    "source": "partners",
    "partners": [
-    "Metagross",
-    "Farigiraf",
-    "Salamence"
+    "Talonflame",
+    "Froslass"
    ],
-   "teams": 3
+   "teams": 25
   },
   "Tauros|": {
    "source": "history",

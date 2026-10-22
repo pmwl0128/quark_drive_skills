@@ -14,6 +14,7 @@ import type {
   WorkspaceInfoDto, WorkspaceLibraryDto,
 } from "@pokemon-champions/protocol";
 import { OnlineErrorDetailSchema } from "@pokemon-champions/protocol";
+import type { TeamCodeResultDto } from "@pokemon-champions/protocol";
 
 /** Lightweight dex-browse entry (projection-only shape: full cards stay lazy). */
 export interface DexIndexEntry {
@@ -86,6 +87,7 @@ export interface BuilderApi {
 }
 
 export interface RuntimeAdapter {
+  teamCode(code: string, format: FormatId): Promise<TeamCodeResultDto>;
   readonly runtime: "local" | "online";
   readonly storage?: WorkspaceApi;
   capabilities(): Promise<Capabilities>;

@@ -1,12 +1,31 @@
-# Quark Drive Skills · クォークチャージ
+<h1 align="center">Quark Drive Skills · クォークチャージ </h1>
+
+Web・Console のチーム入力欄とインポートメニュー、AI 質問・チーム診断で公開チームコードを利用できます。1 回につき 1 コードを入力してください。運用者による独自の照会用アカウントまたはゲートウェイの設定が必要です。設定と追加依存関係は[チームコードガイド](.agents/skills/pokemon-champions-team/references/team-codes.md)を参照してください。
+
+<p align="center">
+  <img alt="skills" src="https://img.shields.io/badge/skills-4-blue"/>
+  <img alt="modes" src="https://img.shields.io/badge/single%20%26%20double-supported-success"/>
+  <img alt="query" src="https://img.shields.io/badge/query-offline--first-success"/>
+  <img alt="languages" src="https://img.shields.io/badge/names-zh%20%7C%20en%20%7C%20ja-orange"/>
+  <img alt="agents" src="https://img.shields.io/badge/Claude%20Code%20%7C%20Codex-Agent%20Skills-blueviolet"/>
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-green"/>
+</p>
+
+<p align="center">
+  <b>環境スナップショット</b> · M-7 / M-C · 更新日 <b>2026-10-21</b>
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> | <a href="README_zh.md">中文</a> | <b>日本語</b>
+</p>
+
+<p align="center">
+  <a href="https://champion.mpan.top">Quark Drive Webを開く</a> · <a href="https://github.com/pmwl0128/quark_drive_skills/releases/tag/data-latest">配布ファイル</a>
+</p>
+
+---
 
 『ポケモンチャンピオンズ』向けのAgent Skillsです。図鑑・環境データの照会やダメージ計算に加え、データと所定の手順に沿った構築作成、構築診断、SP調整をAIアシスタントから行えます。シングル・ダブルに対応し、ポケモンや技の名前は日本語・英語・中国語で検索できます。
-
-[English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md)
-
-<b>環境スナップショット</b> · M-7 / M-C · 更新日 <b>2026-10-20</b>
-
-[Quark Drive Webを開く](https://champion.mpan.top) · [配布ファイル](https://github.com/pmwl0128/quark_drive_skills/releases/tag/data-latest)
 
 ## 導入
 
@@ -162,6 +181,8 @@ Linux/macOSでは`frontend/build-ui.sh`と`frontend/start-ui.sh`に実行権限�
 | ダブルの構築例 | [Limitless](https://play.limitlesstcg.com/)、[Nimbasa City Post](https://www.nimbasacitypost.com/)、[VGCPastes / Pokepaste](https://pokepast.es/) |
 
 資料やツールを公開している開発者、大会運営者、コミュニティの皆さんに感謝します。配布するのは整理済みの検索用データで、収集時の生キャッシュは含みません。
+
+環境データ照会 API とチームコード照会にご協力いただいた [Silph Scope](https://silph-scope.com/) に、特に感謝いたします。
 
 ## 今後の予定
 

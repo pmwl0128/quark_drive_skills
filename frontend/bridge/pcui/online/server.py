@@ -55,7 +55,7 @@ MATCHUP_WORK_UNIT_PAIRS = 30     # ceil(member_count * top_k / 30); max 6x60 cos
 TUNE_QUEUE_WAIT = 20.0           # shares the heavy deterministic lane with actual matchup
 _DEPLOYMENT_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{2,80}\Z")
 _ACCESS_PATHS = frozenset(("/api/qa", "/api/builder", "/api/team/diagnose",
-                           "/api/team/matchup", "/api/team/tune", "/api/quota"))
+                           "/api/team/matchup", "/api/team/tune", "/api/team/code", "/api/quota"))
 # What the access log records: the metered entry points. The quota read every page load makes is
 # not a use of anything, and logging it would bury the uses.
 _LOGGED_PATHS = _ACCESS_PATHS - {"/api/quota"}
@@ -133,6 +133,8 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
     det_pool = ThreadPoolExecutor(max_workers=max(2, deterministic_workers),
                                   thread_name_prefix="pcui-det")
     builder_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pcui-build")
+    code_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pcui-code")
+    code_slots = asyncio.Semaphore(2)
 
     def _in(pool: ThreadPoolExecutor, fn, *args):
         """Run a blocking call on an explicit lane. `run_in_executor` takes no kwargs, and the
@@ -417,6 +419,8 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
             advertised.append("team.validate")
         if "team.tune" not in advertised:
             advertised.append("team.tune")
+        if "team.code" not in advertised:
+            advertised.append("team.code")
         if question_provider is not None:
             for capability in ("llm.qa",):
                 if capability not in advertised:
@@ -606,12 +610,17 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
             except RateLimited:
                 raise HTTPException(429, _err("rate_limited", "daily diagnose limit reached"))
         try:
+            text = await _resolve_code_text(request, text, fmt)
             async with diagnose_slots:
                 report = await _in(det_pool, _run_diagnose, text, fmt)
         except ValueError:
             if not bypass_limits:
                 limits.refund(ids, quota_day, cost=cost)
             raise HTTPException(400, _err("unparseable", "could not parse a team from the text"))
+        except HTTPException:
+            if not bypass_limits:
+                limits.refund(ids, quota_day, cost=cost)
+            raise
         except Exception:
             if not bypass_limits:
                 limits.refund(ids, quota_day, cost=cost)
@@ -683,6 +692,9 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
 
     async def _execute_actual_matchup(request: Request, body: dict):
         """Actual registered sets vs top-K usage targets (deterministic; no LLM quota)."""
+        if (isinstance(body.get("text"), str) and body.get("team") is None
+                and body.get("format") in ("single", "double")):
+            body = {**body, "text": await _resolve_code_text(request, body["text"], body["format"])}
         acquire = asyncio.ensure_future(matchup_slots.acquire())
         done, _pending = await asyncio.wait({acquire}, timeout=MATCHUP_QUEUE_WAIT)
         if acquire not in done:
@@ -716,6 +728,10 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                 if not bypass_limits and quota_cost:
                     limits.refund(ids, quota_day, cost=quota_cost)
                 raise HTTPException(400, _err("bad_input", str(exc))) from exc
+            except HTTPException:
+                if not bypass_limits and quota_cost:
+                    limits.refund(ids, quota_day, cost=quota_cost)
+                raise
             except Exception as exc:
                 if not bypass_limits and quota_cost:
                     limits.refund(ids, quota_day, cost=quota_cost)
@@ -723,6 +739,43 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                                               "actual matchup calculation failed")) from exc
         finally:
             matchup_slots.release()
+
+    async def _resolve_code_text(request: Request, text: str, fmt: str):
+        import re
+        if len(text) > 64 or not re.fullmatch(r"[A-Za-z0-9]{10}", re.sub(r"\s+", "", text)):
+            return text
+        return await _execute_team_code(request, {"code": text, "format": fmt}, from_text=True)
+
+    async def _execute_team_code(request: Request, body: dict, from_text=False):
+        from ..team_code import resolve, resolve_text
+        device_id = getattr(request.state, "device_id", None) or limits.device_cookie(None)[0]
+        client_ip = request.client.host if request.client else "unknown"
+        ids = [f"tc-d:{device_id}", f"tc-i:{limits.ip_hash(client_ip)}"]
+
+        def consume():
+            # Owner access bypasses visitor accounting, never the skill's shared upstream guard.
+            if not (_authorized(request) or unmetered):
+                try:
+                    limits.check_and_consume(ids, limits.cfg.team_code_daily_limit)
+                except RateLimited:
+                    raise HTTPException(429, _err("rate_limited", "Team-code import is temporarily unavailable.")) from None
+        if code_slots.locked():
+            raise HTTPException(429, _err("busy", "Team-code import is temporarily unavailable."))
+        async with code_slots:
+            future = (_in(code_pool, resolve_text, body["code"], body["format"], consume) if from_text
+                      else _in(code_pool, resolve, body, consume))
+            # Disconnects do not release a running network operation's capacity early.
+            try:
+                return await asyncio.shield(future)
+            except asyncio.CancelledError:
+                await future
+                raise
+
+    @app.post("/api/team/code")
+    async def team_code_import(request: Request, body: dict):
+        if not _wants_ndjson(request):
+            return await _execute_team_code(request, body)
+        return _ndjson_stream(lambda _emit: _execute_team_code(request, body), request)
 
     @app.post("/api/team/matchup")
     async def actual_team_matchup(request: Request, body: dict):
@@ -1044,7 +1097,7 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
     async def _stop_lanes() -> None:
         # Do not wait: a lane may be holding a 420 s builder or a 240 s matchup, and shutdown
         # must not block on it. The owned subprocesses are reaped by `pool.shutdown` below.
-        for lane in (llm_pool, det_pool, builder_pool):
+        for lane in (llm_pool, det_pool, builder_pool, code_pool):
             lane.shutdown(wait=False, cancel_futures=True)
 
     # Optional static hosting: production puts Nginx in front (§8) — these mounts give the

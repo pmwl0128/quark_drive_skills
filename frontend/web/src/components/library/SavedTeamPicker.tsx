@@ -5,11 +5,12 @@ import { roveFocus } from "../../lib/popover.ts";
 import { useLibraryT } from "./messages.ts";
 import TeamImportList from "./TeamImportList.tsx";
 
-export default function SavedTeamPicker({ format, receiverId, title, onClose }: {
+export default function SavedTeamPicker({ format, receiverId, title, onClose, replaceCurrent = false }: {
   format: FormatId;
   receiverId: string;
   title: string;
   onClose: () => void;
+  replaceCurrent?: boolean;
 }) {
   const t = useLibraryT();
   const { receivers, deliver } = useLibraryWorkspace("receivers", "deliver");
@@ -22,8 +23,8 @@ export default function SavedTeamPicker({ format, receiverId, title, onClose }: 
       <span className="muted">{t("library.importReplace")}</span>
     </div>
     <div className="saved-team-list" role="menu" aria-label={t("library.importSaved")}
-      onKeyDown={event => roveFocus(event, "[role=menuitem]")}>
-      <TeamImportList format={format} autoFocus initialLimit={5} onPick={(doc, name) => {
+      onKeyDown={event => { if (!(event.target instanceof HTMLInputElement)) roveFocus(event, "[role=menuitem]"); }}>
+      <TeamImportList format={format} autoFocus initialLimit={5} replaceCurrent={replaceCurrent} onPick={(doc, name) => {
         const receiver = receivers.find(candidate => candidate.id === receiverId && candidate.kind === "team");
         if (receiver && deliver(receiver, { kind: "team", doc, name }).ok) onClose();
       }} />

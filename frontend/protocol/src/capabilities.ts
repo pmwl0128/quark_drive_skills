@@ -34,7 +34,7 @@ export type SkillId = (typeof SKILL_IDS)[number];
 export const KNOWN_CAPABILITIES = [
   "dex.query", "meta.rank", "meta.detail", "meta.trend",
   "calc.damage", "calc.speedline",
-  "team.validate", "team.uep", "team.matchup", "team.tune",
+  "team.validate", "team.uep", "team.matchup", "team.tune", "team.code",
   "llm.qa", "llm.builder",
 ] as const;
 export type KnownCapability = (typeof KNOWN_CAPABILITIES)[number];

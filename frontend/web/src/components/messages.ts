@@ -51,7 +51,7 @@ export const SHARED_MESSAGES = {
     zh: "当前 Mega 形态必须携带对应的进化石，道具已锁定。若要更换道具，请先在形态中切回普通形态。",
     en: "This Mega form requires its Mega Stone, so the item is locked. Switch Forme back to the base form to change the item.",
     ja: "このメガ形態には対応するメガストーンが必要なため、もちものを固定しています。変更するにはフォルムを通常の姿に戻してください。" },
-  "library.importSaved": { zh: "导入已保存队伍", en: "Import saved team", ja: "保存済みチームを読み込む" },
+  "library.importSaved": { zh: "导入队伍", en: "Import team", ja: "チームを読み込む" },
   "library.importReplace": { zh: "选择一支队伍，替换当前一侧。", en: "Choose a team to replace this side.", ja: "チームを選ぶと、この側のチームを置き換えます。" },
   "calc.ability": { zh: "特性", en: "Ability", ja: "とくせい" },
   "calc.damageLine": { zh: "{attacker} 使用 {move} 攻击 {defender}",

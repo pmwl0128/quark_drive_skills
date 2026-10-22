@@ -65,6 +65,14 @@ by the orchestration layer. Read `references/schema.md` for durable domain and c
 
 ## Core Commands
 
+An explicitly supplied ten-character public team code is a team input. Resolve it once with
+`python scripts/team.py code <code> --format json`, then use its `team` in the existing workflow.
+Never guess or enumerate codes, fetch while typing, or retry a refusal automatically. `--cache-only`
+makes no network request. A query does not establish format, season or rule: preserve nulls until
+the caller supplies the context. Query failure must not become a fabricated or species-only team.
+Network setup, conservative shared limits and error contracts: `references/team-codes.md`.
+The resolved team still goes through the normal validation/build/diagnostic gates.
+
 Parse and validate:
 
 ```bash

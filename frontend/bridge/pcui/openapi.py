@@ -130,6 +130,8 @@ _NDJSON = {"type": "string", "description": "Newline-delimited JSON event stream
 
 
 LOCAL_ROUTES: dict[RouteKey, dict[str, Any]] = {
+    ("POST", "/api/team/code"): _route("Import one public team code", "team",
+        _ref("TeamCodeResultDtoSchema"), request=_ref("TeamCodeRequestDtoSchema")),
     ("GET", "/api/workspace"): _route("Read workspace location", "workspace", _ref("WorkspaceInfoDtoSchema")),
     ("POST", "/api/workspace/pick-folder"): _route("Choose a local workspace folder", "workspace", _ref("WorkspacePickerResultDtoSchema"), request=_ref("WorkspacePickerRequestDtoSchema")),
     ("POST", "/api/workspace/import-browser"): _route("Import old browser data into an empty workspace", "workspace", _HEALTH, request=_ref("WorkspaceBrowserImportDtoSchema")),
@@ -244,6 +246,9 @@ LOCAL_ROUTES: dict[RouteKey, dict[str, Any]] = {
 
 
 ONLINE_ROUTES: dict[RouteKey, dict[str, Any]] = {
+    ("POST", "/api/team/code"): _route("Import one public team code", "team",
+        _ref("TeamCodeResultDtoSchema"), request=_ref("TeamCodeRequestDtoSchema"),
+        extra_content={"application/x-ndjson": _NDJSON}),
     ("GET", "/api/health"): _route("Online API liveness", "system", _HEALTH),
     ("GET", "/api/capabilities"): _route(
         "Read runtime capabilities", "system", _ref("CapabilitiesSchema")),

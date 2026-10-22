@@ -16,6 +16,7 @@ payload contract; run `python scripts/team.py vocab` for enumerated intent field
 - [Evidence](#7-evidence-output-side-lightweight)
 - [Frame](#8-frame-assembly-front-door)
 - [Top Meta](#9-top-meta-the-library-on-the-metagames-fields)
+- [Public team codes](team-codes.md): canonical six-member lookup and bounded local batch interface.
 
 ## 1. `team-json` (the canonical team structure)
 

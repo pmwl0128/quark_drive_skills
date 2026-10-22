@@ -10,6 +10,14 @@ This distribution bundles third-party components:
      (mirrored at .claude/skills/ncp-damage-calculator/references/upstream-LICENSE).
    - That license governs the bundled calculator code and must be retained on redistribution.
 
+2. Pokémon Champions team-code protocol and entity mapping
+   - Adapted from https://github.com/crazylei12/Pokemon-Champions-dmg_cal
+   - Upstream revision: 2d1a2cdb11701ccc2afe0fb1169d9976aa665ea2
+   - Upstream MIT license and copyright notice are retained in
+     .agents/skills/pokemon-champions-team/references/team-code-upstream-LICENSE
+     (mirrored at .claude/skills/pokemon-champions-team/references/team-code-upstream-LICENSE).
+   - Query identities are supplied privately by the operator; none are distributed.
+
 Pokémon and Pokémon character names are trademarks of Nintendo / Creatures Inc. / GAME FREAK inc.
 This is an unofficial, fan-made tool and is not affiliated with or endorsed by those companies.
 Battle-fact data is derived from public community sources for interoperability/reference only.

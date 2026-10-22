@@ -101,7 +101,7 @@ function teamFromMembers(format: FormatId, members: DraftMember[]) {
 
 /** 导入队伍: one of the reader's kept teams of this format replaces the builds. A page that works on
  * one whole team takes it straight from here; the dock stays the way for a single Pokémon. */
-function TeamImport({ format, onPick }: { format: FormatId; onPick: (doc: TeamDoc) => void }) {
+function TeamImport({ format, onPick, replaceCurrent }: { format: FormatId; onPick: (doc: TeamDoc) => void; replaceCurrent: boolean }) {
   const t = useMatchupT();
   const pop = usePopover();
   const list = useRef<HTMLDivElement>(null);
@@ -116,8 +116,8 @@ function TeamImport({ format, onPick }: { format: FormatId; onPick: (doc: TeamDo
       </button>
       {pop.open && (
         <div ref={list} className="duel-pop team-import-pop" role="menu" aria-label={t("actual.importTeam")}
-          onKeyDown={(event) => roveFocus(event, "[role=menuitem]")}>
-          <TeamImportList format={format} autoFocus onPick={(doc) => { pop.setOpen(false); onPick(doc); }} />
+          onKeyDown={(event) => { if (!(event.target instanceof HTMLInputElement)) roveFocus(event, "[role=menuitem]"); }}>
+          <TeamImportList format={format} autoFocus replaceCurrent={replaceCurrent} onPick={(doc) => { pop.setOpen(false); onPick(doc); }} />
         </div>
       )}
     </div>
@@ -480,7 +480,7 @@ export function ActualMatchupWorkspace({ format, onFormatChange }: {
             showRecord(record.id);
             requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
           }} />
-          <TeamImport format={format} onPick={(doc) => loadTeam(doc)} />
+          <TeamImport format={format} replaceCurrent={mode === "text" ? !!text.trim() : members.some(m => !!m.species)} onPick={(doc) => loadTeam(doc)} />
         </span>
         <SegmentedControl kind="tabs" idBase="actual-input" value={mode} onChange={setMode}
           ariaLabel={t("actual.inputMode")} className="seg" items={[

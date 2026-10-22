@@ -1,12 +1,29 @@
-# Quark Drive Skills · 夸克充能
+<h1 align="center">Quark Drive Skills · 夸克充能</h1>
 
-用于 AI Agent的《宝可梦冠军》对战工具 Skills：支持图鉴信息、环境查询、伤害计算等事实查询，以及基于事实和工作流的建队、诊断和 SP 调整等任务。支持单打、双打，以及中英日名称检索，可供 Claude Code、Codex、WorkBuddy 等能加载 Agent Skills、运行本地 Python 的助手使用。
+<p align="center">
+  <img alt="skills" src="https://img.shields.io/badge/skills-4-blue"/>
+  <img alt="modes" src="https://img.shields.io/badge/single%20%26%20double-supported-success"/>
+  <img alt="query" src="https://img.shields.io/badge/query-offline--first-success"/>
+  <img alt="languages" src="https://img.shields.io/badge/names-zh%20%7C%20en%20%7C%20ja-orange"/>
+  <img alt="agents" src="https://img.shields.io/badge/Claude%20Code%20%7C%20Codex-Agent%20Skills-blueviolet"/>
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-green"/>
+</p>
 
-[English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md)
+<p align="center">
+  <b>环境快照</b> · M-7 / M-C · 更新于 <b>2026-10-21</b>
+</p>
 
-<b>环境快照</b> · M-7 / M-C · 更新于 <b>2026-10-20</b>
+<p align="center">
+  <a href="README.md">English</a> | <b>中文</b> | <a href="README_ja.md">日本語</a>
+</p>
 
-[打开 Quark Drive Web](https://champion.mpan.top) · [下载与数据表](https://github.com/pmwl0128/quark_drive_skills/releases/tag/data-latest)
+<p align="center">
+  <a href="https://champion.mpan.top">打开 Quark Drive Web</a> · <a href="https://github.com/pmwl0128/quark_drive_skills/releases/tag/data-latest">下载与数据表</a>
+</p>
+
+---
+
+用于 AI Agent 的《宝可梦冠军》对战工具 Skills：支持图鉴信息、环境查询、伤害计算等事实查询，以及基于事实和工作流的建队、诊断和 SP 调整等任务。支持单打、双打，以及中英日名称检索，可供 Claude Code、Codex、WorkBuddy 等能加载 Agent Skills、运行本地 Python 的助手使用。
 
 ## 安装
 
@@ -50,7 +67,9 @@ python -m pip install "quickjs-ng>=0.15"
 
 更新时，按原安装方式执行 `npx skills update`、`/plugin marketplace update`，或重新复制、导入最新版本，四个技能一起更新。仓库的 `.claude/skills/` 与 `.agents/skills/` 内容相同。
 
-## 可以怎样用
+## 使用方法
+
+Web 和 Console 的队伍输入框、导入菜单，以及 AI 问答和队伍诊断支持队伍码，每次导入一个公开队伍码。运行者需要配置自有查询身份或自己的查询网关，配置与可选联网依赖见[队伍码指南](.agents/skills/pokemon-champions-team/references/team-codes.md)。
 
 自然语言直接描述需求。队伍可以粘贴 Showdown 文本、提供清晰截图，也可以放在本地文件里，让助手读取；
 
@@ -164,6 +183,8 @@ Linux/macOS 将对应的 `frontend/build-ui.sh`、`frontend/start-ui.sh` 设为�
 | 双打队伍 | [Limitless](https://play.limitlesstcg.com/)、[Nimbasa City Post](https://www.nimbasacitypost.com/)、[VGCPastes / Pokepaste](https://pokepast.es/) |
 
 感谢公开数据和工具的作者、赛事组织者与社区贡献者。发布包只包含整理后的查询数据，不分发原始抓取缓存。
+
+特别感谢 [Silph Scope](https://silph-scope.com/) 在环境数据查询接口和队伍码查询方面提供的帮助。
 
 ## 后续方向
 

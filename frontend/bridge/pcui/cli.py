@@ -294,9 +294,16 @@ def cmd_online_serve(ns) -> int:
         import secrets as _secrets
         secret = _secrets.token_hex(16)
         print(i18n.t("secret_missing"))
+    try:
+        code_daily_limit = int(os.environ.get("PCUI_TEAMCODE_VISITOR_DAILY_LIMIT", "30"))
+        if code_daily_limit < 1:
+            raise ValueError
+    except ValueError:
+        raise SystemExit("PCUI_TEAMCODE_VISITOR_DAILY_LIMIT must be a positive integer") from None
     limits = OnlineLimits(data_dir() / "online.db", secret,
                           QaLimitConfig(daily_limit=ns.qa_daily_limit,
-                                        daily_token_budget=ns.qa_token_budget))
+                                        daily_token_budget=ns.qa_token_budget,
+                                        team_code_daily_limit=code_daily_limit))
     dev_key = os.environ.get("PCUI_DEV_KEY") or None
     smoke_key = os.environ.get("PCUI_SMOKE_KEY") or None
     tester_keys = TesterKeyStore(data_dir() / "tester-keys.db")

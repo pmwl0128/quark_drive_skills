@@ -5,7 +5,7 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-20T04:04:18Z"
+  "built_at": "2026-10-22T06:13:13Z"
  },
  "counts": {
   "partners": 11
@@ -31,17 +31,16 @@
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
-    "Basculegion",
-    "Dragonite",
-    "Raichu"
+    "Gengar",
+    "Snorlax"
    ],
-   "teams": 3
+   "teams": 8
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Metagross",
-    "Gengar"
+    "Empoleon",
+    "Metagross"
    ],
    "teams": 9
   },
@@ -102,7 +101,7 @@
     "Cinderace",
     "Gyarados"
    ],
-   "teams": 13
+   "teams": 14
   }
  }
 }

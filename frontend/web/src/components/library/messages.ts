@@ -15,11 +15,19 @@ const LIBRARY_MESSAGES = {
   "lib.tab.box": { zh: "宝可梦箱", en: "Pokémon Box", ja: "ボックス" },
 
   "lib.formatPick": { zh: "赛制", en: "Format", ja: "ルール" },
-  "lib.paste": { zh: "粘贴队伍", en: "Paste a team", ja: "チームを貼り付け" },
+  "lib.paste": { zh: "输入队伍或队伍码", en: "Enter a team or team code", ja: "チーム・チームコードを入力" },
+  "lib.code.label": { zh: "队伍码导入", en: "Import a team code", ja: "チームコード読込" },
+  "lib.import.replaceTitle": { zh: "替换当前整队", en: "Replace the whole team", ja: "チーム全体を置き換え" },
+  "lib.import.replaceBody": { zh: "导入后会替换当前整队。请先保存需要保留的配置。", en: "Import replaces the whole current team. Save any builds you want to keep first.", ja: "読込後、現在のチーム全体を置き換えます。残したい型は先に保存してください。" },
+  "lib.import.replaceConfirm": { zh: "确认并导入", en: "Confirm and import", ja: "確認して読み込む" },
+  "lib.code.placeholder": { zh: "输入十位公开队伍码", en: "Enter one ten-character public code", ja: "公開10桁コードを入力" },
+  "lib.code.loading": { zh: "查询中…", en: "Looking up…", ja: "検索中…" },
+  "lib.code.import": { zh: "查询并导入", en: "Look up and import", ja: "検索して読み込む" },
+  "lib.code.failed": { zh: "暂时无法导入，请检查队伍码或稍后再试。原有配置已保留。", en: "Unable to import. Check the code or try again later. Your existing sets are unchanged.", ja: "読込できません。コードを確認するか、後ほどお試しください。既存の構成は保持されています。" },
   "lib.firstRun": {
-    zh: "粘贴 Showdown 文本即可保存一支队伍，队伍里的宝可梦会同时放进箱子。",
-    en: "Paste a Showdown export to save a team; its Pokémon go into your boxes as well.",
-    ja: "Showdown 形式のテキストを貼り付けるとチームを保存でき、そのポケモンはボックスにも入ります。" },
+    zh: "输入一个公开队伍码或粘贴 Showdown 文本，预览后保存队伍，成员会同时放进箱子。",
+    en: "Enter one public team code or paste Showdown, then preview and save the team. Its Pokémon go into your boxes too.",
+    ja: "公開コードを1つ、またはShowdownテキストを入力し、確認後に保存します。メンバーはボックスにも入ります。" },
   "lib.slot": { zh: "队伍位 {n}", en: "Team slot {n}", ja: "チーム枠 {n}" },
   "lib.slot.empty": { zh: "空队伍位", en: "Empty slot", ja: "空き枠" },
   "lib.slot.pasteHere": { zh: "粘贴队伍到这里", en: "Paste a team here", ja: "ここにチームを貼り付け" },
@@ -180,10 +188,10 @@ const LIBRARY_MESSAGES = {
     ja: "「{name}」を削除し、{n} チームから外しました" },
 
   "lib.paste.hint": {
-    zh: "粘贴 Showdown 或 Pokepaste 格式的文本，名称可以是中文、日文或英文。",
-    en: "Paste Showdown or Pokepaste text. Names may be in English, Chinese or Japanese.",
-    ja: "Showdown・Pokepaste 形式のテキストを貼り付けてください。名前は日本語・中国語・英語のいずれでも構いません。" },
-  "lib.paste.text": { zh: "队伍文本", en: "Team text", ja: "チームテキスト" },
+    zh: "输入一个十位公开队伍码，或粘贴 Showdown / Pokepaste 文本，名称支持中、日、英。",
+    en: "Enter one ten-character public team code or paste Showdown / Pokepaste text. Names may be in English, Chinese or Japanese.",
+    ja: "公開10桁コードを1つ、またはShowdown / Pokepasteテキストを入力してください。中・日・英名に対応。" },
+  "lib.paste.text": { zh: "队伍文本或队伍码", en: "Team text or code", ja: "チームテキスト・コード" },
   "lib.paste.read": { zh: "读取", en: "Read", ja: "読み取る" },
   "lib.paste.reading": { zh: "读取中…", en: "Reading…", ja: "読み取り中…" },
   "lib.paste.none": {

@@ -70,6 +70,10 @@ SYSTEM_PROMPT = """\
 You are the fact-lookup assistant of a Pokemon Champions data site.
 
 Rules:
+- If the user supplies a public team code, use team_code_lookup to retrieve its actual
+  members and configurations before answering about that team. Accept only ONE explicitly
+  supplied code per question. Never invent, enumerate, repair or retry codes; if retrieval
+  fails, explain that the team could not be loaded. Codes do not establish format or season.
 - Answer ONE factual question about Pokemon Champions: battle-dex facts (types, stats,
   abilities, moves, items, natures), the current metagame (usage ranking, common
   moves/items/abilities/natures/partners/SP spreads, representative real-team sets), or a
@@ -136,6 +140,12 @@ Rules:
 """
 
 TOOLS: list[dict] = [
+    {"type": "function", "function": {
+        "name": "team_code_lookup",
+        "description": "Read the complete six-member team for a ten-character public code explicitly supplied by the user. Never invent codes. Format, season and rule are unknown; do not infer them from the result.",
+        "parameters": {"type": "object", "properties": {"code": {"type": "string"}},
+                       "required": ["code"], "additionalProperties": False},
+    }},
     {"type": "function", "function": {
         "name": "dex_lookup",
         "description": "Look up one canonical fact sheet from the battle dex: a pokemon "
@@ -1247,7 +1257,7 @@ def _meta_detail(pool: Any, fmt: str, name: str, timeout: float) -> Any:
 
 def _run_tool(pool: Any, name: str, args: dict,
               timeout: float = QA_TOOL_TIMEOUT,
-              budget: float | None = None) -> tuple[tuple[str, str, dict] | None, str]:
+              budget: float | None = None, supplied_codes: frozenset[str] = frozenset()) -> tuple[tuple[str, str, dict] | None, str]:
     """Execute one whitelisted tool call. Returns ((tool_id, label, params) or None, content).
     Bad arguments and CLI error shapes become CONTENT (the model reads the miss and says
     so); only infrastructure faults bubble up via WorkerError -> content too. `timeout` is
@@ -1255,6 +1265,17 @@ def _run_tool(pool: Any, name: str, args: dict,
     whole remaining wall clock, which bounds the longer-running repset fallback."""
     timeout = max(1.0, timeout)
     try:
+        if name == "team_code_lookup":
+            from ..team_code import skill
+            service = skill()
+            try:
+                code = service.normalize_code(args.get("code"))
+                if len(supplied_codes) != 1 or code not in supplied_codes:
+                    return None, json.dumps({"error": "only query a public code explicitly supplied by the user"})
+                doc = service.lookup(code, network=(budget is not None and budget >= 80))
+                return ("team.code", "public team " + code, {"code": code}), clip_json(doc)
+            except service.TeamCodeError as exc:
+                return None, json.dumps({"error": {"code": exc.code, "message": str(exc)}})
         if name == "dex_lookup":
             kind = args.get("kind")
             q = _clean_name(args.get("name"))
@@ -1892,6 +1913,8 @@ def answer(pool: Any, provider: LlmProvider, question: str, lang: str,
     into EVERY provider/worker call (so no single call runs past it) and re-checked between
     tools; and once cumulative tokens cross QA_MAX_REQUEST_TOKENS the loop stops spending on
     tool rounds and forces the closing synthesis."""
+    from ..team_code import skill as team_code_skill
+    supplied_codes = frozenset(code.upper() for code in team_code_skill().explicit_codes(question))
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"[lang={lang}] {question}"},
@@ -1980,7 +2003,8 @@ def answer(pool: Any, provider: LlmProvider, question: str, lang: str,
             else:
                 answered.add(key)
                 traced, content = _run_tool(pool, str(fn.get("name") or ""), args,
-                                            timeout=min(QA_TOOL_TIMEOUT, rem), budget=rem)
+                                            timeout=min(QA_TOOL_TIMEOUT, rem), budget=rem,
+                                            supplied_codes=supplied_codes)
                 metrics["toolBytes"] += len(content.encode("utf-8"))
                 if traced is not None:
                     trace.append({"tool": traced[0], "label": traced[1], "params": traced[2]})

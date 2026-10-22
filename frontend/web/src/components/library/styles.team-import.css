@@ -15,3 +15,14 @@
 .team-import-more { display: block; width: 100%; margin-top: 5px; padding: 8px 10px; border: 1px solid var(--line);
   border-radius: 8px; background: var(--panel-2); color: var(--brand-strong); font: inherit; font-size: 12px; cursor: pointer; }
 .team-import-more:hover { border-color: var(--brand); background: var(--brand-soft); }
+/* One explicit code import alongside the saved-team picker. */
+.team-import-list { display: flex; flex-direction: column; min-height: 0; width: 100%; }
+.team-code-import { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; padding: .6rem; }
+.team-code-import label { display: grid; gap: .3rem; flex: 1; min-width: 10rem; }
+.team-code-import input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--ink); padding: 9px 10px; font: inherit; font-size: 13px; }
+.team-code-import p { flex-basis: 100%; margin: 0; }
+.team-replace-notice { flex-basis: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--panel-2); font-size: 13px; line-height: 1.6; }
+.team-replace-notice p { margin: 0 0 8px; }
+.team-replace-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }

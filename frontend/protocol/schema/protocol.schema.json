@@ -3,8 +3,8 @@
   "$id": "urn:pokemon-champions:protocol:0.1.0",
   "title": "Quark Drive Web Protocol",
   "description": "Generated from @pokemon-champions/protocol Zod schemas; do not edit by hand.",
-  "x-schema-count": 140,
-  "x-export-fingerprint": "0cb108b865ce35d83d1c12a374821340c59601ef4deb683d5119394b6c10cdee",
+  "x-schema-count": 142,
+  "x-export-fingerprint": "5f43ade9a90f0002b1d7bbc66ad5eee4df81ad89afcbf613bb837d6aa606e6cf",
   "$defs": {
     "AbilityDtoSchema": {
       "type": "object",
@@ -14998,6 +14998,272 @@
         "Asleep",
         "Frozen"
       ]
+    },
+    "TeamCodeRequestDtoSchema": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 64
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "single",
+            "double"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "TeamCodeResultDtoSchema": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "team-code.v1"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{10}$"
+        },
+        "team": {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "number",
+              "const": 1
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "single",
+                "double"
+              ]
+            },
+            "season": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rule": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "pokemon": {
+              "minItems": 6,
+              "maxItems": 6,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TeamCodeResultDtoSchema/$defs/__schema0"
+              }
+            },
+            "provenance": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "schema_version",
+            "format",
+            "season",
+            "rule",
+            "pokemon",
+            "provenance"
+          ],
+          "additionalProperties": false
+        },
+        "cache": {
+          "type": "object",
+          "properties": {
+            "hit": {
+              "type": "boolean"
+            },
+            "fetched_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hit",
+            "fetched_at"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "code",
+        "team",
+        "cache"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "object",
+          "properties": {
+            "species": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "item": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ability": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "moves": {
+              "default": [],
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TeamCodeResultDtoSchema/$defs/__schema1"
+              }
+            },
+            "nature": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "spread": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "hp": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "atk": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "def": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "spa": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "spd": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "spe": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tera": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "completeness": {
+              "type": "string",
+              "enum": [
+                "observed_full_set",
+                "observed_species_only",
+                "extracted_set",
+                "inferred_set"
+              ]
+            }
+          },
+          "required": [
+            "species",
+            "item",
+            "ability",
+            "moves",
+            "nature",
+            "spread"
+          ],
+          "additionalProperties": false
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      }
     },
     "TeamDocSchema": {
       "type": "object",

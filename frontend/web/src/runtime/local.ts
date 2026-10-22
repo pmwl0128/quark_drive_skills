@@ -16,6 +16,7 @@ import {
   type SpeedInputDto, type TopMetaScopeId,
 } from "@pokemon-champions/protocol";
 import { z } from "zod";
+import { TeamCodeResultDtoSchema } from "@pokemon-champions/protocol";
 import {
   HttpError, fetchJson,
   type DexIndexEntry, type RuntimeAdapter, type RuntimeConfig, type SessionApi, type WorkspaceApi,
@@ -24,6 +25,9 @@ import { loadProjectionDexIndex } from "./online.ts";
 import { SessionFeed } from "./sessionFeed.ts";
 
 export class LocalAdapter implements RuntimeAdapter {
+  async teamCode(code: string, format: FormatId) {
+    return TeamCodeResultDtoSchema.parse(await this.post("/team/code", { code, format }));
+  }
   readonly runtime = "local" as const;
 
   constructor(private cfg: RuntimeConfig) {}

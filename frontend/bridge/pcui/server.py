@@ -926,6 +926,11 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
                     run.update(state="failed", ended=time.time())
                 publish("activity", {"sessionId": session_id})
 
+    @app.post("/api/team/code")
+    async def team_code_import(body: dict):
+        from .team_code import resolve
+        return await asyncio.to_thread(resolve, body)
+
     @app.post("/api/team/matchup")
     async def actual_team_matchup(body: dict):
         """Actual registered sets versus a caller-selected top-K (1..60).
@@ -937,6 +942,8 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
             return await asyncio.to_thread(run_actual_matchup, pool, body)
         except MatchupInputError as exc:
             raise HTTPException(400, str(exc)) from exc
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(500, "actual matchup calculation failed") from exc
 

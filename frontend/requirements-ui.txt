@@ -1,3 +1,5 @@
 fastapi>=0.115
 uvicorn>=0.30
 quickjs-ng>=0.15
+requests>=2.31
+cryptography>=43

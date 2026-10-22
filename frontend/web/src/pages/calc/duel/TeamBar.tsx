@@ -21,6 +21,7 @@ import { MonAvatar } from "./MonEditor.tsx";
 import { roveFocus, useFocusOnOpen, usePopover } from "../../../lib/popover.ts";
 import { SIDE_FLAGS, effectiveEntry, type FieldState, type MonState, type SideId } from "./state.ts";
 import { useAnchoredPopover } from "../../../components/useAnchoredPopover.ts";
+import { ReplaceTeamNotice } from "../../../components/library/ReplaceTeamNotice.tsx";
 
 import { preloadable } from "../../../lib/preloadable.ts";
 
@@ -204,10 +205,17 @@ export function TeamBar({
   const activeNamed = !!team[index]?.slug;
   const anyNamed = team.some((mon) => !!mon.slug);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
+  const [importFailed, setImportFailed] = useState(false);
+  const [confirmImport, setConfirmImport] = useState(false);
   const run = async () => {
+    if (busy) return;
+    setConfirmImport(false);
     setBusy(true);
+    setImportFailed(false);
     try {
       setOutcome(await onImport(text));
+    } catch {
+      setImportFailed(true);
     } finally {
       setBusy(false);
     }
@@ -390,6 +398,7 @@ export function TeamBar({
         <div className="duel-pop saved-team-pop" ref={saved.wrap} onBlur={saved.onBlur}
           style={savedPosition} role="dialog" aria-label={`${teamLabel} · ${t("library.importSaved")}`}>
           <SavedTeamPicker format={field.format} receiverId={`calc-team-${librarySide}`}
+            replaceCurrent={anyNamed}
             title={`${teamLabel} · ${t("library.importSaved")}`}
             onClose={() => { saved.setOpen(false); menu.trigger.current?.focus(); }} />
         </div>, document.body,
@@ -398,20 +407,22 @@ export function TeamBar({
         <div className="duel-pop paste-pop" ref={paste.wrap} onBlur={paste.onBlur}
           role="dialog" aria-label={`${teamLabel} · ${t("calc.importPaste")}`}>
           <label className="paste-label">{t("calc.pasteHint")}
-            <textarea rows={8} value={text} spellCheck={false} autoFocus
-              placeholder={"Garchomp @ Life Orb\nAbility: Rough Skin\nJolly Nature\nSPs: 32 Atk / 32 Spe\n- Earthquake"}
-              onChange={(e) => setText(e.target.value)} />
+            <textarea rows={8} value={text} spellCheck={false} autoFocus disabled={busy || confirmImport}
+              placeholder={t("calc.pasteHint")}
+              onChange={(e) => { setText(e.target.value); setImportFailed(false); }} />
           </label>
           <div className="paste-actions">
-            <button type="button" className="primary-btn" disabled={busy || !text.trim()}
-              onClick={() => void run()}>
+            {!confirmImport && <button type="button" className="primary-btn" disabled={busy || !text.trim()}
+              onClick={() => { if (anyNamed) setConfirmImport(true); else void run(); }}>
               {busy ? t("state.loading") : t("calc.pasteApply")}
-            </button>
+            </button>}
             <button type="button" className="ghost-btn"
-              onClick={() => { paste.setOpen(false); setOutcome(null); menu.trigger.current?.focus(); }}>
+              onClick={() => { paste.setOpen(false); setOutcome(null); setConfirmImport(false); menu.trigger.current?.focus(); }}>
               {t("calc.pasteClose")}
             </button>
           </div>
+          {confirmImport && <ReplaceTeamNotice onCancel={() => setConfirmImport(false)} onConfirm={() => void run()} />}
+          {importFailed && <p className="notice" role="alert">{t("calc.pasteFailed")}</p>}
           {outcome && (
             <div className="paste-outcome">
               <div>{t("calc.pasteResult").replace("{n}", String(outcome.added))}</div>

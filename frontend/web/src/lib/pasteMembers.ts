@@ -5,7 +5,8 @@
  * whatever is left (a fuzzy or alias spelling is exactly what `resolve` is for; per-name round trips
  * are not). Items, abilities, natures and moves match the local vocabularies in any of the three
  * languages; anything unrecognised is reported back rather than guessed. */
-import type { LearnsetDto, NatureDto, TeamMemberDoc } from "@pokemon-champions/protocol";
+import type { FormatId, LearnsetDto, NatureDto, TeamMemberDoc } from "@pokemon-champions/protocol";
+import { readTeamCode, teamCodeFromText } from "./teamCode.ts";
 import { parsePokepaste } from "./pokepaste.ts";
 import type { DexIndexEntry, RuntimeAdapter } from "../runtime/adapter.ts";
 import { loadLearnset, type ItemRef } from "../runtime/projection.ts";
@@ -38,9 +39,19 @@ export interface PasteMembersResult {
   rescaledEvs: boolean;
 }
 
-export async function membersFromPaste(text: string, vocabulary: PasteVocabulary, limit = 6)
+export async function membersFromPaste(text: string, vocabulary: PasteVocabulary, limit = 6, codeFormat?: FormatId)
   : Promise<PasteMembersResult> {
   const { dex, items, natures, adapter } = vocabulary;
+  const code = codeFormat && !matchLocal(dex, text) ? teamCodeFromText(text) : null;
+  if (code && codeFormat) {
+    const result = await readTeamCode(adapter, code, codeFormat);
+    const members = result.team.pokemon.map(member => {
+      const entry = dex.find(row => row.name === member.species);
+      if (!entry) throw new Error("team-code entity unavailable in this snapshot");
+      return { entry, member };
+    });
+    return { members, unresolved: [], rescaledEvs: false };
+  }
   const { mons: pasted, rescaledEvs } = parsePokepaste(text);
   if (!pasted.length) return { members: [], unresolved: [], rescaledEvs };
 

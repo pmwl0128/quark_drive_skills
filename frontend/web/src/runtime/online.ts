@@ -33,10 +33,11 @@ import {
 } from "./adapter.ts";
 
 import { loadCards, loadProjectionDexIndex } from "./projection.ts";
+import { TeamCodeResultDtoSchema } from "@pokemon-champions/protocol";
 export { loadProjectionDexIndex } from "./projection.ts";
 
 const API_ONLY_CAPABILITIES = new Set([
-  "llm.qa", "llm.builder", "team.validate", "team.tune",
+  "llm.qa", "llm.builder", "team.validate", "team.tune", "team.code",
 ]);
 
 function staticCapabilities(raw: unknown): Capabilities {
@@ -46,6 +47,9 @@ function staticCapabilities(raw: unknown): Capabilities {
 }
 
 export class OnlineAdapter implements RuntimeAdapter {
+  async teamCode(code: string, format: FormatId) {
+    return TeamCodeResultDtoSchema.parse(await postNdjson(`${this.cfg.apiBase}/team/code`, { code, format }));
+  }
   readonly runtime = "online" as const;
   private cards = new AsyncOnce<Map<string, PokemonCardDto>>();
   private details = new AsyncFacts<import("@pokemon-champions/protocol").MetaDetailDto>();

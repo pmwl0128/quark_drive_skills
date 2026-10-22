@@ -1,16 +1,35 @@
-# Quark Drive Skills
+<h1 align="center">Quark Drive Skills</h1>
 
-Four Agent Skills for Pokémon Champions: dex and metagame lookups, damage calculations, and team building, diagnosis, and SP tuning grounded in data and a defined workflow. They support Singles, Doubles, and names in English, Chinese, and Japanese. Use them with Claude Code, Codex, WorkBuddy, or another agent that can load Agent Skills and run local Python.
+<p align="center">
+  <img alt="skills" src="https://img.shields.io/badge/skills-4-blue"/>
+  <img alt="modes" src="https://img.shields.io/badge/single%20%26%20double-supported-success"/>
+  <img alt="query" src="https://img.shields.io/badge/query-offline--first-success"/>
+  <img alt="languages" src="https://img.shields.io/badge/names-zh%20%7C%20en%20%7C%20ja-orange"/>
+  <img alt="agents" src="https://img.shields.io/badge/Claude%20Code%20%7C%20Codex-Agent%20Skills-blueviolet"/>
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-green"/>
+</p>
 
-[English](README.md) · [中文](README_zh.md) · [日本語](README_ja.md)
+<p align="center">
+  <b>Metagame snapshot</b> · M-7 / M-C · updated <b>2026-10-21</b>
+</p>
 
-<b>Metagame snapshot</b> · M-7 / M-C · updated <b>2026-10-20</b>
+<p align="center">
+  <b>English</b> | <a href="README_zh.md">中文</a> | <a href="README_ja.md">日本語</a>
+</p>
 
-[Try Quark Drive Web](https://champion.mpan.top) · [Downloads](https://github.com/pmwl0128/quark_drive_skills/releases/tag/data-latest)
+<p align="center">
+  <a href="https://champion.mpan.top">Try Quark Drive Web</a> · <a href="https://github.com/pmwl0128/quark_drive_skills/releases/tag/data-latest">Downloads</a>
+</p>
+
+---
+
+Four Agent Skills for Pokémon Champions: dex and metagame lookups, damage calculations, and team building, diagnosis, and SP tuning grounded in data and a defined workflow. Support Singles, Doubles, and names in English, Chinese, and Japanese. Use them with Claude Code, Codex, WorkBuddy, or another agent that can load Agent Skills and run local Python.
 
 ## Install
 
-You need **Python 3.10+**. The calculator uses `quickjs-ng` by default and falls back to Node.js if it is unavailable. Ordinary dex, metagame, and team queries need no other Python packages.
+Requires Python 3.10 or later. The calculator uses `quickjs-ng` by default and falls back to Node.js if it is unavailable. Ordinary dex, metagame, and team queries need no other Python packages.
+
+Team-code imports also work in team text inputs and import menus across Web and Console, and in assistant questions and team diagnosis. Enter one public code per import. Operators must configure an independently registered query identity or their own query gateway; setup and optional network dependencies are documented in the [team-code guide](.agents/skills/pokemon-champions-team/references/team-codes.md).
 
 The easiest option is to give an assistant with terminal access this request:
 
@@ -50,7 +69,7 @@ The installed folders should be `pokemon-champions-dex`, `pokemon-champions-meta
 
 To update, use `npx skills update`, `/plugin marketplace update`, or repeat your copy/import installation with the latest repository contents. Update all four skills together. The `.claude/skills/` tree is a mirror of `.agents/skills/`.
 
-## Use it
+## How to use
 
 Describe what you want in your own words. Paste a Showdown export, attach a readable screenshot, or ask the assistant to read a local team or roster file.
 
@@ -164,6 +183,8 @@ The rolling [data-latest release](https://github.com/pmwl0128/quark_drive_skills
 | Doubles teams | [Limitless](https://play.limitlesstcg.com/), [Nimbasa City Post](https://www.nimbasacitypost.com/), [VGCPastes / Pokepaste](https://pokepast.es/) |
 
 Thanks to the authors, tournament organizers, and contributors who publish these resources. The release contains processed query data, not raw scrape caches.
+
+Special thanks to [Silph Scope](https://silph-scope.com/) for their help with the metagame query API and team-code lookup.
 
 ## Roadmap
 
