@@ -34,13 +34,13 @@ def resolve(body: dict, consume=None) -> dict:
     service = skill()
     try:
         code = service.normalize_code(body.get("code"))
+        if consume is not None:
+            consume()
         try:
             result = service.lookup(code, network=False)
         except service.TeamCodeError as exc:
             if exc.code != "cache_miss":
                 raise
-            if consume is not None:
-                consume()
             result = service.lookup(code)
         # Format is explicitly chosen by the importing caller; no season/rule is guessed.
         return {**result, "team": {**result["team"], "format": body["format"]}}

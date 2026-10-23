@@ -393,6 +393,38 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
     async def health():
         return {"ok": True}
 
+    @app.get("/api/pool")
+    async def pool_status(request: Request):
+        """Read-only identity-pool summary for the private operations portal.
+
+        Never returns a token: the store keeps only a digest, and `list()` exposes labels,
+        budgets and counters. The route is outside `_ACCESS_PATHS`, so it carries no visitor
+        credential check of its own — nginx protects it with basic auth and stamps
+        `X-PCWEB-Admin`. Requiring that header here means a mis-scoped nginx location fails
+        closed instead of publishing the pool.
+        """
+        if request.headers.get("x-pcweb-admin") != "1":
+            raise HTTPException(404, _err("not_found", "not found"))
+        if tester_keys is None:
+            raise HTTPException(503, _err("pool_unavailable", "tester key store is not configured"))
+        keys = tester_keys.list()
+        return {
+            "keys": keys,
+            "summary": {
+                "total": len(keys),
+                "deviceBound": sum(1 for key in keys if key["deviceBound"]),
+                "todaySpent": sum(key["today"]["spent"] for key in keys),
+                "todayReserved": sum(key["today"]["reserved"] for key in keys),
+                "totalSpent": sum(key["totalSpent"] for key in keys),
+                "withDailyBudget": sum(1 for key in keys if key["dailyTokenBudget"] is not None),
+                "withTotalBudget": sum(1 for key in keys if key["totalTokenBudget"] is not None),
+            },
+            "teamCode": {
+                "dailyLimit": limits.cfg.team_code_daily_limit,
+                "minuteLimit": limits.cfg.team_code_minute_limit,
+            },
+        }
+
     @app.get("/api/capabilities")
     async def capabilities():
         """Projection identity plus the capabilities of THIS running API process.
@@ -529,7 +561,7 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
             raise HTTPException(429, _err("busy", "too many concurrent questions — retry"))
         try:
             result = await _in(llm_pool, qa.answer, pool, question_provider, question, lang,
-                               _thread_reporter(emit))
+                               _thread_reporter(emit), _team_code_consumer(request))
         except LlmUnavailable as e:
             fail_cleanup(getattr(e, "tokens", 0))   # earlier rounds' spend settles truthfully
             raise HTTPException(503, _err("llm_unavailable", str(e)))
@@ -746,19 +778,27 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
             return text
         return await _execute_team_code(request, {"code": text, "format": fmt}, from_text=True)
 
-    async def _execute_team_code(request: Request, body: dict, from_text=False):
-        from ..team_code import resolve, resolve_text
+    def _team_code_consumer(request: Request):
+        from ..team_code import skill
         device_id = getattr(request.state, "device_id", None) or limits.device_cookie(None)[0]
         client_ip = request.client.host if request.client else "unknown"
-        ids = [f"tc-d:{device_id}", f"tc-i:{limits.ip_hash(client_ip)}"]
-
+        ids = [f"d:{device_id}", f"i:{limits.ip_hash(client_ip)}"]
+        consumed=False
         def consume():
-            # Owner access bypasses visitor accounting, never the skill's shared upstream guard.
+            nonlocal consumed
+            if consumed:
+                return
             if not (_authorized(request) or unmetered):
                 try:
-                    limits.check_and_consume(ids, limits.cfg.team_code_daily_limit)
+                    limits.consume_team_code(ids)
                 except RateLimited:
-                    raise HTTPException(429, _err("rate_limited", "Team-code import is temporarily unavailable.")) from None
+                    raise skill().TeamCodeError('rate_limited') from None
+            consumed=True
+        return consume
+
+    async def _execute_team_code(request: Request, body: dict, from_text=False):
+        from ..team_code import resolve, resolve_text
+        consume=_team_code_consumer(request)
         if code_slots.locked():
             raise HTTPException(429, _err("busy", "Team-code import is temporarily unavailable."))
         async with code_slots:
@@ -771,7 +811,7 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                 await future
                 raise
 
-    @app.post("/api/team/code")
+    @app.post("/api/team/code", include_in_schema=False)
     async def team_code_import(request: Request, body: dict):
         if not _wants_ndjson(request):
             return await _execute_team_code(request, body)

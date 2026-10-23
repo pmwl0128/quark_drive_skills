@@ -5,7 +5,7 @@
   "format": "double",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-22T06:13:20Z"
+  "built_at": "2026-10-23T13:00:53Z"
  },
  "counts": {
   "history": 5,
@@ -19,7 +19,7 @@
     "Indeedee",
     "Salamence"
    ],
-   "teams": 232
+   "teams": 235
   },
   "Avalugg|": {
    "source": "history",
@@ -36,25 +36,24 @@
     "Excadrill",
     "Indeedee"
    ],
-   "teams": 267
+   "teams": 273
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
     "Kingambit",
-    "Gengar",
-    "Milotic"
+    "Farigiraf"
    ],
-   "teams": 3
+   "teams": 403
   },
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
+    "Rillaboom",
     "Milotic",
-    "Ceruledge",
-    "Staraptor"
+    "Ceruledge"
    ],
-   "teams": 93
+   "teams": 120
   },
   "Qwilfish|": {
    "source": "history",
@@ -89,7 +88,7 @@
     "Talonflame",
     "Froslass"
    ],
-   "teams": 25
+   "teams": 27
   },
   "Tauros|": {
    "source": "history",

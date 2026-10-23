@@ -26,9 +26,8 @@ from libsearch import base_key, team_view
 # score. The finer §12 rungs (official top cut vs major vs minor event) are not derivable from
 # current provenance (no event metadata ships), so placing/record/field_size stay RAW fact tags on
 # each row for the reader to weigh transparently. A kind outside the ladder maps to the DECLARED
-# sink category "unknown" (sorts last); a data test pins that the shipped library never actually
-# carries an off-ladder kind, so a new source kind fails loudly at update time instead of silently
-# sinking high-authority evidence.
+# sink category "unknown" (sorts last). Published configurations without asserted performance
+# use that category; a data test rejects unreviewed kinds on supplied performance facts.
 OBSERVED_TIERS = ("tournament", "community", "ladder")
 ORDERS = ("overlap", "tier", "recent")
 

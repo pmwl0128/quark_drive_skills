@@ -295,7 +295,7 @@ def cmd_online_serve(ns) -> int:
         secret = _secrets.token_hex(16)
         print(i18n.t("secret_missing"))
     try:
-        code_daily_limit = int(os.environ.get("PCUI_TEAMCODE_VISITOR_DAILY_LIMIT", "30"))
+        code_daily_limit = int(os.environ.get("PCUI_TEAMCODE_VISITOR_DAILY_LIMIT", "10"))
         if code_daily_limit < 1:
             raise ValueError
     except ValueError:

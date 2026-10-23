@@ -49,7 +49,8 @@ class QaLimitConfig:
     # Team diagnose has a separate allowance from QA. A thinking explanation consumes two
     # units; the ordinary deterministic/quick path consumes one.
     diagnose_daily_limit: int = 4
-    team_code_daily_limit: int = 30  # Cache misses only; never projected into public quota UI.
+    team_code_daily_limit: int = 10  # Explicit reads, including cache hits and tool calls.
+    team_code_minute_limit: int = 3  # Server-side burst bound; never projected into public DTOs.
     # CPU-heavy actual-set batteries use workload units, not a flat request count. One unit is
     # 30 source-set x Top-K pairs; 24 units lets a client run the full 6 x 60 battery twice while
     # allowing proportionally more small reads. Device and IP both consume the same units.
@@ -156,6 +157,13 @@ class OnlineLimits:
             row = self._con.execute("SELECT used FROM qa_quota WHERE id=? AND day=?",
                                     (identity, self._day())).fetchone()
         return (row[0] if row else 0), (self.cfg.daily_limit if limit is None else limit)
+
+    def consume_team_code(self, ids: list[str]) -> None:
+        # Both keys are authoritative. A forged/new cookie cannot reset the IP allowance.
+        # Rejected daily attempts still count toward the short-window abuse bound.
+        minute=int(time.time()//60)
+        self.check_and_consume([f'tc-m:{minute}:{key}' for key in ids],self.cfg.team_code_minute_limit)
+        self.check_and_consume([f'tc-{key}' for key in ids],self.cfg.team_code_daily_limit)
 
     def refund(self, ids: list[str], day: str | None = None, *, cost: int = 1) -> None:
         """Give the count back when WE failed (provider down, queue full) — a user should

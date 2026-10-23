@@ -83,8 +83,9 @@ def read_response(response, deadline):
 
 
 class OfficialClient:
-    def __init__(self, identity, version):
+    def __init__(self, identity, version, *, before_request=None):
         self.identity = identity
+        self.before_request = before_request
         self.deadline = time.monotonic() + 60
         self.session = requests.Session()
         self.steps = []
@@ -96,6 +97,8 @@ class OfficialClient:
 
     def post(self, path, data, dummy):
         assert path in ['/auth/get-token', '/auth/login', '/api/trainingcode/search']
+        if self.before_request:
+            self.before_request()
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError('official lookup deadline exceeded')

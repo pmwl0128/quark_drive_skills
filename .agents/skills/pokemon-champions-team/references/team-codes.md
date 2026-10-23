@@ -4,11 +4,8 @@
 `--cache-only` forbids network access. `team.py code-status` is an operator diagnostic, not a Web DTO.
 The Python interface is `team_codes.lookup(code, network=True, scenario="interactive")`.
 
-`team.py code-batch <codes.json> --format json` accepts a JSON list of explicitly supplied codes.
-The list is bounded by the operator batch limit, preserves order/duplicates, shares cached results,
-and issues only serial, paced misses. It stops new network requests after a refusal or transport
-failure, continues reading fresh cache entries, and returns unresolved positions with a domain error
-and `stopped_reason`. It never enumerates codes or retries a failed request automatically.
+Only one explicit code is accepted per command or Web import. No batch lookup command or public
+batch transport is provided. Source enrichment remains an operator-controlled internal workflow.
 
 Success: `{schema:"team-code.v1",code,team,cache:{hit,fetched_at}}`. `team` uses canonical
 English entity names, six complete members and Champions SP. Its `format`, `season`, `rule` and
@@ -36,7 +33,7 @@ One identity must have one official-query host. Other workstations can set
 `PCUI_TEAMCODE_GATEWAY_URL=https://<your-service>/api/team/code` and optionally
 `PCUI_TEAMCODE_GATEWAY_KEY` to that service's operational smoke key. Remove their local guest UUID.
 The gateway accepts only a single code over HTTPS, refuses redirects, keeps the original cache
-timestamp and never guesses format/season/rule. Local serial batch callers use that same endpoint;
+timestamp and never guesses format/season/rule. Single-code callers use that same endpoint;
 the central host remains the authority for the identity's total budget and circuit breaker.
 Local cache-only queries never contact the gateway. These settings are private operator configuration.
 
@@ -59,14 +56,22 @@ Operator-only settings (positive integers): `PCUI_TEAMCODE_INTERVAL_SECONDS` (10
 `PCUI_TEAMCODE_CACHE_SECONDS` (86400), `PCUI_TEAMCODE_BATCH_LIMIT` (20).
 These are conservative local policy choices, not known official quotas. No caller, including an
 owner or AI tool, bypasses the shared official-service controls. UI copy does not expose limits.
-Online operators can set `PCUI_TEAMCODE_VISITOR_DAILY_LIMIT` (30) for cache-miss imports per
-visitor/device and IP. Owner/tester access bypasses this visitor allowance only, never upstream policy.
+Online operators can set `PCUI_TEAMCODE_VISITOR_DAILY_LIMIT` (10) for explicit lookups per
+visitor/device and IP, including cache hits and QA/diagnosis imports. A separate minute bound
+limits bursts. Clearing cookies does not reset the IP count; IPv6 addresses share their /64 count.
+Owner/tester access bypasses visitor accounting only, never upstream policy or worker capacity.
+An HTTP 429 returned by the gateway is not promoted to a new hour-long circuit on
+the forwarding workstation: the gateway owns official backoff, while the local
+interval, budget and in-flight lease still apply. Operators can run the native
+Python lookup on that query host without traversing the public HTTP boundary;
+reuse its private identity configuration and state directory.
+`PCUI_TEAMCODE_BATCH_LIMIT` bounds internal source enrichment; it does not enable a public batch API.
 `PCUI_TEAMCODE_CLIENT_VERSION` pins the client version (initially 1.2.2); changing it does not repair
 an incompatible protocol or mapping. Version rejections are not an invitation to enumerate versions.
 
 ## Consumer boundaries
 
-Web exposes only `POST /api/team/code` with `{code,format}`. Arrays, batch options, state overrides
+Web import transport accepts `{code,format}`. Arrays, batch options, state overrides
 and force-refresh flags are rejected. The same single-code resolver is used by explicit text
 submissions for imports, diagnosis and actual-set matchups; typing never performs an official lookup.
 The QA tool accepts only one code literally supplied in the current question and has no discovery

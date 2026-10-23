@@ -23,6 +23,7 @@ SCHEMA = "team-code.v1"
 MAP_PATH = Path(__file__).resolve().parents[1] / "data/team-code/entity-map.v18.json"
 DEFAULTS = {"INTERVAL_SECONDS": 10, "HOURLY_LIMIT": 60, "DAILY_LIMIT": 300,
             "CACHE_SECONDS": 86400, "BATCH_LIMIT": 20}
+IDENTITY_KEYS = {"PCUI_GAME_IDENTITY_POOL", "PCUI_GAME_IDENTITY_STATE_DIR"}
 ERROR_MESSAGES = {
     "bad_input": "A public team code must contain ten letters or digits.",
     "not_configured": "Team-code lookup is not configured on this host.",
@@ -85,9 +86,16 @@ def settings() -> dict[str, str]:
     if path.exists():
         for line in path.read_text(encoding="utf-8-sig").splitlines():
             key, sep, value = line.partition("=")
-            if sep and key.strip().startswith("PCUI_TEAMCODE_"):
+            if sep and (key.strip().startswith("PCUI_TEAMCODE_") or key.strip() in IDENTITY_KEYS):
                 values[key.strip()] = value.strip().strip("\"'")
-    values.update({key: value for key, value in os.environ.items() if key.startswith("PCUI_TEAMCODE_")})
+    values.update({key: value for key, value in os.environ.items()
+                   if key.startswith("PCUI_TEAMCODE_") or key in IDENTITY_KEYS})
+    if values.get("PCUI_GAME_IDENTITY_POOL"):
+        from game_identities import pool_identities
+        try:
+            pool_identities(values["PCUI_GAME_IDENTITY_POOL"],"team_code")
+        except ValueError:
+            raise TeamCodeError("not_configured") from None
     return values
 
 
@@ -183,7 +191,7 @@ def _map_payload(payload: dict, mapping: dict) -> dict:
         raise TeamCodeError("invalid_response") from None
 
 
-def _official(code: str, cfg: dict) -> dict:
+def _official(code: str, cfg: dict, *, before_request=None) -> dict:
     try:
         from team_code_protocol import OfficialClient, ProtocolError
     except ImportError:
@@ -194,7 +202,7 @@ def _official(code: str, cfg: dict) -> dict:
     version = cfg.get("PCUI_TEAMCODE_CLIENT_VERSION", "1.2.2")
     if not re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){1,3}", version):
         raise TeamCodeError("not_configured")
-    client = OfficialClient(identity, version)
+    client = OfficialClient(identity, version, before_request=before_request)
     try:
         payload = client.resolve(code)
         return _map_payload(payload, json.loads(MAP_PATH.read_text(encoding="utf-8")))
@@ -203,7 +211,7 @@ def _official(code: str, cfg: dict) -> dict:
             raise TeamCodeError("rate_limited", retry_after=3600) from None
         if exc.http in {401, 403}:
             raise TeamCodeError("authentication_failed") from None
-        known = {31502: "not_found", 9990: "maintenance", 10100: "authentication_failed",
+        known = {31502: "not_found", 9990: "maintenance", 1102: "authentication_failed", 10100: "authentication_failed",
                  11200: "authentication_failed", 15002: "tutorial_required", 9901: "version_changed"}
         raise TeamCodeError(known.get(exc.code, "upstream_rejected")) from None
     except TeamCodeError:
@@ -245,7 +253,8 @@ def _gateway(code: str, cfg: dict, now: float) -> tuple[dict, float]:
                            headers=headers, timeout=(10, 65), stream=True,
                            allow_redirects=False) as response:
             chunks, size = [], 0
-            for chunk in response.iter_content(8192):
+            # A full buffered chunk can take unbounded time on a slow-drip response.
+            for chunk in response.iter_content(1):
                 size += len(chunk)
                 if size > 65536 or time.monotonic() > deadline:
                     raise TeamCodeError("invalid_response")
@@ -284,7 +293,14 @@ def lookup(value: str, *, network: bool = True, scenario: str = "interactive",
         raise TeamCodeError("bad_input")
     cfg = settings() if config is None else config
     map_hash = hashlib.sha256(MAP_PATH.read_bytes()).hexdigest()
-    con = None
+    con = pool = lease = None
+    def check_identity():
+        if lease:
+            try:
+                lease.check()
+            except identity_module.PoolError as exc:
+                raise TeamCodeError("circuit_open" if exc.code=="circuit_open" else "busy",
+                                    retry_after=exc.retry_after) from None
     try:
         con = _connect(state_path(cfg))
         now = clock()
@@ -299,7 +315,8 @@ def lookup(value: str, *, network: bool = True, scenario: str = "interactive",
             if not network:
                 raise TeamCodeError("cache_miss")
             if fetch is None:
-                if not _gateway_url(cfg) and not re.fullmatch(r"[A-Za-z0-9]{42}", cfg.get("PCUI_TEAMCODE_GUEST_UUID", "")):
+                if (not _gateway_url(cfg) and not cfg.get("PCUI_GAME_IDENTITY_POOL")
+                        and not re.fullmatch(r"[A-Za-z0-9]{42}", cfg.get("PCUI_TEAMCODE_GUEST_UUID", ""))):
                     raise TeamCodeError("not_configured")
                 if not all(importlib.util.find_spec(name) for name in ("requests", "cryptography")):
                     raise TeamCodeError("dependency_unavailable")
@@ -315,6 +332,18 @@ def lookup(value: str, *, network: bool = True, scenario: str = "interactive",
             hour, day = con.execute("SELECT SUM(at>?),COUNT(*) FROM attempts", (now - 3600,)).fetchone()
             if (hour or 0) >= _number(cfg, "HOURLY_LIMIT") or day >= _number(cfg, "DAILY_LIMIT"):
                 raise TeamCodeError("rate_limited", retry_after=3600)
+            if cfg.get("PCUI_GAME_IDENTITY_POOL") and not _gateway_url(cfg):
+                import game_identities as identity_module
+                try:
+                    pool = identity_module.Pool(cfg["PCUI_GAME_IDENTITY_POOL"],
+                        identity_module.state_directory(cfg), clock=clock)
+                    lease = pool.acquire("team_code",180)
+                except ValueError:
+                    raise TeamCodeError("not_configured") from None
+                except identity_module.PoolError as exc:
+                    raise TeamCodeError(exc.code if exc.code in ERROR_MESSAGES else "state_unavailable",
+                                        retry_after=exc.retry_after) from None
+                cfg = {**cfg,"PCUI_TEAMCODE_GUEST_UUID":lease.identity['uuid']}
             con.execute("INSERT INTO attempts(at) VALUES(?)", (now,))
             con.execute("UPDATE guard SET next_at=?,held_until=?,held_code=?,owner=? WHERE id=1",
                         (now + _number(cfg, "INTERVAL_SECONDS"), now + 180, code, owner))
@@ -323,7 +352,7 @@ def lookup(value: str, *, network: bool = True, scenario: str = "interactive",
             if fetch is None and _gateway_url(cfg):
                 team, result_at = _gateway(code, cfg, clock())
             else:
-                team = (fetch or _official)(code, cfg)
+                team = fetch(code,cfg) if fetch else _official(code,cfg,before_request=check_identity)
                 result_at = clock()
             payload = json.dumps(team, ensure_ascii=False, separators=(",", ":"))
             if len(payload) > 65536 or not isinstance(team, dict) or len(team.get("pokemon", [])) != 6:
@@ -334,11 +363,19 @@ def lookup(value: str, *, network: bool = True, scenario: str = "interactive",
             return {"schema": SCHEMA, "code": code, "team": team,
                     "cache": {"hit": False, "fetched_at": _iso(result_at)}}
         except TeamCodeError as exc:
+            if lease and exc.code not in {"not_found","busy","circuit_open","not_configured","dependency_unavailable"}:
+                delay = {"network_error":60,"maintenance":900,"rate_limited":3600}.get(exc.code,86400)
+                lease.fail(exc.code,retry_after=max(delay,exc.retry_after or 0),
+                           permanent=exc.code in {"authentication_failed","tutorial_required","version_changed","upstream_rejected","invalid_response"})
             with _transaction(con):
                 if exc.code == "not_found":
                     con.execute("INSERT OR REPLACE INTO cache VALUES(?,?,?,?,?,?)",
                                 (code, clock(), clock() + 3600, None, exc.code, map_hash))
-                else:
+                elif exc.code not in {"busy","circuit_open"} and not (
+                        exc.code == "rate_limited" and fetch is None and _gateway_url(cfg)):
+                    # The gateway owns official refusal backoff. Its 429 can also
+                    # mean visitor/burst throttling; do not invent an hour-long
+                    # official-service circuit on the forwarding workstation.
                     delay = {"authentication_failed": 86400, "tutorial_required": 86400,
                              "version_changed": 86400, "rate_limited": 3600, "maintenance": 900,
                              "network_error": 60}.get(exc.code, 900)
@@ -353,8 +390,14 @@ def lookup(value: str, *, network: bool = True, scenario: str = "interactive",
     except (sqlite3.Error, OSError, json.JSONDecodeError):
         raise TeamCodeError("state_unavailable") from None
     finally:
-        if con:
-            con.close()
+        try:
+            if lease:
+                lease.release()
+        finally:
+            if pool:
+                pool.close()
+            if con:
+                con.close()
 
 
 def _iso(timestamp):
@@ -364,7 +407,8 @@ def _iso(timestamp):
 def status() -> dict:
     cfg = settings()
     path = state_path(cfg)
-    out = {"schema": SCHEMA, "configured": bool(_gateway_url(cfg) or re.fullmatch(r"[A-Za-z0-9]{42}", cfg.get("PCUI_TEAMCODE_GUEST_UUID", ""))),
+    out = {"schema": SCHEMA, "configured": bool(_gateway_url(cfg) or cfg.get("PCUI_GAME_IDENTITY_POOL")
+           or re.fullmatch(r"[A-Za-z0-9]{42}", cfg.get("PCUI_TEAMCODE_GUEST_UUID", ""))),
            "dependencies_available": all(importlib.util.find_spec(name) is not None for name in ("requests", "cryptography")),
            "limits": {key.lower(): _number(cfg, key) for key in DEFAULTS}, "circuit_open": False}
     if path.exists():
@@ -372,34 +416,3 @@ def status() -> dict:
             row = con.execute("SELECT blocked_until FROM guard WHERE id=1").fetchone()
             out["circuit_open"] = bool(row and row[0] > time.time())
     return out
-
-
-def batch(values: list[str], *, network: bool = True, config: dict | None = None,
-          fetch=None, clock=time.time, sleep=time.sleep) -> dict:
-    """Explicit bounded list, serial and paced; preserve input positions, stop on refusal."""
-    cfg = settings() if config is None else config
-    if not isinstance(values, list) or not 1 <= len(values) <= _number(cfg, "BATCH_LIMIT"):
-        raise TeamCodeError("bad_input")
-    codes = [normalize_code(value) for value in values]
-    rows, halted, last_network = [], None, None
-    for index, code in enumerate(codes):
-        try:
-            try:
-                result = lookup(code, network=False, scenario="pipeline", config=cfg, fetch=fetch, clock=clock)
-            except TeamCodeError as exc:
-                if exc.code != "cache_miss":
-                    raise
-                if halted or not network:
-                    raise TeamCodeError(halted or "cache_miss")
-                if last_network is not None:
-                    sleep(max(0, last_network + _number(cfg, "INTERVAL_SECONDS") - clock()))
-                result = lookup(code, scenario="pipeline", config=cfg, fetch=fetch, clock=clock)
-                last_network = clock()
-            rows.append({"index": index, **result})
-        except TeamCodeError as exc:
-            rows.append({"index": index, "code": code, **exc.result()})
-            if exc.code not in {"not_found", "cache_miss"}:
-                halted = exc.code
-            if exc.code == "not_found":
-                last_network = clock()
-    return {"schema": SCHEMA, "results": rows, "stopped_reason": halted}

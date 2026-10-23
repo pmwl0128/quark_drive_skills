@@ -76,6 +76,38 @@ def _route(summary: str, tag: str, response: Schema, *,
 
 
 _HEALTH = _object(properties={"ok": {"type": "boolean"}}, required=["ok"])
+_POOL_KEY = _object(properties={
+    "id": {"type": "string"},
+    "label": {"type": "string"},
+    "holder": {"type": "string"},
+    "generation": {"type": "integer"},
+    "deviceBound": {"type": "boolean"},
+    "dailyTokenBudget": {"type": ["integer", "null"]},
+    "totalTokenBudget": {"type": ["integer", "null"]},
+    "today": _object(properties={"reserved": {"type": "integer"},
+                                 "spent": {"type": "integer"}},
+                     required=["reserved", "spent"]),
+    "totalSpent": {"type": "integer"},
+    "createdAt": {"type": "integer"},
+    "rotatedAt": {"type": "integer"},
+    "lastUsedAt": {"type": ["integer", "null"]},
+}, required=["id", "label", "generation", "deviceBound", "today", "totalSpent"])
+_POOL = _object(properties={
+    "keys": _array(_POOL_KEY),
+    "summary": _object(properties={
+        "total": {"type": "integer"},
+        "deviceBound": {"type": "integer"},
+        "todaySpent": {"type": "integer"},
+        "todayReserved": {"type": "integer"},
+        "totalSpent": {"type": "integer"},
+        "withDailyBudget": {"type": "integer"},
+        "withTotalBudget": {"type": "integer"},
+    }, required=["total", "deviceBound", "todaySpent", "totalSpent"]),
+    "teamCode": _object(properties={
+        "dailyLimit": {"type": "integer"},
+        "minuteLimit": {"type": "integer"},
+    }, required=["dailyLimit", "minuteLimit"]),
+}, required=["keys", "summary", "teamCode"])
 _BOOTSTRAP = _object(
     properties={"token": {"type": "string", "minLength": 1}}, required=["token"])
 _DEX_QUERY = _object(
@@ -246,10 +278,11 @@ LOCAL_ROUTES: dict[RouteKey, dict[str, Any]] = {
 
 
 ONLINE_ROUTES: dict[RouteKey, dict[str, Any]] = {
-    ("POST", "/api/team/code"): _route("Import one public team code", "team",
-        _ref("TeamCodeResultDtoSchema"), request=_ref("TeamCodeRequestDtoSchema"),
-        extra_content={"application/x-ndjson": _NDJSON}),
     ("GET", "/api/health"): _route("Online API liveness", "system", _HEALTH),
+    # Not a visitor route: nginx basic auth and the X-PCWEB-Admin stamp protect it. Listed here
+    # because the catalog must cover every /api route the process actually serves.
+    ("GET", "/api/pool"): _route(
+        "Read identity pool status (admin, via nginx only)", "system", _POOL),
     ("GET", "/api/capabilities"): _route(
         "Read runtime capabilities", "system", _ref("CapabilitiesSchema")),
     ("GET", "/api/quota"): _route(

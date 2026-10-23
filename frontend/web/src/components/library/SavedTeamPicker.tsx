@@ -24,7 +24,7 @@ export default function SavedTeamPicker({ format, receiverId, title, onClose, re
     </div>
     <div className="saved-team-list" role="menu" aria-label={t("library.importSaved")}
       onKeyDown={event => { if (!(event.target instanceof HTMLInputElement)) roveFocus(event, "[role=menuitem]"); }}>
-      <TeamImportList format={format} autoFocus initialLimit={5} replaceCurrent={replaceCurrent} onPick={(doc, name) => {
+      <TeamImportList key={receiverId} format={format} autoFocus initialLimit={5} replaceCurrent={replaceCurrent} onPick={(doc, name) => {
         const receiver = receivers.find(candidate => candidate.id === receiverId && candidate.kind === "team");
         if (receiver && deliver(receiver, { kind: "team", doc, name }).ok) onClose();
       }} />

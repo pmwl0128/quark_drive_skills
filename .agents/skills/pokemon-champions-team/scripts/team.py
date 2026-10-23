@@ -2491,7 +2491,6 @@ TEAM_SCHEMA = {
     "commands": {
         "code": "<public-code> [--cache-only] -> {schema:team-code.v1,code,team,cache}; explicit bounded network lookup, unknown format/season/rule stay null",
         "code-status": "-> private operator configuration/dependency/circuit status; never contains identity or tokens",
-        "code-batch": "<JSON-file: list of explicit public codes> [--cache-only] -> ordered results; bounded serial queries, stops new requests on refusal",
         "parse": "<file> -> {schema_version, format, season, rule, pokemon:[member], provenance}",
         "validate": "<file> [--context] -> {status: valid|invalid|unknown, valid, confidence, errors, warnings}",
         "diagnose": "<file> [--aspect defense|offense|speed|roles|all] [--context] "
@@ -2871,7 +2870,7 @@ def main() -> int:
     p.add_argument("command",
                    choices=["parse", "validate", "diagnose", "tune", "select", "matchup", "fill", "replace",
                             "context-audit", "frame", "slate-evaluate", "checkpoint", "answer-audit", "draft-init", "landscape", "observed",
-                            "intake", "repset", "oppmatrix", "topmeta", "search", "show", "session", "schema", "vocab", "code", "code-status", "code-batch"])
+                            "intake", "repset", "oppmatrix", "topmeta", "search", "show", "session", "schema", "vocab", "code", "code-status"])
     p.add_argument("--cache-only", action="store_true", help="code: use a fresh shared cache result without a network request")
     p.add_argument("file", nargs="?",
                    help="team-json/Showdown file; for `repset` it is the SPECIES name, for `oppmatrix` "
@@ -2962,21 +2961,11 @@ def main() -> int:
                         "(e.g. answer_shape when the user said 'just one team'). Unknown ids -> rc=2.")
     ns = p.parse_args()
     i18n.set_lang(getattr(ns, "lang", None))   # must run BEFORE any command produces output
-    if ns.command in {"code", "code-status", "code-batch"}:
+    if ns.command in {"code", "code-status"}:
         import team_codes
         try:
-            if ns.command == "code-batch":
-                try:
-                    path = Path(ns.file or "")
-                    if path.stat().st_size > 65536:
-                        raise ValueError
-                    values = json.loads(path.read_text(encoding="utf-8-sig"))
-                except (OSError, ValueError):
-                    raise team_codes.TeamCodeError("bad_input") from None
-                result = team_codes.batch(values, network=not ns.cache_only)
-            else:
-                result = (team_codes.status() if ns.command == "code-status" else
-                          team_codes.lookup(ns.file or "", network=not ns.cache_only))
+            result = (team_codes.status() if ns.command == "code-status" else
+                      team_codes.lookup(ns.file or "", network=not ns.cache_only))
         except team_codes.TeamCodeError as exc:
             print(json.dumps(exc.result(), ensure_ascii=False, indent=2))
             return 0 if exc.code == "not_found" else 1

@@ -1,5 +1,5 @@
 import type { FormatId, TeamDoc } from "@pokemon-champions/protocol";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRuntime } from "../../runtime/context.tsx";
 import { readTeamCode, teamCodeFromText } from "../../lib/teamCode.ts";
 import { useLibraryT } from "./messages.ts";
@@ -14,15 +14,24 @@ export function TeamCodeImport({ format, onPick, replaceCurrent = false }: {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const generation = useRef(0);
+  useEffect(() => {
+    setBusy(false); setFailed(false); setConfirming(false);
+    return () => { generation.current += 1; };
+  }, [adapter, format]);
   if (!can("team.code")) return null;
   const code = teamCodeFromText(text);
   const run = async () => {
     if (!code || busy) return;
+    const request = ++generation.current;
     setConfirming(false);
     setBusy(true); setFailed(false);
-    try { onPick((await readTeamCode(adapter, code, format)).team); }
-    catch { setFailed(true); }
-    finally { setBusy(false); }
+    try {
+      const result = await readTeamCode(adapter, code, format);
+      if (request === generation.current) onPick(result.team);
+    }
+    catch { if (request === generation.current) setFailed(true); }
+    finally { if (request === generation.current) setBusy(false); }
   };
   const submit = () => {
     if (!code || busy) return;

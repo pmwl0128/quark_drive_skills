@@ -5,10 +5,11 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-22T06:13:13Z"
+  "built_at": "2026-10-23T13:00:48Z"
  },
  "counts": {
-  "partners": 11
+  "partners": 8,
+  "stand_in": 1
  },
  "anchors": {
   "Aegislash-Shield|": {
@@ -26,23 +27,23 @@
     "Basculegion",
     "Aegislash"
    ],
-   "teams": 10
+   "teams": 11
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
     "Gengar",
-    "Snorlax"
+    "Tyranitar"
    ],
    "teams": 8
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Empoleon",
-    "Metagross"
+    "Tyranitar",
+    "Skeledirge"
    ],
-   "teams": 9
+   "teams": 5
   },
   "Hydrapple|": {
    "source": "partners",
@@ -50,7 +51,7 @@
     "Toxapex",
     "Corviknight"
    ],
-   "teams": 24
+   "teams": 31
   },
   "Meowstic-F|": {
    "source": "partners",
@@ -62,46 +63,32 @@
    "teams": 5
   },
   "Morpeko-Hangry|": {
-   "source": "partners",
-   "partners": [
-    "Gholdengo",
-    "Corviknight"
-   ],
-   "teams": 15
-  },
-  "Oranguru|": {
-   "source": "partners",
-   "partners": [
-    "Feraligatr",
-    "Gardevoir"
-   ],
-   "teams": 7
+   "source": "stand_in",
+   "species": "Pawmot",
+   "hits": {
+    "types": 1,
+    "lean": 1,
+    "speed_band": 1,
+    "roles": 2,
+    "field": 0
+   },
+   "teams": 152
   },
   "Passimian|": {
    "source": "partners",
    "partners": [
     "Greninja",
-    "Staraptor",
-    "Hippowdon"
+    "Staraptor"
    ],
-   "teams": 3
+   "teams": 8
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
     "Salamence",
-    "Rillaboom",
-    "Cinderace"
+    "Rillaboom"
    ],
-   "teams": 4
-  },
-  "Tauros-Paldea-Combat|": {
-   "source": "partners",
-   "partners": [
-    "Cinderace",
-    "Gyarados"
-   ],
-   "teams": 14
+   "teams": 44
   }
  }
 }

@@ -1257,7 +1257,8 @@ def _meta_detail(pool: Any, fmt: str, name: str, timeout: float) -> Any:
 
 def _run_tool(pool: Any, name: str, args: dict,
               timeout: float = QA_TOOL_TIMEOUT,
-              budget: float | None = None, supplied_codes: frozenset[str] = frozenset()) -> tuple[tuple[str, str, dict] | None, str]:
+              budget: float | None = None, supplied_codes: frozenset[str] = frozenset(),
+              consume_team_code: Callable[[], None] | None = None) -> tuple[tuple[str, str, dict] | None, str]:
     """Execute one whitelisted tool call. Returns ((tool_id, label, params) or None, content).
     Bad arguments and CLI error shapes become CONTENT (the model reads the miss and says
     so); only infrastructure faults bubble up via WorkerError -> content too. `timeout` is
@@ -1272,6 +1273,8 @@ def _run_tool(pool: Any, name: str, args: dict,
                 code = service.normalize_code(args.get("code"))
                 if len(supplied_codes) != 1 or code not in supplied_codes:
                     return None, json.dumps({"error": "only query a public code explicitly supplied by the user"})
+                if consume_team_code is not None:
+                    consume_team_code()
                 doc = service.lookup(code, network=(budget is not None and budget >= 80))
                 return ("team.code", "public team " + code, {"code": code}), clip_json(doc)
             except service.TeamCodeError as exc:
@@ -1898,7 +1901,8 @@ def explain_diagnose(provider: LlmProvider, report: dict, lang: str) -> tuple[st
 
 
 def answer(pool: Any, provider: LlmProvider, question: str, lang: str,
-           on_progress: Callable[[dict], None] | None = None) -> dict:
+           on_progress: Callable[[dict], None] | None = None,
+           consume_team_code: Callable[[], None] | None = None) -> dict:
     """Run the full pipeline. Returns {"answer", "toolTrace", "grounded", "tokens"} plus the
     metric split the §9 benchmark consumes ("promptTokens"/"completionTokens"/"cacheHitTokens"/
     "llmCalls"/"toolBytes"); raises QaFailed (tokens attached) when the model never produces
@@ -2004,7 +2008,7 @@ def answer(pool: Any, provider: LlmProvider, question: str, lang: str,
                 answered.add(key)
                 traced, content = _run_tool(pool, str(fn.get("name") or ""), args,
                                             timeout=min(QA_TOOL_TIMEOUT, rem), budget=rem,
-                                            supplied_codes=supplied_codes)
+                                            supplied_codes=supplied_codes,consume_team_code=consume_team_code)
                 metrics["toolBytes"] += len(content.encode("utf-8"))
                 if traced is not None:
                     trace.append({"tool": traced[0], "label": traced[1], "params": traced[2]})
