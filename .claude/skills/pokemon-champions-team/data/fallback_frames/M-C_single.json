@@ -5,7 +5,7 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-23T13:00:48Z"
+  "built_at": "2026-10-25T10:15:07Z"
  },
  "counts": {
   "partners": 8,
@@ -40,10 +40,10 @@
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Tyranitar",
-    "Skeledirge"
+    "Meowscarada",
+    "Metagross"
    ],
-   "teams": 5
+   "teams": 21
   },
   "Hydrapple|": {
    "source": "partners",
@@ -72,23 +72,24 @@
     "roles": 2,
     "field": 0
    },
-   "teams": 152
+   "teams": 157
   },
   "Passimian|": {
    "source": "partners",
    "partners": [
-    "Greninja",
-    "Staraptor"
+    "Baxcalibur",
+    "Gyarados"
    ],
-   "teams": 8
+   "teams": 20
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
     "Salamence",
-    "Rillaboom"
+    "Rillaboom",
+    "Glimmora"
    ],
-   "teams": 44
+   "teams": 4
   }
  }
 }

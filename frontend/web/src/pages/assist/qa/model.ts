@@ -12,8 +12,8 @@ export function toolIcon(tool: string): ComponentType<{ "aria-hidden"?: boolean 
   if (tool.startsWith("dex.")) return IconBook2;
   if (tool.startsWith("meta.")) return IconChartBar;
   if (tool === "team.repset") return IconCards;
-  if (tool === "calc.damage") return IconSwords;
-  if (tool === "calc.speed" || tool === "speed_ladder") return IconBolt;
+  if (tool === "calc.damage" || tool === "calc.threshold") return IconSwords;
+  if (tool === "calc.speed" || tool === "calc.speed_threshold" || tool === "speed_ladder") return IconBolt;
   return IconDatabase;
 }
 

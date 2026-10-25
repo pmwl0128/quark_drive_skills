@@ -21,6 +21,7 @@ from collections import Counter, OrderedDict
 from functools import lru_cache
 from typing import Any, Callable
 
+from . import calc_scenario
 from .provider import ChatResult, LlmProvider, LlmUnavailable
 
 QA_QUESTION_MAX_CHARS = 400     # mirrors frontend/protocol llm.ts
@@ -102,6 +103,16 @@ Rules:
   do not need a prior detail/repset lookup, and they still work when such a lookup missed:
   always TRY the calc tool before declining. If a tool ultimately fails, decline plainly —
   never substitute numbers from memory.
+- For "how many SP / 加多少点 / 至少要多少 / 最少几点" questions (to OHKO, 2HKO, survive or
+  outspeed), call calc_threshold ONCE: it sweeps every SP value itself. Never loop calc_damage.
+- Put the battle state the question states into attacker_set / defender_set. Stat stages go in
+  boosts: setup moves (look the move up in the dex when unsure of its effect), Baton Pass passing
+  them, Intimidate (-1 Atk), self-drops, an explicit "+2". Spread idioms go in sps + nature: max
+  physical bulk (极限物耐 / HB) = hp 32 + def 32 with a +Def nature; max special bulk (极限特耐 /
+  HD) = hp 32 + spd 32 with a +SpD nature; max Attack (满攻 / 极限物攻) = atk 32 with a +Atk
+  nature; fastest (最速) = spe 32 with a +Spe nature; 准速 = spe 32 with a neutral-Speed nature;
+  无振 = a neutral nature. A tool error naming an item or move not in Pokemon Champions is the
+  answer for that option: say so, never retry it under another spelling.
 - For "what outspeeds X" / "which pokemon are faster than X" / "is X fast enough for the meta",
   call speed_ladder ONCE — it returns X plus the ranked field already sorted and split into
   outspeedsMe / ties / slowerThanMe. Do NOT loop calc_speed over the ranking: that runs out of
@@ -138,6 +149,23 @@ Rules:
 - This box only does factual lookups: for team building or anything off-topic, briefly say
   it is out of scope and point to the site's builder/calculator pages.
 """
+
+# One battle-side state for the calc tools (calc_scenario.apply_set validates it).
+_SET_SCHEMA = {"type": "object", "description": "what the question states for this side", "properties": {
+    "nature": {"type": "string"},
+    "sps": {"type": "object", "description": "SP per stat hp/atk/def/spa/spd/spe, 0-32, at most 66 in "
+                                             "total; replaces the whole most-used spread (omitted = 0)"},
+    "item": {"type": "string", "description": "item (any language), or none"},
+    "ability": {"type": "string"},
+    "boosts": {"type": "object", "description": "stat stages in battle atk/def/spa/spd/spe, -6..6"},
+    "status": {"type": "string", "enum": list(calc_scenario.STATUSES)},
+}}
+_FIELD_SCHEMA = {"type": "object", "properties": {
+    "weather": {"type": "string", "enum": list(calc_scenario.WEATHERS)},
+    "terrain": {"type": "string", "enum": list(calc_scenario.TERRAINS)},
+    "reflect": {"type": "boolean"}, "light_screen": {"type": "boolean"},
+    "aurora_veil": {"type": "boolean"}, "helping_hand": {"type": "boolean"},
+}}
 
 TOOLS: list[dict] = [
     {"type": "function", "function": {
@@ -228,15 +256,49 @@ TOOLS: list[dict] = [
                        "assumed sets. Both sides default to their most-used competitive set "
                        "(usage modes; Mega forms use their real-team representative set); a set "
                        "holding its own Mega Stone is computed as that Mega form with its ability. "
-                       "Optional item overrides answer what-if-holding-X questions.",
+                       "attacker_set / defender_set state what the question says (nature, SP, item, "
+                       "stat stages, status) on top of that; field sets weather, terrain and screens.",
         "parameters": {"type": "object", "properties": {
             "attacker": {"type": "string"},
             "defender": {"type": "string"},
             "move": {"type": "string", "description": "the attacking move (any language)"},
             "format": {"type": "string", "enum": ["single", "double"]},
+            "attacker_set": _SET_SCHEMA,
+            "defender_set": _SET_SCHEMA,
+            "field": _FIELD_SCHEMA,
+            "crit": {"type": "boolean", "description": "a critical hit"},
             "attacker_item": {"type": "string", "description": "optional item override"},
             "defender_item": {"type": "string", "description": "optional item override"},
         }, "required": ["attacker", "defender", "move"]},
+    }},
+    {"type": "function", "function": {
+        "name": "calc_threshold",
+        "description": "Solve 'how many SP' questions exactly in ONE call: the fewest SP on one stat "
+                       "(0-32) for an OHKO / 2HKO, to survive one or two hits, or to outspeed, per "
+                       "nature lane (the set's own, the one raising that stat, a neutral one) and per "
+                       "compared item, with the result at 0 and 32 SP when it cannot be reached. Never "
+                       "loop calc_damage over SP values. State the battle state in the sets exactly as "
+                       "for calc_damage. The solved side holds only the item the question names (item "
+                       "omitted = none; its usual non-Mega item is added as a compared lane); the other "
+                       "side uses its most-used set unless stated. Answer from its conclusion lines.",
+        "parameters": {"type": "object", "properties": {
+            "attacker": {"type": "string"},
+            "defender": {"type": "string"},
+            "move": {"type": "string", "description": "the attacking move; any move for outspeed"},
+            "format": {"type": "string", "enum": ["single", "double"]},
+            "solve_for": {"type": "string", "enum": list(calc_scenario.SOLVE_FOR),
+                          "description": "side.stat whose SP is asked; defender.bulk = HP plus the "
+                                         "defence the move hits"},
+            "goal": {"type": "string", "enum": list(calc_scenario.GOALS)},
+            "probability": {"type": "string", "enum": ["guaranteed", "any"],
+                            "description": "guaranteed (default) or any chance"},
+            "attacker_set": _SET_SCHEMA,
+            "defender_set": _SET_SCHEMA,
+            "field": _FIELD_SCHEMA,
+            "crit": {"type": "boolean"},
+            "compare_items": {"type": "array", "items": {"type": "string"}, "maxItems": 3,
+                              "description": "extra items for the solved side (any language)"},
+        }, "required": ["attacker", "defender", "move", "solve_for", "goal"]},
     }},
     {"type": "function", "function": {
         "name": "calc_speed",
@@ -1255,6 +1317,117 @@ def _meta_detail(pool: Any, fmt: str, name: str, timeout: float) -> Any:
     return {"note": NO_USAGE, **doc}
 
 
+def _calc_sides(pool: Any, args: dict, timeout: float, budget: float | None,
+                solved: str | None = None) -> dict:
+    """Both combatants of a calc tool call: the most-used sets with the question's stated parts on top
+    (calc_scenario.apply_set validates them and checks Champions legality), each in the form it battles as,
+    and the move resolved strictly. The `solved` side of a threshold holds only the item the question names;
+    its usual item, unless that is its own Mega Stone, is returned as `usual_item` for a compared lane."""
+    fmt = args.get("format") or "single"
+    names = {k: _clean_name(args.get(k)) for k in ("attacker", "defender", "move")}
+    if fmt not in ("single", "double") or None in names.values():
+        raise calc_scenario.ScenarioError("attacker, defender and move are required; format is single or double")
+    move = calc_scenario.resolve_strict(pool, names["move"], "move", timeout)
+    if move is None:
+        raise calc_scenario.ScenarioError(f"move {names['move']!r} is not in Pokemon Champions")
+    snapshot = _modal_snapshot(pool)
+    sides, usual_item, notes = [], None, []
+    for side in ("attacker", "defender"):
+        species = _resolve_query(pool, names[side], "pokemon", timeout)
+        combatant, src = _modal_combatant(pool, fmt, species, timeout, budget, snapshot)
+        spec = args.get(f"{side}_set")
+        spec = dict(spec) if isinstance(spec, dict) else spec
+        legacy = _clean_name(args.get(f"{side}_item")) if args.get(f"{side}_item") else None
+        if legacy and (spec is None or isinstance(spec, dict) and "item" not in spec):
+            spec = {**(spec or {}), "item": legacy}
+        states_item = isinstance(spec, dict) and "item" in spec
+        states_build = isinstance(spec, dict) and any(spec.get(k) for k in ("nature", "sps"))
+        if not states_item and (side == solved or states_build) and combatant.get("item"):
+            stones = _stones(_dex_cards(pool, [combatant["name"]], timeout).get(combatant["name"]))
+            if side == solved:
+                usual = combatant.pop("item")
+                usual_item = usual if usual not in stones else None
+            elif combatant["item"] in stones:
+                # A build the question states (nature / SP) without an item is that species' own build: the
+                # usual Mega Stone would silently turn it into another form with other stats and ability.
+                notes.append(f"{side}: stated build without an item, so its usual {combatant.pop('item')} "
+                             f"(Mega Stone) is not assumed")
+        sides.append((calc_scenario.apply_set(pool, combatant, spec, side, timeout), src))
+    # After the overrides: the item a side finally holds decides its battle form (a Specs override keeps
+    # Gengar base; a stone override makes the Mega).
+    (atk, src_a), (dfd, src_d) = _battle_forms(pool, sides, timeout)
+    learners = pool.request_json("dex", ["find", "move", move, "--format", "json"], timeout=timeout)
+    rows = learners.get("results") if isinstance(learners, dict) else None
+    if isinstance(rows, list) and atk["name"] not in {r.get("name") for r in rows if isinstance(r, dict)}:
+        notes.append(f"{atk['name']} cannot learn {move} in Pokemon Champions; computed as asked")
+    return {"format": fmt, "attacker": atk, "defender": dfd, "basis": {"attacker": src_a, "defender": src_d},
+            "move": move, "field": calc_scenario.field_payload(fmt, args.get("field")),
+            "crit": bool(args.get("crit")), "usual_item": usual_item, "notes": notes}
+
+
+def _calc_tool(pool: Any, name: str, args: dict, timeout: float,
+               budget: float | None) -> tuple[tuple[str, str, dict] | None, str]:
+    from .. import mappers
+    solve_for = args.get("solve_for") if name == "calc_threshold" else None
+    solved = solve_for.split(".")[0] if isinstance(solve_for, str) and "." in solve_for else None
+    s = _calc_sides(pool, args, timeout, budget, solved)
+    atk, dfd, move = s["attacker"], s["defender"], s["move"]
+    public = lambda c: {k: v for k, v in c.items() if not k.startswith("_")}
+    assumed = {"attacker": {**public(atk), "basis": s["basis"]["attacker"]},
+               "defender": {**public(dfd), "basis": s["basis"]["defender"]}}
+    if name == "calc_damage":
+        payload = calc_scenario.calc_payload(atk, dfd, move, s["field"], s["crit"])
+        doc = pool.request_json("calc", ["one"], json.dumps(payload, ensure_ascii=False), timeout=timeout)
+        label = ("calc.damage", f"calc {atk['name']} {move} vs {dfd['name']}",
+                 {"attacker": atk["name"], "move": move, "defender": dfd["name"], "format": s["format"]})
+        if isinstance(doc, dict) and doc.get("error"):
+            return label, clip_json(doc)   # unknown move/mon: an honest miss
+        mapped = mappers.map_damage(doc)
+        result = {"description": mapped.get("description"), "koChance": mapped.get("koChance"),
+                  "minPercent": mapped.get("minPercent"), "maxPercent": mapped.get("maxPercent"),
+                  "hits": mapped.get("hits"), "assumedSets": assumed}
+        if s["notes"]:
+            result["notes"] = s["notes"]
+        return label, clip_json(result)
+    compared: list[str | None] = []
+    for raw in (args.get("compare_items") or [])[:calc_scenario.COMPARE_ITEMS_MAX]:
+        text = str(raw or "").strip()
+        if text.lower() in calc_scenario.NO_ITEM:
+            compared.append(None)
+            continue
+        item = calc_scenario.resolve_strict(pool, text, "item", timeout)
+        if item is None:
+            raise calc_scenario.ScenarioError(f"item {text!r} is not in Pokemon Champions; drop it from compare_items")
+        compared.append(item)
+    if s["usual_item"] and s["usual_item"] not in compared and len(compared) < calc_scenario.COMPARE_ITEMS_MAX:
+        compared.append(s["usual_item"])
+
+    def run(cli: str, rows: list[dict]) -> list[dict]:
+        docs = pool.request_json(cli, ["batch"], json.dumps(rows, ensure_ascii=False), timeout=timeout)
+        if not isinstance(docs, list) or len(docs) != len(rows):
+            raise calc_scenario.ScenarioError("the calculator returned no result for this scenario")
+        bad = next((d for d in docs if not isinstance(d, dict) or d.get("error")), None)
+        if bad is not None:
+            raise calc_scenario.ScenarioError(str(bad.get("error") if isinstance(bad, dict) else "calc failed"))
+        return docs
+    solution = calc_scenario.solve(lambda rows: run("calc", rows), lambda rows: run("speedline", rows),
+                                   atk, dfd, move, s["field"], solve_for=str(solve_for), goal=str(args.get("goal")),
+                                   probability=str(args.get("probability") or "guaranteed"),
+                                   compare_items=compared, crit=s["crit"])
+    if args.get("goal") == "outspeed":
+        mover = atk if solved == "attacker" else dfd
+        other = dfd if solved == "attacker" else atk
+        label = ("calc.speed_threshold", f"speed SP {mover['name']} vs {other['name']}",
+                 {"a": mover["name"], "b": other["name"], "format": s["format"]})
+    else:
+        label = ("calc.threshold", f"SP threshold {atk['name']} {move} vs {dfd['name']}",
+                 {"attacker": atk["name"], "move": move, "defender": dfd["name"], "format": s["format"]})
+    result = {"assumedSets": assumed, **solution}
+    if s["notes"]:
+        result["notes"] = s["notes"]
+    return label, clip_json(result, cap=QA_TOOL_RESULT_CHARS * 2)
+
+
 def _run_tool(pool: Any, name: str, args: dict,
               timeout: float = QA_TOOL_TIMEOUT,
               budget: float | None = None, supplied_codes: frozenset[str] = frozenset(),
@@ -1421,49 +1594,11 @@ def _run_tool(pool: Any, name: str, args: dict,
                 params["opponent_ranges"] = True
             return ("speed_ladder", f"speed ladder: {out['pokemon']} ({fmt})", params), \
                 clip_json(out)
-        if name == "calc_damage":
-            from .. import mappers
-            fmt = args.get("format") or "single"
-            atk_n = _clean_name(args.get("attacker"))
-            dfd_n = _clean_name(args.get("defender"))
-            mv = _clean_name(args.get("move"))
-            if fmt not in ("single", "double") or None in (atk_n, dfd_n, mv):
-                return None, json.dumps({"error": "bad calc_damage arguments"})
-            atk_n = _resolve_query(pool, atk_n, "pokemon", timeout)
-            dfd_n = _resolve_query(pool, dfd_n, "pokemon", timeout)
-            mv = _resolve_query(pool, mv, "move", timeout)
-            snapshot = _modal_snapshot(pool)
-            atk, src_a = _modal_combatant(pool, fmt, atk_n, timeout, budget, snapshot)
-            dfd, src_d = _modal_combatant(pool, fmt, dfd_n, timeout, budget, snapshot)
-            for override, side in ((args.get("attacker_item"), atk),
-                                   (args.get("defender_item"), dfd)):
-                item = _clean_name(override) if override else None
-                if item:
-                    side["item"] = _resolve_query(pool, item, "item", timeout)
-                    side["_item_overridden"] = True
-            # After the overrides: the item a side finally holds decides its battle form (a Specs
-            # override keeps Gengar base; a stone override makes the Mega).
-            (atk, src_a), (dfd, src_d) = _battle_forms(pool, [(atk, src_a), (dfd, src_d)], timeout)
-            payload = {"attacker": {k: v for k, v in atk.items() if not k.startswith("_")},
-                       "defender": {k: v for k, v in dfd.items() if not k.startswith("_")},
-                       "move": mv, "field": {"format": fmt}}
-            doc = pool.request_json("calc", ["one"],
-                                    json.dumps(payload, ensure_ascii=False), timeout=timeout)
-            label = ("calc.damage", f"calc {atk['name']} {mv} vs {dfd['name']}",
-                     {"attacker": atk["name"], "move": mv, "defender": dfd["name"],
-                      "format": fmt})
-            if isinstance(doc, dict) and doc.get("error"):
-                return label, clip_json(doc)   # unknown move/mon: an honest miss
-            mapped = mappers.map_damage(doc)
-            result = {"description": mapped.get("description"),
-                      "koChance": mapped.get("koChance"),
-                      "minPercent": mapped.get("minPercent"),
-                      "maxPercent": mapped.get("maxPercent"),
-                      "hits": mapped.get("hits"),
-                      "assumedSets": {
-                          "attacker": {**payload["attacker"], "basis": src_a},
-                          "defender": {**payload["defender"], "basis": src_d}}}
-            return label, clip_json(result)
+        if name in ("calc_damage", "calc_threshold"):
+            try:
+                return _calc_tool(pool, name, args, timeout, budget)
+            except calc_scenario.ScenarioError as exc:
+                return None, json.dumps({"error": str(exc)})
         if name == "calc_speed":
             from .. import mappers
             fmt = args.get("format") or "single"
@@ -1949,7 +2084,7 @@ def answer(pool: Any, provider: LlmProvider, question: str, lang: str,
         # crossed — no further tool spend, one final tool_choice=none call to answer.
         final = round_no >= QA_MAX_ROUNDS or tokens >= QA_MAX_REQUEST_TOKENS
         if final and not final_turn:
-            # The forced-final call carries no tool definitions (MiMo honours only auto), yet the
+            # The forced-final call may carry no tool definitions (the Anthropic route drops them), yet the
             # transcript is full of tool calls; told nothing, the model writes its next call out
             # as text (seen live: <tool_call><function=meta_detail>…). Say the tools are gone.
             messages.append({"role": "user", "content": FINAL_TURN})

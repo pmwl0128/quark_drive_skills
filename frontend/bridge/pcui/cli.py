@@ -248,32 +248,25 @@ def cmd_online_serve(ns) -> int:
         print(i18n.t("expose_online", host=ns.host))
         if input(i18n.t("confirm")).strip() != "yes":
             return 1
-    qa_provider = None
+    qa_provider = None  # questions use the ordinary (non-thinking) chain
     if ns.provider == "echo":
         provider = EchoProvider()
         thinking_provider = provider
-    elif ns.provider in {"mimo", "deepseek"}:
+    elif ns.provider in {"opencode", "deepseek"}:
+        # opencode: OpenCode Go's DeepSeek Flash first, DeepSeek's official API as the second route.
         try:
-            llm_config = AnthropicMessagesConfig.from_env(
-                os.environ, provider=ns.provider)
-            fallback_config = (AnthropicMessagesConfig.from_env(
-                os.environ, provider="deepseek") if ns.provider == "mimo" else None)
+            official = AnthropicMessagesConfig.from_env(os.environ, provider="deepseek")
+            primary = (OpenAIChatConfig.from_env(os.environ, provider="opencode")
+                       if ns.provider == "opencode" else None)
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
-        base_provider = AnthropicMessagesProvider(llm_config) if llm_config.api_key else None
-        provider = base_provider.with_thinking(False) if base_provider else None
-        thinking_provider = base_provider.with_thinking(True) if base_provider else None
-        qa_provider = (base_provider.with_model(
-            os.environ.get("PCUI_MIMO_QA_MODEL", "mimo-v2.6-flash"))
-            .with_thinking(False) if base_provider and ns.provider == "mimo" else provider)
-        if fallback_config and fallback_config.api_key:
-            fallback_base = AnthropicMessagesProvider(fallback_config)
-            fallback = fallback_base.with_thinking(False)
-            thinking_fallback = fallback_base.with_thinking(True)
-            provider = FallbackProvider(provider, fallback) if provider else fallback
-            qa_provider = FallbackProvider(qa_provider, fallback) if qa_provider else fallback
-            thinking_provider = (FallbackProvider(thinking_provider, thinking_fallback)
-                                 if thinking_provider else thinking_fallback)
+        bases = ([OpenAICompatibleProvider(primary)] if primary and primary.api_key else []) + \
+            ([AnthropicMessagesProvider(official)] if official.api_key else [])
+        provider = thinking_provider = None
+        for base in reversed(bases):
+            plain, deep = base.with_thinking(False), base.with_thinking(True)
+            provider = FallbackProvider(plain, provider) if provider else plain
+            thinking_provider = FallbackProvider(deep, thinking_provider) if thinking_provider else deep
         if provider is None:
             print(i18n.t("llm_key_missing"))
     elif ns.provider == "openai-compatible":
@@ -681,7 +674,7 @@ def main(argv: list[str] | None = None) -> int:
     online.add_argument("--port", type=int, default=runtime_config.online_port)
     online.add_argument("--host", default="127.0.0.1")
     online.add_argument("--provider",
-                        choices=["openai-compatible", "mimo", "deepseek", "echo", "none"],
+                        choices=["opencode", "deepseek", "openai-compatible", "echo", "none"],
                         default=runtime_config.llm_provider
                         if runtime_config.online_use_api_key else "none",
                         help=i18n.t("provider_help"))

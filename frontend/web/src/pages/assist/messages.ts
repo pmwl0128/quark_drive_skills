@@ -42,6 +42,8 @@ const ASSIST_MESSAGES = {
   "qa.trace.team.code": { zh: "公开队伍：{code}", en: "Public team: {code}", ja: "公開チーム：{code}" },
   "qa.trace.calc.damage": { zh: "伤害计算：{attacker}的{move}攻击{defender}", en: "Damage: {attacker}'s {move} into {defender}", ja: "ダメージ計算：{attacker}の{move}→{defender}" },
   "qa.trace.calc.speed": { zh: "速度比较：{a}与{b}", en: "Speed comparison: {a} vs {b}", ja: "素早さ比較：{a}と{b}" },
+  "qa.trace.calc.threshold": { zh: "所需点数：{attacker}的{move}对{defender}", en: "SP needed: {attacker}'s {move} into {defender}", ja: "必要SP：{attacker}の{move}→{defender}" },
+  "qa.trace.calc.speed_threshold": { zh: "所需速度点数：{a}快过{b}", en: "Speed SP needed: {a} over {b}", ja: "必要素早さSP：{a}が{b}を抜く" },
   "qa.trace.speed_ladder": { zh: "{pokemon}的速度线", en: "Speed tiers for {pokemon}", ja: "{pokemon}の素早さライン" },
   "qa.trace.generic": { zh: "已查询对战数据", en: "Battle data lookup", ja: "対戦データを照会" },
   "qa.ungrounded": {

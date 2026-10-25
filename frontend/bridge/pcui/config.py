@@ -25,7 +25,7 @@ class RuntimeConfig:
     online_port: int = 1026
     online_use_api_key: bool = True
     local_online_unlimited: bool = False
-    llm_provider: str = "mimo"
+    llm_provider: str = "opencode"
     workspace_dir: str | None = None
 
 
@@ -76,10 +76,10 @@ def load_runtime_config(path: Path | None = None) -> RuntimeConfig:
     """Read non-secret startup defaults without exporting any values into the process."""
     source = path or data_dir() / CONFIG_ENV_NAME
     values = env_file_values(source)
-    provider = values.get("PCUI_LLM_PROVIDER", "mimo").strip().lower()
-    if provider not in {"openai-compatible", "mimo", "deepseek", "echo", "none"}:
+    provider = values.get("PCUI_LLM_PROVIDER", "opencode").strip().lower()
+    if provider not in {"opencode", "deepseek", "openai-compatible", "echo", "none"}:
         raise ValueError(
-            "PCUI_LLM_PROVIDER must be openai-compatible, mimo, deepseek, echo, or none")
+            "PCUI_LLM_PROVIDER must be opencode, deepseek, openai-compatible, echo, or none")
     return RuntimeConfig(
         local_port=_port(values, "PCUI_LOCAL_PORT", 1025),
         online_port=_port(values, "PCUI_ONLINE_PORT", 1026),

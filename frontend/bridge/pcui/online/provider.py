@@ -3,6 +3,7 @@ so the whole answer pipeline runs inside a single `asyncio.to_thread` — the en
 async while provider + skill-tool calls stay simple synchronous code."""
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import time
@@ -107,13 +108,28 @@ def _post_json(url: str, payload: dict, headers: dict[str, str], timeout: float)
     return document
 
 
+# OpenCode Go: the subscription tier's OpenAI-compatible endpoint (DeepSeek models are served only as
+# chat completions there). Its edge refuses default client user agents, and the plan asks for one stable
+# x-opencode-session per conversation.
+OPENCODE_BASE_URL = "https://opencode.ai/inference/go/openai/v1"
+OPENCODE_MODEL = "deepseek-v4.1-flash"
+USER_AGENT = "QuarkDrive/1.0"
+
+
+def _conversation_id(messages: list[dict]) -> str:
+    """Stable across one tool loop: the system prompt and the first user turn never change in it."""
+    opening = json.dumps(messages[:2], ensure_ascii=False, sort_keys=True, default=str)
+    return "qd-" + hashlib.sha256(opening.encode("utf-8")).hexdigest()[:32]
+
+
 @dataclass(frozen=True)
 class OpenAIChatConfig:
     """One environment-backed seam for OpenAI-compatible chat-completions providers.
 
     Known generation controls get typed fields. ``extra_body`` is the escape hatch for a
     future provider-specific option without another code change, but cannot replace request
-    structure or orchestration-owned limits.
+    structure or orchestration-owned limits. ``provider="opencode"`` is the OpenCode Go
+    subscription (PCUI_OC_*); ``openai-compatible`` is any other endpoint (PCUI_LLM_*).
     """
 
     api_key: str
@@ -134,20 +150,28 @@ class OpenAIChatConfig:
     @classmethod
     def from_env(cls, values: Mapping[str, str], *,
                  provider: str = "openai-compatible") -> "OpenAIChatConfig":
-        if provider != "openai-compatible":
+        if provider not in {"openai-compatible", "opencode"}:
             raise ValueError(f"unsupported OpenAI-compatible provider: {provider}")
-        api_style = values.get("PCUI_LLM_API_STYLE", "openai-chat-completions").strip()
-        if api_style != "openai-chat-completions":
-            raise ValueError("PCUI_LLM_API_STYLE currently supports only openai-chat-completions")
+        api_style = "openai-chat-completions"
+        if provider == "openai-compatible":
+            api_style = values.get("PCUI_LLM_API_STYLE", api_style).strip()
+            if api_style != "openai-chat-completions":
+                raise ValueError("PCUI_LLM_API_STYLE currently supports only openai-chat-completions")
         thinking, effort = _thinking_controls(values)
         reserved = {"model", "messages", "stream", "max_tokens", "tools", "tool_choice",
                     "temperature", "top_p", "presence_penalty", "frequency_penalty", "seed",
                     "thinking", "reasoning_effort"}
         extra = _extra_body(values, reserved)
-        base_url = values.get("PCUI_LLM_BASE_URL", "https://api.openai.com/v1").strip()
-        model = values.get("PCUI_LLM_MODEL", "").strip()
-        api_key = values.get("PCUI_LLM_API_KEY", "").strip()
-        api_path = values.get("PCUI_LLM_API_PATH", "/chat/completions").strip()
+        if provider == "opencode":
+            base_url = values.get("PCUI_OC_BASE_URL", OPENCODE_BASE_URL).strip()
+            model = values.get("PCUI_OC_MODEL", OPENCODE_MODEL).strip()
+            api_key = values.get("PCUI_OC_API_KEY", "").strip()
+            api_path = "/chat/completions"
+        else:
+            base_url = values.get("PCUI_LLM_BASE_URL", "https://api.openai.com/v1").strip()
+            model = values.get("PCUI_LLM_MODEL", "").strip()
+            api_key = values.get("PCUI_LLM_API_KEY", "").strip()
+            api_path = values.get("PCUI_LLM_API_PATH", "/chat/completions").strip()
         if not base_url or not model or not api_path.startswith("/"):
             raise ValueError(
                 f"{provider} base URL/model must be non-empty and API path must start with /")
@@ -212,29 +236,32 @@ class OpenAICompatibleProvider:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = tool_choice
-        doc = _post_json(
-            f"{cfg.base_url.rstrip('/')}{cfg.api_path}", payload,
-            {"Authorization": f"Bearer {cfg.api_key}"}, timeout)
+        headers = {"Authorization": f"Bearer {cfg.api_key}", "User-Agent": USER_AGENT}
+        if cfg.provider == "opencode":
+            headers["x-opencode-session"] = _conversation_id(messages)
+        doc = _post_json(f"{cfg.base_url.rstrip('/')}{cfg.api_path}", payload, headers, timeout)
         try:
             message = doc["choices"][0]["message"]
         except (LookupError, TypeError) as exc:
             raise LlmUnavailable("llm upstream returned an unparseable response") from exc
         usage = doc.get("usage") or {}
-        return ChatResult(message, int(usage.get("prompt_tokens") or 0),
-                          int(usage.get("completion_tokens") or 0),
-                          int(usage.get("prompt_cache_hit_tokens") or 0),
-                          int(usage.get("prompt_cache_miss_tokens") or 0))
+        prompt = int(usage.get("prompt_tokens") or 0)
+        # DeepSeek names the cache split; OpenAI-style upstreams (OpenCode) report only the hits.
+        details = usage.get("prompt_tokens_details") or {}
+        hit = int(usage.get("prompt_cache_hit_tokens") or details.get("cached_tokens") or 0)
+        miss = int(usage.get("prompt_cache_miss_tokens") or (prompt - hit if details else 0))
+        return ChatResult(message, prompt, int(usage.get("completion_tokens") or 0), hit, miss)
 
 
 @dataclass(frozen=True)
 class AnthropicMessagesConfig:
-    """Provider-specific configuration for Anthropic Messages-compatible endpoints."""
+    """DeepSeek's official Anthropic Messages endpoint (the fallback behind OpenCode Go)."""
 
     api_key: str
-    provider: str = "mimo"
-    base_url: str = "https://token-plan-cn.xiaomimimo.com/anthropic"
+    provider: str = "deepseek"
+    base_url: str = "https://api.deepseek.com/anthropic"
     api_path: str = "/v1/messages"
-    model: str = "mimo-v2.6-pro"
+    model: str = "deepseek-flash"
     api_style: str = "anthropic-messages"
     temperature: float | None = 0.3
     top_p: float | None = None
@@ -244,36 +271,22 @@ class AnthropicMessagesConfig:
 
     @classmethod
     def from_env(cls, values: Mapping[str, str], *,
-                 provider: str = "mimo") -> "AnthropicMessagesConfig":
-        if provider not in {"mimo", "deepseek"}:
+                 provider: str = "deepseek") -> "AnthropicMessagesConfig":
+        if provider != "deepseek":
             raise ValueError(f"unsupported Anthropic Messages provider: {provider}")
-        # Named providers have a fixed wire protocol.  Do not reuse the generic style flag:
-        # keeping its legacy OpenAI value lets the next release be staged alongside the
-        # currently running release without making an unexpected old-process restart fail.
+        # A named provider has a fixed wire protocol; the generic PCUI_LLM_API_STYLE flag does not apply.
         api_style = "anthropic-messages"
         thinking, effort = _thinking_controls(values)
         reserved = {"model", "messages", "system", "stream", "max_tokens", "tools",
                     "tool_choice", "temperature", "top_p", "thinking", "output_config"}
         extra = _extra_body(values, reserved)
-        if provider == "mimo":
-            base_url = values.get(
-                "PCUI_MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/anthropic").strip()
-            api_path = values.get("PCUI_MIMO_API_PATH", "/v1/messages").strip()
-            model = values.get("PCUI_MIMO_MODEL", "mimo-v2.6-pro").strip()
-            api_key = values.get("PCUI_MIMO_API_KEY", "").strip()
-        else:
-            base_url = values.get(
-                "PCUI_DEEPSEEK_ANTHROPIC_BASE_URL",
-                "https://api.deepseek.com/anthropic").strip()
-            api_path = values.get(
-                "PCUI_DEEPSEEK_ANTHROPIC_API_PATH", "/v1/messages").strip()
-            model = values.get(
-                "PCUI_DEEPSEEK_MODEL",
-                values.get("DEEPSEEK_MODEL", "deepseek-flash")).strip()
-            api_key = values.get(
-                "PCUI_DEEPSEEK_API_KEY",
-                values.get("PCUI_LLM_API_KEY",
-                           values.get("DEEPSEEK_API_KEY", ""))).strip()
+        base_url = values.get(
+            "PCUI_DEEPSEEK_ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic").strip()
+        api_path = values.get("PCUI_DEEPSEEK_ANTHROPIC_API_PATH", "/v1/messages").strip()
+        model = values.get("PCUI_DEEPSEEK_MODEL", values.get("DEEPSEEK_MODEL", "deepseek-flash")).strip()
+        api_key = values.get(
+            "PCUI_DEEPSEEK_API_KEY",
+            values.get("PCUI_LLM_API_KEY", values.get("DEEPSEEK_API_KEY", ""))).strip()
         if not base_url or not model or not api_path.startswith("/"):
             raise ValueError(
                 f"{provider} base URL/model must be non-empty and API path must start with /")
@@ -288,8 +301,7 @@ class AnthropicMessagesConfig:
 
     def safe_summary(self) -> str:
         thinking = self.thinking or "provider-default"
-        effort = (self.reasoning_effort if self.provider == "deepseek"
-                  and self.thinking == "enabled" else "provider-default")
+        effort = self.reasoning_effort if self.thinking == "enabled" else "provider-default"
         return (f"{self.provider}/{self.api_style}, model={self.model}, thinking={thinking}, "
                 f"reasoning_effort={effort}")
 
@@ -415,21 +427,15 @@ class AnthropicMessagesProvider:
                 payload["temperature"] = cfg.temperature
             if cfg.top_p is not None:
                 payload["top_p"] = cfg.top_p
-        # MiMo currently documents only auto tool choice. Omitting tools on the forced-final
-        # call makes `none` an actual hard gate on both providers instead of relying on an
-        # ignored field. The orchestration still keeps the full tool loop internally.
+        # Omitting tools on the forced-final call makes `none` a hard gate instead of relying on
+        # the upstream honouring the field. The orchestration still keeps the full tool loop internally.
         if tools and tool_choice != "none":
             payload["tools"] = _anthropic_tools(tools)
             payload["tool_choice"] = {"type": "auto"}
-        if (cfg.provider == "deepseek" and cfg.thinking == "enabled"
-                and cfg.reasoning_effort is not None):
+        if cfg.thinking == "enabled" and cfg.reasoning_effort is not None:
             payload["output_config"] = {"effort": cfg.reasoning_effort}
-        if cfg.provider == "mimo":
-            headers = {"Authorization": f"Bearer {cfg.api_key}",
-                       "Content-Type": "application/json"}
-        else:
-            headers = {"x-api-key": cfg.api_key, "anthropic-version": "2023-06-01",
-                       "Content-Type": "application/json"}
+        headers = {"x-api-key": cfg.api_key, "anthropic-version": "2023-06-01",
+                   "Content-Type": "application/json", "User-Agent": USER_AGENT}
         doc = _post_json(
             f"{cfg.base_url.rstrip('/')}{cfg.api_path}", payload, headers, timeout)
         try:

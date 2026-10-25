@@ -5,10 +5,10 @@
   "format": "double",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-23T13:00:53Z"
+  "built_at": "2026-10-25T10:15:15Z"
  },
  "counts": {
-  "history": 5,
+  "history": 4,
   "partners": 5
  },
  "anchors": {
@@ -17,17 +17,9 @@
    "partners": [
     "Tyranitar",
     "Indeedee",
-    "Salamence"
+    "Milotic"
    ],
-   "teams": 235
-  },
-  "Avalugg|": {
-   "source": "history",
-   "seasons": [
-    "M-4",
-    "M-5"
-   ],
-   "teams": 4
+   "teams": 57
   },
   "Gourgeist-Large|": {
    "source": "partners",
@@ -36,15 +28,16 @@
     "Excadrill",
     "Indeedee"
    ],
-   "teams": 273
+   "teams": 277
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Kingambit",
-    "Farigiraf"
+    "Gengar",
+    "Snorlax",
+    "Scrafty"
    ],
-   "teams": 403
+   "teams": 8
   },
   "Morpeko-Hangry|": {
    "source": "partners",
@@ -85,10 +78,11 @@
   "Tauros-Paldea-Combat|": {
    "source": "partners",
    "partners": [
-    "Talonflame",
-    "Froslass"
+    "Metagross",
+    "Farigiraf",
+    "Salamence"
    ],
-   "teams": 27
+   "teams": 3
   },
   "Tauros|": {
    "source": "history",
