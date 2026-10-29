@@ -824,6 +824,7 @@ def next_batch(context: dict[str, Any] | None = None, game_format: str | None = 
     RESOLVED, not what happened to populate a context field. Ids not in the base set are echoed in
     `unknown_answered` (the CLI turns a non-empty list into rc=2 — a silently dropped typo would
     re-ask a resolved dimension and spin the loop). Batch size varies 1-3."""
+    from canonhash import content_hash
     covered = covered_dimensions(context)
     answered_ids = [qid for qid in (answered or []) if qid in _ONBOARDING_IDS]
     unknown = [qid for qid in (answered or []) if qid not in _ONBOARDING_IDS]
@@ -832,6 +833,7 @@ def next_batch(context: dict[str, Any] | None = None, game_format: str | None = 
     out: dict[str, Any] = {
         "kind": "intake",
         "mode": "onboarding_step",
+        "context_fingerprint": content_hash(context or {}, 24),
         "consumer": "ai-orchestration",
         "game_format": game_format,
         "already_answered": [{"id": qid, "covered_by": covered[qid]}

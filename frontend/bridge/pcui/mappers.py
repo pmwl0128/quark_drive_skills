@@ -1142,6 +1142,25 @@ TOP_PANEL_LIMIT = 10
 TOP_PARTNER_MIN_TEAMS = 3
 
 
+def map_landscape(raw: dict) -> dict:
+    """The team skill's format landscape (structure distributions over the observed real teams of the
+    rule), cropped to what a reader asks about. Aggregates only: cores already carry the skill's support
+    floor, which equals the projection's partner-row privacy boundary."""
+    env = raw.get("environment") or {}
+    cores = [{"members": list(c["members"]), "count": int(c["count"]), "share": c["share"]}
+             for c in raw.get("observed_cores") or [] if int(c.get("count") or 0) >= TOP_PARTNER_MIN_TEAMS]
+    mega = raw.get("mega_slot_distribution") or {}
+    return {"format": raw["format"], "rule": env.get("data_rule") or env.get("rule"),
+            "season": env.get("season"), "dataSeasons": list(env.get("data_seasons") or []),
+            "sample": int(raw["sample_count"]), "thin": bool(raw.get("thin")),
+            "speedControlModes": {k: dict(v) for k, v in (raw.get("speed_control_modes") or {}).items()},
+            "structuralSignals": {k: dict(v) for k, v in (raw.get("structural_signals") or {}).items()},
+            "megaSlots": {"buckets": {k: dict(v) for k, v in (mega.get("buckets") or {}).items()},
+                          "average": mega.get("average_registered_mega_slots"),
+                          "unknown": mega.get("unknown_sample_count")},
+            "cores": cores, "coresTotal": raw.get("cores_total")}
+
+
 def _topmeta_mod():
     if str(_TEAM_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(_TEAM_SCRIPTS))
@@ -1238,6 +1257,14 @@ def _top_header(doc: dict) -> dict:
             out["comparedWith"]["updatedAt"] = cw["updated_at"]
     if doc.get("built_at"):
         out["builtAt"] = doc["built_at"]
+    if doc.get("criteria"):
+        # The high slice: the raw-fact bar and how many team units each source kind contributed.
+        out["criteria"] = {"tournamentTop8": {"placingAtMost": doc["criteria"]["tournament_top8"]["placing_at_most"],
+                                              "fieldSizeAtLeast": doc["criteria"]["tournament_top8"]["field_size_at_least"]},
+                           "ladderTop": {"rankAtMost": doc["criteria"]["ladder_top"]["rank_at_most"],
+                                         "orRatingAtLeast": doc["criteria"]["ladder_top"]["or_rating_at_least"]}}
+        out["composition"] = {"tournamentTop8": int((doc.get("composition") or {}).get("tournament_top8") or 0),
+                              "ladderTop": int((doc.get("composition") or {}).get("ladder_top") or 0)}
     return out
 
 
@@ -1277,8 +1304,8 @@ def _top_scope(doc: dict | None, name: str, slug_of) -> dict | None:
     }
 
 
-def map_top_detail(season_doc: dict, rule_doc: dict, name: str, slug_of) -> dict:
-    """One Pokemon's Top Meta panels for BOTH scopes in one document: switching scope on the page
+def map_top_detail(season_doc: dict, rule_doc: dict, name: str, slug_of, high_doc: dict | None = None) -> dict:
+    """One Pokemon's Top Meta panels for EVERY scope in one document: switching scope on the page
     costs no request, and the in-game page reads the season scope's records for its comparison."""
     dex = _dex_row("pokemon", name)
     return {
@@ -1286,7 +1313,8 @@ def map_top_detail(season_doc: dict, rule_doc: dict, name: str, slug_of) -> dict
         **_top_named(name, dex),
         "format": season_doc["format"], "rule": season_doc["rule"], "season": season_doc.get("season"),
         "scopes": {"season": _top_scope(season_doc, name, slug_of),
-                   "rule": _top_scope(rule_doc, name, slug_of)},
+                   "rule": _top_scope(rule_doc, name, slug_of),
+                   **({"high": _top_scope(high_doc, name, slug_of)} if high_doc is not None else {})},
     }
 
 
@@ -1313,6 +1341,7 @@ def top_meta_docs(fmt: str, meta_data, season: str, rule: str) -> dict | None:
 
     season_doc = tm.compare(table, "season", ingame)
     rule_doc = tm.compare(table, "rule", ingame)
+    high_doc = tm.compare(table, "high", ingame) if "high" in table["scopes"] else None
     names = sorted(set(season_doc["species"]) | set(rule_doc["species"]))
-    return {"season": season_doc, "rule": rule_doc, "slug_of": slug_of,
+    return {"season": season_doc, "rule": rule_doc, "high": high_doc, "slug_of": slug_of,
             "by_slug": {slug_of(n): n for n in names}}

@@ -1,6 +1,6 @@
 ---
 name: pokemon-champions-meta
-description: Offline-first Pokémon Champions metagame cache and query API for current and historical seasons/rules in single and double formats. Use when the request is about metagame popularity, distribution, common sets, partners, format comparison, update reports, or current/historical environment summaries; do not trigger merely because an item/ability/nature is mentioned without usage or environment context. Chinese examples include "现在环境哪些常见", "X使用率/排名多少", "X常见配置", "X常带什么道具/常用什么性格/招式", "X常见队友", "单双打环境差异", "这期有什么变化". English examples include "usage/ranking for X", "what does X commonly run", "common items/moves/natures for X", "popular partners", "single vs double meta comparison", "latest meta changes". Japanese examples include "環境で多いポケモン", "Xの採用率/順位", "Xのよくある型", "よく採用される技/持ち物/性格", "相方", "シングルとダブルの違い", "今期の変化".
+description: Offline-first Pokémon Champions metagame queries for current/historical seasons and single/double formats, including usage, common configurations, partners, trends and competitive Top Meta. Use for "环境/使用率/常见配置/高端局/上位", "usage/ranking/common sets/high ladder/top cut/tournament", or "環境/採用率/よくある型/上位帯/大会". High-level wording routes to topmeta --scope high. Do not trigger from an isolated item, ability or nature without metagame context. Battle dex facts belong to the dex skill; exact damage and speed arithmetic belong to the calculator.
 ---
 
 # Pokémon Champions Meta
@@ -12,10 +12,21 @@ how is it used?"; canonical battle facts remain the responsibility of `$pokemon-
 ## Workflow
 
 1. Use the current season/rule unless the user explicitly requests a historical context.
-2. Use `ranking` for the environment overview and `detail` for one Pokémon's panels.
-3. Use `search` for reverse lookup across panel entries and `compare` for single-vs-double facts.
+2. Use `ranking` for the in-game environment overview and `detail` for one Pokémon's panels.
+   Use `topmeta` for the competitive real-team population and its differences from in-game usage.
+   High-level wording always uses `--scope high`: 高端、高分段、高水平、天梯顶端、上位、比赛、大赛;
+   high-end, high ladder, top ladder, high-rated, top cut, tournament;
+   上位帯、上位勢、高レート、大会、入賞. Never substitute the whole ladder for this population.
+3. Use `who-uses` to find which Pokemon run a move/item/ability/nature, and `compare` for
+   single-vs-double ranks and per-Pokemon panel shares. `search` handles more general filters.
 4. Use `ko` for the knock-out axis — whom a Pokémon knocks out and who knocks it out.
-5. Use `report` for snapshot changes. Use `export-excel` only when the user requests workbooks.
+5. Use `trend` for one Pokemon's stored rank/panel history, `movers` for this season's top-30
+   risers/fallers, and `report` for changes since the latest snapshot. Use `export-excel` only
+   when the user requests workbooks.
+   For team-level format structure (speed control, signals, Mega slots and common pairs), use
+   the sibling team skill's `landscape --game-format <single|double> --format json`; it reads
+   real joint teams, not in-game usage marginals. Add `--scope high` for high-level structure;
+   its sample counts qualifying published records, not Top Meta's player-deduplicated units.
 6. Keep usage marginals factual: common moves/items/partners are not a guaranteed joint set.
 7. When asked to update only meta, run `python dev/update/update.py meta` from the repository root.
    The default flow collects full single and double usage, KO objects and both KO move-share panels
@@ -38,6 +49,7 @@ Query Pokémon details:
 ```bash
 python scripts/meta_query.py detail --format single --pokemon 雷丘
 python scripts/meta_query.py detail --format double --pokemon garchomp
+python scripts/meta_query.py inference-prior --format double --pokemon "Mega Garchomp Z"
 ```
 
 Reverse-search panel entries or compare formats:
@@ -47,6 +59,9 @@ python scripts/meta_query.py search --format double --panel moves --name 地震
 python scripts/meta_query.py search --format both --panel moves --type ground --category physical --min-usage 20
 python scripts/meta_query.py search --format single --panel moves --where '{"and":[{"type":"Fire"},{"or":[{"category":"Special"},{"usage":">=20"}]}]}'
 python scripts/meta_query.py compare --pokemon 雷丘
+python scripts/meta_query.py who-uses --kind item --entry 讲究围巾 --format double
+python scripts/meta_query.py trend --pokemon 烈咬陆鲨 --format single
+python scripts/meta_query.py movers --format double
 python scripts/meta_query.py report --format both
 ```
 
@@ -66,8 +81,31 @@ a reserved tier: while `coverage.move_share` is `absent` they are `null`, meanin
 "no KO moves". Never present a KO list as a matchup win rate; it counts knock-outs, not games.
 
 Names resolve through the sibling dex in Chinese, English, or Japanese. Fuzzy corrections are always
-disclosed: structured detail/compare results carry resolution metadata, while `search` reports a
+disclosed: structured detail/compare/ko results carry resolution metadata, while `search` reports a
 correction on stderr without contaminating JSON stdout.
+The public dex resolver accepts compositional Mega names such as `Mega耿鬼` and `メガゲンガー`;
+explicit forms never fall back to a base row when the snapshot lacks that form.
+
+## Competitive Top Meta
+
+```bash
+python scripts/meta_query.py topmeta --format double --scope high --pokemon 烈咬陆鲨
+python scripts/meta_query.py topmeta --format single --scope rule --limit 10
+python scripts/meta_query.py topmeta --format double --scope season --pokemon Garchomp --view full
+```
+
+The default is compact canonical JSON (`--view summary`, display limit 6). `--view full` returns
+untruncated data. Always name the population, scope, sample and comparison window. `high` states its
+separate tournament/ladder criteria and composition; it is a filter, not a strength score.
+Read `queries[]` and `projection.omitted` before making claims. An unrepresented or ambiguous query
+stays visible. Published counts aggregate Megas into species: a Mega-only question reports the
+granularity gap and a possible base-name reference, without presenting that aggregate as Mega data.
+
+This command has a read-only dependency on the sibling `$pokemon-champions-team` published
+`data/top_meta/` tables and its pure comparison/projection modules. It does not load the team
+orchestrator, read the real-team library, rebuild data or call a network service. Missing team
+installation is explicitly unavailable; other meta commands continue to work without it.
+The data remains the same library evidence used by repset/frame, so agreement is not corroboration.
 
 Use JSON for downstream processing:
 

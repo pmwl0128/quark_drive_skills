@@ -18,10 +18,12 @@ Output (default frontend/web/public/projection/, gitignored):
     meta/ko_{single,double}/<slug>.json       MetaKoDto (lazy per-pokemon; own snapshot clock)
     meta/ko_trend_{single,double}/<slug>.json MetaKoTrendDto (lazy; the KO axis's own history)
     meta/facets_{single,double}.json          MetaFacetsDto (filter-rail inverted index)
-    meta/top_ranking_{single,double}_{season,rule}.json  TopMetaRankingDto (Top Meta, per scope)
-    meta/top_detail_{single,double}/<slug>.json          TopMetaDetailDto (lazy; both scopes)
+    meta/top_ranking_{single,double}_{season,rule,high}.json  TopMetaRankingDto (Top Meta, per scope)
+    meta/top_detail_{single,double}/<slug>.json          TopMetaDetailDto (lazy; every scope)
     assets/                           image pack (full audit manifest + compact runtime index + files)
     matchup/details_{single,double}/<slug>.json   species builds + reverse damage cells (lazy)
+    qa/{matchup,ko}_{single,double}/<form>.json   server-side QA reverse indexes (counters, OHKO/2HKO)
+    meta/landscape_{single,double}.json  format structure over the rule's real teams (server-side QA)
 
     python frontend/web/scripts/build_projection.py [--out DIR] [--ui-build-id ID]
 """
@@ -43,6 +45,7 @@ from pcui import mappers  # noqa: E402
 from pcui.capabilities import WEB_PROTOCOL_VERSION, assemble, calc_engine_digest  # noqa: E402
 from pcui.paths import META_DATA, SKILLS_ROOT  # noqa: E402
 from pcui.worker import WorkerPool  # noqa: E402
+from pcui.online import qa_matchups  # noqa: E402
 
 PACK = PROJECT_ROOT / "frontend" / "assets" / "pack"
 # Beyond browsing, the static projection also carries:
@@ -109,6 +112,16 @@ def write_matchup_details(out: Path, fmt: str, dto: dict, *, native: bool = Fals
         suffix = ".native" if native else ""
         write(out / "matchup" / f"details_{fmt}" / f"{slug}{suffix}.json",
               detail if detail is not None else {"available": False})
+
+
+def write_qa_matchups(out: Path, fmt: str, cache: dict, *, native: bool = False) -> None:
+    suffix = ".native" if native else ""
+    for folder, shards in (("matchup", qa_matchups.build_shards(cache)), ("ko", qa_matchups.build_ko_shards(cache))):
+        for form, doc in shards.items():
+            path = out / "qa" / f"{folder}_{fmt}" / f"{mappers.slugify(form)}{suffix}.json"
+            write(path, doc)
+            if path.stat().st_size > qa_matchups.MAX_SHARD_BYTES:
+                raise RuntimeError(f"QA {folder} shard exceeds its read budget: {path.name}")
 
 
 def load_usage_trend_store(path: Path, detail_slugs: set[str], fmt: str) -> dict:
@@ -372,12 +385,21 @@ def main() -> int:
             top = mappers.top_meta_docs(fmt, META_DATA, season, rule)
             if top is None:
                 raise RuntimeError(f"required Top Meta table is missing: {rule}/{fmt}")
-            for scope in ("season", "rule"):
-                write(out / "meta" / f"top_ranking_{fmt}_{scope}.json",
-                      mappers.map_top_ranking(top[scope], top["slug_of"]))
+            for scope in ("season", "rule", "high"):
+                if top.get(scope) is not None:
+                    write(out / "meta" / f"top_ranking_{fmt}_{scope}.json",
+                          mappers.map_top_ranking(top[scope], top["slug_of"]))
             for top_slug, top_name in top["by_slug"].items():
                 write(out / "meta" / f"top_detail_{fmt}" / f"{top_slug}.json",
-                      mappers.map_top_detail(top["season"], top["rule"], top_name, top["slug_of"]))
+                      mappers.map_top_detail(top["season"], top["rule"], top_name, top["slug_of"], top["high"]))
+            # Format structure (speed-control modes, structural roles, Mega slots, common cores) over the
+            # rule's observed real teams. The skill reads the whole library (~35 s per format), so it is
+            # computed once here and read by server-side QA, never per request.
+            landscape = pool.request_json("team", ["landscape", "--game-format", fmt, "--format", "json"],
+                                          timeout=600)
+            if not isinstance(landscape, dict) or landscape.get("kind") != "landscape":
+                raise RuntimeError(f"team landscape failed for {fmt}")
+            write(out / "meta" / f"landscape_{fmt}.json", mappers.map_landscape(landscape))
             print(f"  meta[{fmt}]: ranking + {len(details['rows'])} details + trend"
                   f" + {usage_count} usage trends + {ko_count} ko"
                   f" + {ko_trend_count} ko trends + facets + top meta ({len(top['by_slug'])})")
@@ -419,6 +441,7 @@ def main() -> int:
                 write(out / "matchup" / f"oppchecks_{fmt}.json", oppchecks)
                 write(out / "matchup" / f"oppsets_{fmt}.json", oppsets)
                 write_matchup_details(out, fmt, oppcache)
+                write_qa_matchups(out, fmt, cache)
                 if cache.get("built_for", {}).get("handover_receipt"):
                     native = mappers._oppcache_mod().load_cache(fmt, rule, native=True)
                     native_views = ({"oppcache": mappers.map_oppcache(native),
@@ -428,6 +451,8 @@ def main() -> int:
                                          native, mappers.derive_oppcheck_grid(native))}
                                     if native is not None else
                                     {name: {"available": False} for name in ("oppcache", "oppko", "oppchecks", "oppsets")})
+                    if native is not None:
+                        write_qa_matchups(out, fmt, native, native=True)
                     for name, doc in native_views.items():
                         strip_matchup_provenance(doc)
                         write(out / "matchup" / f"{name}_{fmt}.native.json", doc)

@@ -26,10 +26,10 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from canonhash import content_hash
-from libsearch import base_key
-from mega import base_of_form_name
 from mega_facts import assess_registration, mega_plan_from_profile
 from frame import frame_fingerprint as _frame_fingerprint  # P4.5 chain: recompute the frame receipt
+import slate_comparison
+from team_views import coverage as compact_coverage
 
 
 def evidence_id(fmt: str, attacker: str, defender: str, move: str) -> str:
@@ -85,7 +85,38 @@ def slate_fingerprint(audit_fp: str | None, teams: list, survivors: list[int], b
             str(i): content_hash(candidate_facts.get(i), 12) for i in survivors}
         if "_slate" in candidate_facts:
             body["candidate_set_facts"] = content_hash(candidate_facts["_slate"], 12)
+        if "_comparison" in candidate_facts:
+            body["comparison"] = content_hash(candidate_facts["_comparison"], 16)
     return content_hash(body, 24)
+
+
+def saved_slate_fingerprint(slate_input: dict, slate_output: dict) -> str:
+    """Re-bind saved facts using the same fields for draft transport and the terminal answer gate."""
+    receipt = slate_output.get("slate_receipt") or {}
+    candidates = slate_output.get("candidates")
+    candidates = candidates if isinstance(candidates, list) else []
+    survivors = [i for i in (slate_output.get("survivors") or []) if isinstance(i, int)]
+
+    def candidate(i):
+        c = candidates[i] if 0 <= i < len(candidates) else None
+        return c if isinstance(c, dict) else {}
+
+    facts = None
+    if receipt.get("candidate_facts_bound"):
+        facts = {i: {k: candidate(i).get(k) for k in
+                     ("mega_plan", "mega_registration_assessment", "selection")} for i in survivors}
+        facts["_slate"] = slate_output.get("mega_registration_slate")
+        if receipt.get("constraint_facts_bound"):
+            for i in survivors:
+                facts[i].update({k: candidate(i).get(k) for k in ("constraint_satisfaction", "frame_binding")})
+        if receipt.get("comparison_facts_bound"):
+            facts["_comparison"] = slate_output.get("comparison")
+            for i in survivors:
+                facts[i]["comparison_facts"] = candidate(i).get("comparison_facts")
+                facts[i]["library_overlap"] = candidate(i).get("library_overlap")
+    return slate_fingerprint(receipt.get("audit_fingerprint"), slate_input["teams"], survivors,
+                             slate_output.get("format"), {i: candidate(i).get("matchup_risk") for i in survivors},
+                             receipt.get("frame_fingerprint"), facts)
 
 
 def slate_shape_error(slate: Any) -> dict[str, Any] | None:
@@ -149,6 +180,7 @@ def _matchup_digest(mres: dict[str, Any], fmt: str) -> dict[str, Any]:
                     we_faster += 1
     return {
         "top_k": mres.get("top_k") or 0,
+        "opponent_scope": mres.get("opponent_scope"),
         "opponents_we_ohko_guaranteed": {k: v for k, v in sorted(we_g.items())},
         "opponents_we_ohko_possible": {k: v for k, v in sorted(we_p.items())},
         "opponents_with_guaranteed_ohko_on_us": {k: v for k, v in sorted(them_g.items())},
@@ -176,6 +208,7 @@ def _check_digest(cov: dict[str, Any] | None) -> dict[str, Any] | None:
             contested.append({"opponent": row["opponent"], "variants": variants})
     return {
         "grade_distribution": cov.get("grade_distribution"),
+        "by_opponent": compact_coverage(cov).get("by_opponent"),
         # pass the hole rows through wholesale — they are already a small facts-only label table, so a
         # projection here would silently drop any field the roll-up gains later (e.g. the §17 wall_no_ko
         # refinement) and quietly coarsen matchup_risk with no error.
@@ -223,36 +256,34 @@ def _avoid_items_check(ctx: dict[str, Any], team_items: list[str]) -> dict[str, 
 
 
 def _constraints(ctx: dict[str, Any], team_species: list[str],
-                 team_items: list[str]) -> dict[str, Any]:
+                 team_items: list[str], *, identity_complete: bool = True,
+                 identity_basis: str = "registered_species") -> dict[str, Any]:
     """Set-level constraint facts vs the (canonicalized) context. owned/owned_only legality is
     validate's verdict (base-species-aware there); these are the pure membership checks.
 
-    Membership is BASE-folded (Mega == base, X == Y — the search/observed semantics): a user who
-    locks/avoids the base means ANY form unless they say otherwise (user decision 2026-07-03 —
-    the 2026-07-03 system test showed a Mega Gengar candidate falsely eliminated against a locked
-    base Gengar). Reported names stay exactly as the user gave them."""
-    bases = {base_key(s) for s in team_species}
-    locked_missing = sorted(n for n in (ctx.get("locked") or []) if base_key(n) not in bases)
+    Membership uses exact actual forms supplied by the caller. A base holding its own stone counts
+    as that Mega; ordinary, X, Y and Z remain distinct. Reported names retain the context spelling."""
+    forms = set(team_species)
+    locked_missing = sorted(n for n in (ctx.get("locked") or []) if n not in forms)
     avoid_hits = sorted(n for n in (ctx.get("avoid_species") or ctx.get("avoid") or [])
-                        if base_key(n) in bases)
+                        if n in forms)
     prefer = [n for n in (ctx.get("prefer") or []) if n]
-    prefer_present = sorted(n for n in prefer if base_key(n) in bases)
-    # avoid_soft is prefer's MIRROR and gets the mirror treatment: membership echoed as a FACT
-    # (base-folded) so the soft preference is visible in the matrix — never an elimination
-    # (self-audit 2026-07-03: it was invisible in P5, leaving P6 nothing to weigh).
+    prefer_present = sorted(n for n in prefer if n in forms)
+    # Soft preferences expose exact membership facts without eliminating candidates.
     soft = [n for n in (ctx.get("avoid_soft") or []) if n]
     # Mirror avoid's coverage: avoid_soft may name a species OR a held item (schema.md / FIELD_STATUS),
     # so echo BOTH kinds present on the team as a fact — a soft-avoided item was previously invisible in
     # the matrix while the field doc claimed species/items parity (audit 2026-07-06).
     held_items = set(team_items)
-    soft_present = sorted(n for n in soft if base_key(n) in bases or n in held_items)
+    soft_present = sorted(n for n in soft if n in forms or n in held_items)
     return {
-        "locked": {"satisfied": not locked_missing, "missing": locked_missing},
-        "avoid": {"satisfied": not avoid_hits, "violations": avoid_hits},
+        "identity_basis": identity_basis, "identity_complete": identity_complete,
+        "locked": {"satisfied": not locked_missing and identity_complete, "missing": locked_missing},
+        "avoid": {"satisfied": not avoid_hits and identity_complete, "violations": avoid_hits},
         "avoid_items": _avoid_items_check(ctx, team_items),
         "avoid_soft": ({"present": soft_present} if soft else None),
         "prefer": {"present": prefer_present,
-                   "absent": sorted(n for n in prefer if base_key(n) not in bases)},
+                   "absent": sorted(n for n in prefer if n not in forms)},
         "owned_only": {"delegated_to": "validate (base-species-aware)"} if ctx.get("owned_only") else None,
     }
 
@@ -263,6 +294,9 @@ def verify_frame_output(frame_output: Any, audit_fp: str | None,
     {ok:True, skeletons_by_id} or {ok:False, refused:{code,reason}}. Tamper-evident: the frame_receipt
     fingerprint is recomputed from the skeletons (an edited cluster — widened to sneak an ungrounded set
     past the binding — will not reproduce it), and its audit fingerprint must continue THIS chain."""
+    if isinstance(frame_output, dict) and frame_output.get("view") == "summary":
+        return {"ok": False, "refused": {"code": "summary_frame_output",
+                "reason": "frame summary is display-only; use the full artifact saved by --out"}}
     if not isinstance(frame_output, dict) or not isinstance(frame_output.get("skeletons"), list):
         return {"ok": False, "refused": {"code": "bad_frame_output",
                 "reason": "--frame-output must be a saved `frame` output {skeletons, frame_receipt, ...}"}}
@@ -271,6 +305,9 @@ def verify_frame_output(frame_output: Any, audit_fp: str | None,
     if not provided:
         return {"ok": False, "refused": {"code": "missing_frame_receipt",
                 "reason": "the frame output carries no frame_receipt — re-run `team.py frame`"}}
+    if receipt.get("identity_basis") != "dex_battle_form":
+        return {"ok": False, "refused": {"code": "receipt_upgrade_required",
+                "reason": "saved frame predates exact battle-form grounding; re-run frame and slate-evaluate"}}
     fmt = frame_output.get("format")
     if fmt != battery_fmt:
         return {"ok": False, "refused": {"code": "frame_format_mismatch",
@@ -336,11 +373,8 @@ def frame_binding(team_c: dict[str, Any], binding: Any, skeletons_by_id: dict[st
             if isinstance(cc, dict)}
     for sp, m in members.items():
         item, ability = m.get("item"), m.get("ability")
-        # A doubles Mega is stored (and cored) under its BASE name (base species + stone), so a candidate
-        # that lists it as 'Mega X' must still bind to its base core candidate — else its set escapes the
-        # very check frame targets (the Crabominable case). Fall back to the base form when the raw name misses.
-        base = base_of_form_name(sp)
-        core_key = sp if sp in core else (base if base in core else None)
+        # Both sides use the battle-form view; another form cannot borrow this core's grounding.
+        core_key = sp if sp in core else None
         if core_key is not None:
             tier = core[core_key].get("role")
             # A `recurring-partner` candidate (frame's 0.3-0.5 support band) is NOT the group's
@@ -441,6 +475,8 @@ def evaluate_slate(slate: dict[str, Any], *,
                    matchup_fn: Callable[[dict], dict | None],
                    selection_fn: Callable[[dict, dict | None, str | None], dict] | None = None,
                    canon_team_fn: Callable[[dict], dict] | None = None,
+                   battle_team_fn: Callable[[dict], dict] | None = None,
+                   canon_binding_fn: Callable | None = None,
                    constraints_ctx: dict[str, Any] | None = None,
                    fmt: str | None = None,
                    library_copy_fn: Callable[[dict], dict | None] | None = None,
@@ -513,6 +549,7 @@ def evaluate_slate(slate: dict[str, Any], *,
 
     candidates: list[dict[str, Any]] = []
     canon_teams: dict[int, dict[str, Any]] = {}
+    battle_teams: dict[int, dict[str, Any]] = {}
     survivors: list[int] = []
     for i, team in enumerate(slate["teams"]):
         entry: dict[str, Any] = {"index": i}
@@ -537,7 +574,13 @@ def evaluate_slate(slate: dict[str, Any], *,
         items = [m.get("item") for m in team_c.get("pokemon", []) if m.get("item")]
         entry["team_size"] = len(species)
         entry["legality"] = validate_fn(team_c)
-        entry["constraint_satisfaction"] = _constraints(cctx, species, items)
+        battle_team = battle_team_fn(team_c) if battle_team_fn else team_c
+        battle_teams[i] = battle_team
+        battle_members = battle_team.get("pokemon") or []
+        complete = not any(m.get("_identity_unknown") or not m.get("species") for m in battle_members)
+        entry["constraint_satisfaction"] = _constraints(
+            cctx, [m.get("species") for m in battle_members if m.get("species")], items,
+            identity_complete=complete, identity_basis="dex_battle_form" if battle_team_fn else "registered_species")
         if library_copy_fn:
             # Library guardrail (§A.D), the DETECT half: a candidate that IS a stored team (or the
             # same six species) is surfaced as a fact here; the answer-audit makes recommending a
@@ -548,6 +591,17 @@ def evaluate_slate(slate: dict[str, Any], *,
         entry["structural_profile"] = profile_fn(team_c)
         entry["mega_plan"] = mega_plan_from_profile(entry["structural_profile"])
         entry["flags"] = _flags(entry["structural_profile"], battery_fmt)
+        inferred = [m.get("species") for m in team_c.get("pokemon", [])
+                    if m.get("completeness") == "inferred_set"]
+        if inferred:
+            entry["warnings"] = [{
+                "code": "inferred_set_profile_degraded", "members": inferred,
+                "message": "inferred_set marks guessed source facts: moves and roles are not "
+                           "authoritative, so structural gaps are unconfirmed. For a fully specified "
+                           "AI-authored proposal, omit completeness (or use null); keep inferred_set "
+                           "for genuinely unknown opponent/source sets. Damage and legality checks "
+                           "still inspect the supplied fields.",
+            }]
         reasons = []
         tfmt = (team_c.get("format") or "").lower()
         if tfmt and tfmt != battery_fmt:
@@ -557,23 +611,32 @@ def evaluate_slate(slate: dict[str, Any], *,
                            "metagames are never mixed")
         if entry["legality"].get("status") == "invalid":
             reasons.append("legality: invalid (see legality.errors)")
-        if not entry["constraint_satisfaction"]["locked"]["satisfied"]:
+        if entry["constraint_satisfaction"]["locked"]["missing"]:
             reasons.append("locked members missing: "
                            + ", ".join(entry["constraint_satisfaction"]["locked"]["missing"]))
-        if not entry["constraint_satisfaction"]["avoid"]["satisfied"]:
+        if not complete:
+            reasons.append("battle-form identity could not be proved")
+        if entry["constraint_satisfaction"]["avoid"]["violations"]:
             reasons.append("avoided species present: "
                            + ", ".join(entry["constraint_satisfaction"]["avoid"]["violations"]))
         ai_check = entry["constraint_satisfaction"].get("avoid_items")
         if ai_check and not ai_check["satisfied"]:
             reasons.append("avoided items held: " + ", ".join(ai_check["violations"]))
         binding = bindings[i] if i < len(bindings) else None
+        if canon_binding_fn and isinstance(binding, dict):
+            binding, flags, errors = canon_binding_fn(binding)
+            if flags:
+                entry["binding_name_resolution"] = flags
+            if errors:
+                entry["binding_name_errors"] = errors
+                reasons.append("frame binding contains unresolved or ambiguous species names")
         bound_skeleton: dict[str, Any] | None = None
         if frame_active:
             # P4.5: bind this candidate against the frame it declares. A RED core-bearer deviation
             # (ungrounded set, no rationale/off_meta) eliminates in the funnel (design §19.10 correction:
             # 严重时淘汰); yellow deviations + off-frame advisories survive and are surfaced for the
             # answer-audit disclosure check.
-            binfo, red = frame_binding(team_c, binding,
+            binfo, red = frame_binding(battle_team, binding,
                                        skeletons_by_id, repset_fn)
             entry["frame_binding"] = binfo
             reasons += red
@@ -617,6 +680,10 @@ def evaluate_slate(slate: dict[str, Any], *,
                 canon_teams[i], mres, (candidates[i].get("legality") or {}).get("status"))
 
     mega_registration_slate = _mega_slate_summary(ctx, candidates, survivors)
+    for c in candidates:
+        c["comparison_facts"] = slate_comparison.candidate_facts(
+            c, battle_teams.get(c["index"], {}), cctx.get("goals") or [])
+    comparison = slate_comparison.compare(candidates, survivors)
 
     grid = []
     for c in candidates:
@@ -653,6 +720,12 @@ def evaluate_slate(slate: dict[str, Any], *,
             "selection": candidates[i].get("selection")}
         for i in survivors}
     candidate_facts["_slate"] = mega_registration_slate
+    candidate_facts["_comparison"] = comparison
+    for i in survivors:
+        candidate_facts[i].update(constraint_satisfaction=candidates[i].get("constraint_satisfaction"),
+                                  frame_binding=candidates[i].get("frame_binding"),
+                                  comparison_facts=candidates[i].get("comparison_facts"),
+                                  library_overlap=candidates[i].get("library_overlap"))
     fingerprint = slate_fingerprint(provided, slate["teams"], survivors, battery_fmt,
                                     {i: candidates[i].get("matchup_risk") for i in survivors},
                                     frame_fp, candidate_facts)
@@ -665,6 +738,7 @@ def evaluate_slate(slate: dict[str, Any], *,
         "candidates": candidates,
         "grid": grid,
         "mega_registration_slate": mega_registration_slate,
+        "comparison": comparison,
         "evidence_id_grammar": EVIDENCE_ID_GRAMMAR,
         "slate_receipt": {
             "kind": "slate_receipt",
@@ -673,6 +747,8 @@ def evaluate_slate(slate: dict[str, Any], *,
             "audit_fingerprint": provided,
             "frame_fingerprint": frame_fp,   # P4.5 chain link (None on a non-build slate); answer-audit re-binds it
             "candidate_facts_bound": True,
+            "constraint_facts_bound": True,
+            "comparison_facts_bound": True,
             "format": battery_fmt,
             "candidates": len(candidates), "survivors": len(survivors),
         },
@@ -730,12 +806,12 @@ def project_slate(result: dict[str, Any], view: str = "full") -> dict[str, Any]:
                                "opponents_with_guaranteed_ohko_on_us")}
             cc = mr.get("check_coverage")
             if isinstance(cc, dict):
-                cc = dict(cc)
-                cc["holes"] = [{"opponent": h.get("opponent"), "usage_rank": h.get("usage_rank"),
-                                "grade": (h.get("representative") or {}).get("grade"),
+                from team_views import coverage
+                cc = coverage(cc)
+                # Existing Console cards read the representative aliases; floor remains separate.
+                cc["holes"] = [{**h, "grade": (h.get("representative") or {}).get("grade"),
                                 "best_by": (h.get("representative") or {}).get("best_by")}
-                               for h in (cc.get("holes") or []) if isinstance(h, dict)]
-                cc.pop("contested", None)
+                               for h in cc.get("holes") or []]
                 mr["check_coverage"] = cc
             cand["matchup_risk"] = mr
         sel = cand.get("selection")
@@ -747,4 +823,9 @@ def project_slate(result: dict[str, Any], view: str = "full") -> dict[str, Any]:
         trimmed.append(cand)
     out["candidates"] = trimmed
     out["view"] = "summary"
+    out["projection"] = {"display_only": True, "omitted": [
+        {"path": "/grid", "count": len(result.get("grid") or [])},
+        {"path": "/candidates/*/matchup_risk/opponents_*", "replacement": "full artifact carries per-opponent damage evidence"},
+        {"path": "/candidates/*/matchup_risk/check_coverage/*/variants", "replacement": "variant_count and exceptional variant_qualifiers; observed floors unchanged"},
+        {"path": "/candidates/*/selection/combos", "replacement": "combos_count and Mega routes"}]}
     return out

@@ -30,11 +30,21 @@ SOLVE_FOR = ("attacker.atk", "attacker.spa", "attacker.spe", "defender.hp", "def
 GOALS = ("ohko", "2hko", "survive", "survive_2", "outspeed")
 COMPARE_ITEMS_MAX = 3
 NO_ITEM = {"", "none", "no item", "无", "无道具", "なし", "持ち物なし"}
+# Held items that change only Speed. A question that states a build's nature or SP without naming one
+# describes that build without it (最速 = +Spe nature and 32 Spe SP, not a Choice Scarf).
+SPEED_ITEMS = frozenset({"Choice Scarf"})
+# Abilities that set weather on entry (or on Mega Evolution). The calc applies only stated weather.
+WEATHER_ABILITIES = {"Drought": "sun", "Drizzle": "rain", "Sand Stream": "sand", "Snow Warning": "snow"}
 
 
 class ScenarioError(ValueError):
     """A scenario the model can fix (unknown or illegal name, bad SP, contradictory goal); the message is
     returned to it as the tool result."""
+
+
+class NotInGame(ScenarioError):
+    """The dex refused a stated entity for this game (an item, move or ability Champions does not have,
+    or a Mega without its own stone). That refusal is itself the grounded answer."""
 
 
 @lru_cache(maxsize=1)
@@ -87,13 +97,13 @@ def apply_set(pool: Any, combatant: dict, spec: Any, side: str, timeout: float) 
         else:
             item = resolve_strict(pool, raw, "item", timeout)
             if item is None:
-                raise ScenarioError(f"item {raw!r} is not in Pokemon Champions; use another item or none")
+                raise NotInGame(f"item {raw!r} is not in Pokemon Champions; use another item or none")
             out["item"] = item
     if spec.get("ability"):
         raw = str(spec["ability"]).strip()
         ability = resolve_strict(pool, raw, "ability", timeout)
         if ability is None:
-            raise ScenarioError(f"ability {raw!r} is not in Pokemon Champions")
+            raise NotInGame(f"ability {raw!r} is not in Pokemon Champions")
         out["ability"] = ability
     if spec.get("nature"):
         row = nature_table().get(str(spec["nature"]).strip().lower())
@@ -409,7 +419,7 @@ def _solve_speed(run_speeds, sets, side, compare_items) -> dict:
                             "that only ties. Tailwind, Trick Room, priority and speed abilities not modelled."})
 
 
-def speed_item(combatant: dict) -> dict:
+def speed_item(combatant: dict, field: dict | None = None) -> dict:
     out = {"name": combatant["name"]}
     for key in ("nature", "item", "ability"):
         if combatant.get(key):
@@ -418,4 +428,19 @@ def speed_item(combatant: dict) -> dict:
     out["sps"] = {"spe": int(spe or 0)}
     if (combatant.get("boosts") or {}).get("spe"):
         out["boosts"] = {"spe": combatant["boosts"]["spe"]}
+    if combatant.get("status") and combatant["status"] != "Healthy":
+        out["status"] = combatant["status"]
+    if field:
+        out["field"] = dict(field)
     return out
+
+
+def drop_unstated_speed_item(combatant: dict, spec: Any, side: str) -> str | None:
+    """A stated nature/SP without an item describes that build without a Speed item; returns the note."""
+    if not isinstance(spec, dict) or "item" in spec or not (spec.get("nature") or "sps" in spec):
+        return None
+    if combatant.get("item") not in SPEED_ITEMS:
+        return None
+    item = combatant.pop("item")
+    return (f"{side}: the stated nature/SP describe a build without a Speed item, so its usual {item} "
+            "is not assumed; state the item to include it")

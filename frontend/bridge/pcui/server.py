@@ -58,12 +58,13 @@ DEX_MAPPERS = {"pokemon": mappers.map_pokemon, "move": mappers.map_move,
 TEAM_OPS = {"parse", "validate", "diagnose", "matchup", "select", "repset", "observed",
             "landscape", "search", "show", "oppmatrix", "intake", "context-audit", "frame",
             "slate-evaluate", "checkpoint", "draft-init", "fill", "answer-audit", "tune",
-            "replace", "vocab"}
+            "replace", "vocab", "review", "try", "review-claims", "slate-init", "localize",
+            "type-matchup", "rules-facts", "speed-ladder", "counters", "ko-scan", "scenario", "threshold"}
 # Session-op fields team.py treats as LOCAL FILE PATHS. The bridge never forwards client
 # strings here (arbitrary-file read, §4.3); clients send inline JSON and the bridge
 # materializes it into controlled temp files.
 TEAM_FILE_FIELDS = ("file", "context", "slate", "frame_output", "slate_output",
-                    "audit_receipt")
+                    "audit_receipt", "intake_output", "seen_teams", "set", "conditions", "changes", "focus", "opponents")
 
 
 def _raw_or_error(doc: Any) -> Any:
@@ -642,8 +643,8 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
 
     @app.get("/api/meta/top-ranking")
     async def meta_top_ranking(format: str, scope: str = "season"):
-        if format not in ("single", "double") or scope not in ("season", "rule"):
-            raise HTTPException(400, "format must be single|double and scope season|rule")
+        if format not in ("single", "double") or scope not in ("season", "rule", "high"):
+            raise HTTPException(400, "format must be single|double and scope season|rule|high")
 
         def _load() -> Any:
             state = _top_meta(format)
@@ -678,7 +679,7 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
             if slug not in state["detail"]:
                 docs = state["docs"]
                 state["detail"][slug] = mappers.map_top_detail(
-                    docs["season"], docs["rule"], name, docs["slug_of"])
+                    docs["season"], docs["rule"], name, docs["slug_of"], docs.get("high"))
             return state["detail"][slug]
 
         try:
@@ -736,6 +737,17 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
                              ensure_ascii=False)
         doc = await query("calc", ["one"], payload)
         return mappers.map_damage(_raw_or_error(doc))
+
+    @app.post("/api/calc/inference")
+    async def calc_inference(body: dict):
+        from .inference_tools import run
+        return _raw_or_error(await run(pool, body))
+
+    @app.get("/api/meta/inference-prior")
+    async def meta_inference_prior(pokemon: str, format: str):
+        if not pokemon or len(pokemon) > 200 or format not in ("single", "double"):
+            raise HTTPException(400, "pokemon and format required")
+        return _raw_or_error(await query("meta", ["inference-prior", "--pokemon=" + pokemon, "--format", format]))
 
     @app.post("/api/calc/speedline")
     async def calc_speedline(body: dict):
@@ -865,6 +877,8 @@ def create_app(store: Store, pool: WorkerPool, security: Security,
         for op in ops:
             if not isinstance(op, dict) or not isinstance(op.get("op"), str) or op["op"] not in TEAM_OPS:
                 raise HTTPException(400, "op not allowed")
+            if any(k in op for k in ("out", "spec")):
+                raise HTTPException(400, "client file output and nested specs are not accepted; save the returned JSON locally")
         label = " + ".join(str(op["op"]) for op in ops)
         run = {"op": label, "state": "running", "startedAt": _iso(time.time()), "started": time.time()}
         lease = object()

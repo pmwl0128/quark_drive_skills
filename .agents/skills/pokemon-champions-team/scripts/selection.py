@@ -7,8 +7,8 @@ who's in it, which member(s) could Mega (and into what), the base-Speed ordering
 present — so the AI can reason about the 6vN choice. It assigns NO strength score and names NO single
 best pick; it does not rank combos, only lists them in a stable, neutral order.
 
-Deferred (need design / meta and are marked, not silently skipped): matchup vs a named opponent or
-meta top-K, lead/back constraints, doubles partner synergy & speed-control semantics. See `notes`.
+Optional CHECK coverage comes from the supplied matchup battery, including its opponent scope and
+field conditions. Lead/back constraints, partner synergy and full turn sequences remain outside it.
 
 External lookups are injected (dex_fn / item_fn) so the logic is unit-testable offline.
 """
@@ -22,6 +22,7 @@ import team_i18n as i18n
 from mega import mega_form_from_maps
 
 PICK_SIZE = {"single": 3, "double": 4}
+MAX_ACTIVE_MEGAS = 1
 
 
 def _combo_check_coverage(members: list[str], grid: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -198,17 +199,23 @@ def select(team: dict[str, Any], *, fmt: str | None = None,
         "mega_activation_states enumerates that one-active-Mega choice, and mega_routes counts each "
         "registered option's exclusive/shared lineup availability. These are structural route facts: "
         "check_coverage is still lineup-level and is NOT recomputed per active Mega state.",
-        "DEFERRED (not modelled in v1): matchup vs a NAMED opponent, lead vs back "
-        "constraints, doubles partner synergy and speed-control (tailwind/trick-room) semantics.",
+        "Lead/back constraints, doubles partner synergy and full turn sequences are not modelled. "
+        "speed_order uses base Speed; supplied CHECK coverage inherits the matchup battery's "
+        "opponent scope and field conditions.",
     ]
     if check_grid is not None:
         notes.append(
-            "each combo carries `check_coverage` vs the meta top-K (opt-in, ncp-grounded): per-opponent "
+            "each combo carries `check_coverage` from the supplied matchup battery (opt-in, ncp-grounded): per-opponent "
             "the witnessed observed floor after taking the strongest member per retained build + the "
             "HOLES (opponents no lineup member "
             "switch-in checks) + a grade COUNT. These are per-lineup FACTS — combos are still listed in a "
             "neutral name order, never ranked by coverage, and no 'best lineup' is emitted (design §1/§16). "
             "The coverage inherits the matchup battery's confidence (vs-observed-build), not selection's own.")
+        if check_context and check_context.get("conditions"):
+            notes.append(
+                "CHECK coverage incorporates the stated field conditions in check_coverage_context. "
+                "When specified, Trick Room changes equal-priority action order, not numeric Speed. "
+                "speed_order remains pre-Mega base Speed, not a field-adjusted action order.")
     if any_mega_changes:
         notes.insert(3, "speed_order and types_present are the as-brought (pre-Mega) values; if a member Mega Evolves, "
                      "its post-Mega type/Speed are given on its mega_option (form_types / form_base_speed when they differ).")

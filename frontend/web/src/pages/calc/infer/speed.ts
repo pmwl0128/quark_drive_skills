@@ -6,9 +6,9 @@ import type { ItemRef } from "../../../runtime/projection.ts";
 import type { FieldState, MonState } from "../duel/state.ts";
 import { neutralNature, speedInputOf } from "../speed/lens.ts";
 import type { FoeSpace, Inference } from "./model.ts";
+import { projectSpeeds, type SpeedProjection } from "./speed_projection.ts";
 
-interface SpeedRange { nature: string; lo: number; hi: number; spHi: number }
-export interface SpeedProjection { mine: number | null; ranges: SpeedRange[]; incomplete: boolean }
+export type { SpeedProjection } from "./speed_projection.ts";
 export interface SpeedPlan {
   inputs: SpeedInputDto[];
   mine: number | null;
@@ -44,16 +44,6 @@ export async function readSpeedProjection(adapter: Pick<RuntimeAdapter, "speedBa
   const chunks: SpeedInputDto[][] = [];
   for (let at = 0; at < plan.inputs.length; at += 240) chunks.push(plan.inputs.slice(at, at + 240));
   const results = (await Promise.all(chunks.map((inputs) => adapter.speedBatch(inputs, { lane: "inference" })))).flat();
-  const speed = (index: number | null) => index === null ? null
-    : results[index] && "finalSpeed" in results[index] ? results[index].finalSpeed : null;
-  const ranges = new Map<string, SpeedRange>();
-  let incomplete = plan.mine !== null && speed(plan.mine) === null;
-  for (const probe of plan.probes) {
-    const lo = speed(probe.lo), hi = speed(probe.hi);
-    if (lo === null || hi === null) { incomplete = true; continue; }
-    const previous = ranges.get(probe.nature);
-    ranges.set(probe.nature, { nature: probe.nature, lo: Math.min(lo, previous?.lo ?? lo),
-      hi: Math.max(hi, previous?.hi ?? hi), spHi: Math.max(probe.spHi, previous?.spHi ?? 0) });
-  }
-  return { mine: speed(plan.mine), ranges: [...ranges.values()], incomplete };
+  return projectSpeeds(plan, results.map((result) => result && "finalSpeed" in result
+    ? result.finalSpeed : null));
 }

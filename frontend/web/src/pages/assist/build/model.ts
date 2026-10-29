@@ -10,6 +10,8 @@ export interface BuildInput {
   owned: string;
   avoid: string;
   wants: string[];
+  /** Free-text goal in the reader's words (absent on records from before it existed). */
+  goal?: string;
   thinking: boolean;
   /** `preview`: the day's model budget was spent, so only the deterministic gates ran. */
   mode?: "preview";

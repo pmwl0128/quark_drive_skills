@@ -18,6 +18,7 @@ from typing import Any, Callable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import team_io  # noqa: E402
 import team_i18n as i18n  # noqa: E402
+import query_identity
 from diagnose import (  # noqa: E402
     diagnose_defense, diagnose_offense, diagnose_speed, diagnose_roles,
 )
@@ -106,25 +107,33 @@ def _roles_diff(b: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
 def replace_impact(team_dict: dict[str, Any], out_species: str, candidate: dict[str, Any], *,
                    dex_fn: Callable[[list[str]], dict[str, dict]],
                    move_fn: Callable[[list[str]], dict[str, dict]],
+                   item_fn: Callable | None = None,
                    validate_fn: Callable[[dict], dict] | None = None) -> dict[str, Any]:
     members = team_dict.get("pokemon", [])
-    if not any(_norm(m.get("species")) == _norm(out_species) for m in members):
-        return {"kind": "replace_impact", "result": "skipped",
-                "note": f"`{out_species}` is not on the team — nothing to replace"}
     if not candidate or not candidate.get("species"):
         return {"kind": "replace_impact", "result": "skipped",
                 "note": "candidate must be a concrete member with at least a `species`"}
-    cand_species = candidate["species"]
+    identities = query_identity.Forms(members + [candidate, {"species": out_species}],
+                                      dex_fn=dex_fn, item_fn=item_fn or (lambda _: {}))
+    indices = [i for i, m in enumerate(members) if identities(m) == out_species]
+    if len(indices) != 1 or identities(candidate) is None:
+        return {"kind": "replace_impact", "result": "skipped", "identity_basis": "dex_battle_form",
+                "identity_gaps": identities.gaps,
+                "note": f"`{out_species}` must identify exactly one actual form on the team and the candidate form must be known"}
+    index = indices[0]
+    cand_species = identities(candidate)
     has_moves = bool(candidate.get("moves"))
     after_dict = {**team_dict,
-                  "pokemon": [dict(candidate) if _norm(m.get("species")) == _norm(out_species) else m
-                              for m in members]}
-    before = team_io.team_from_dict(team_dict)
-    after = team_io.team_from_dict(after_dict)
+                  "pokemon": [dict(candidate) if i == index else m for i, m in enumerate(members)]}
+    battle_before, battle_after = identities.project([team_dict, after_dict])
+    before = team_io.team_from_dict(battle_before, retain_registration=True)
+    after = team_io.team_from_dict(battle_after, retain_registration=True)
 
     species = sorted({m.species for m in before.pokemon if m.species}
                      | {m.species for m in after.pokemon if m.species})
-    facts = dex_fn(species) or {}
+    registrations = [m._registration.get("species") for t in (before, after) for m in t.pokemon
+                     if m._registration and m._registration.get("species")]
+    facts = dex_fn(species + registrations) or {}
     moves = sorted({mv for t in (before, after) for m in t.pokemon for mv in m.moves})
     move_facts = move_fn(moves) or {}
 
@@ -157,6 +166,8 @@ def replace_impact(team_dict: dict[str, Any], out_species: str, candidate: dict[
     # Confidence is DERIVED, not fixed: illegal after-team / missing moveset / unconfirmed coverage all
     # drop it to low with the reason (audit 2026-06-24 — the old fixed 'medium' hid these).
     reasons: list[str] = []
+    if identities.gaps:
+        reasons.append("battle-form identity or ability is incomplete (see identity_gaps)")
     if legality and legality.get("status") == "invalid":
         reasons.append("after-team is ILLEGAL (see legality.errors)")
     if not has_moves:
@@ -178,6 +189,8 @@ def replace_impact(team_dict: dict[str, Any], out_species: str, candidate: dict[
 
     return {
         "kind": "replace_impact", "out": out_species, "in": cand_species,
+        "identity_basis": "dex_battle_form", "identity_gaps": identities.gaps,
+        "registration": {"out": dict(members[index]), "in": dict(candidate)},
         "legality": legality,
         "defense": defense, "offense": offense, "speed": speed, "roles": roles,
         "notes": notes,

@@ -36,6 +36,22 @@
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 #diag-text { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; min-height: 180px; }
+.assist-surface :is(.diag-locks, .diag-permissions) { border: 0; padding: 0; margin: 0; min-width: 0; }
+.assist-surface :is(.diag-locks, .diag-permissions) legend { padding: 0; color: var(--ink); font-size: 12.5px; font-weight: 650; }
+.assist-surface :is(.diag-locks, .diag-permissions) .diag-mode-options { flex-wrap: wrap; gap: 8px 16px; }
+.diag-needs-input li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-block: 6px; }
+.diag-change-head { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.diag-change-head h2 { flex: 1; }
+.diag-change-status { padding: 4px 10px; border-radius: 8px; background: var(--panel-2); font-weight: 650; }
+.diag-change-status:is(.losses, .invalid) { color: var(--danger, #b64835); }
+.diag-change-card.has-losses { border-color: var(--danger, #b64835); }
+.diag-change-diff { margin-block: 16px; }
+.diag-change-field { display: grid; grid-template-columns: 64px minmax(0, 1fr) 20px minmax(0, 1fr); gap: 8px; align-items: start; margin-block: 8px; }
+.diag-change-table-wrap { max-width: 100%; overflow-x: auto; }
+.diag-change-table { min-width: 460px; }
+.diag-change-table small { display: block; }
+.diag-tool-trace summary { cursor: pointer; font-weight: 650; }
+.diag-tool-trace li { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-block: 10px; }
 
 /* Tactics are toggles: the pill itself carries the state, the checkbox stays for keyboards. */
 .assist-surface .builder-tactics { gap: 6px; }
@@ -83,12 +99,15 @@
   .builder-form:has(#builder-anchor) > :nth-child(5) { grid-column: 1; grid-row: 3; }
   .builder-form:has(#builder-anchor) > :nth-child(6) { grid-column: 1; grid-row: 4; align-self: end; }
   .builder-form:has(#builder-anchor) > .assist-submit { grid-column: 2; grid-row: 4; align-self: end; }
-  .builder-form:has(#diag-text) { grid-template-rows: auto 1fr auto; }
+  .builder-form:has(#diag-text) { grid-template-rows: auto 1fr auto auto auto; }
   .builder-form:has(#diag-text) > :nth-child(1) { grid-column: 1; grid-row: 1; }
   .builder-form:has(#diag-text) > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; grid-template-rows: auto 1fr; }
   .builder-form:has(#diag-text) #diag-text { height: 100%; min-height: 150px; }
-  .builder-form:has(#diag-text) > .diag-mode-options { grid-column: 1; grid-row: 3; align-self: end; }
-  .builder-form:has(#diag-text) > .assist-submit { grid-column: 2; grid-row: 3; align-self: end; }
+  .builder-form:has(#diag-text) > .diag-goal { grid-column: 2; grid-row: 1; }
+  .builder-form:has(#diag-text) > .diag-locks { grid-column: 1 / -1; grid-row: 3; }
+  .builder-form:has(#diag-text) > .diag-permissions { grid-column: 1 / -1; grid-row: 4; }
+  .builder-form:has(#diag-text) > .diag-mode-options { grid-column: 1; grid-row: 5; align-self: end; }
+  .builder-form:has(#diag-text) > .assist-submit { grid-column: 2; grid-row: 5; align-self: end; }
 }
 .assist-surface .builder-actions { gap: 12px; }
 .assist-surface .builder-actions .primary-btn { padding: 9px 18px; border-radius: 10px; }
@@ -569,3 +588,31 @@
   .aw *, .aw *::before, .aw *::after { animation: none !important; }
   .qa-step.on .qa-step-label, .asm-step.running .asm-step-line { color: var(--stage-accent); background: none; }
 }
+.diag-followups { display: grid; gap: 1rem; margin-top: 1rem; min-width: 0; }
+.diag-followup-form, .diag-followup-turn { padding: clamp(1rem, 2vw, 1.5rem); min-width: 0; }
+.diag-followups h2 { font-size: 1rem; margin: 0 0 .75rem; }
+.diag-followup-form > label { display: block; margin: .75rem 0 .4rem; }
+.diag-followup-form textarea { width: 100%; min-height: 6rem; resize: vertical; border: 1px solid var(--line);
+  font: inherit; color: var(--ink); line-height: 1.6; }
+.diag-followup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: .75rem; }
+.diag-followup-actions > button:last-child { margin-left: auto; }
+.diag-followup-question { white-space: pre-wrap; overflow-wrap: anywhere; border-left: 3px solid var(--brand); padding-left: .8rem; }
+.diag-followup-answer { overflow-wrap: anywhere; }
+.diag-tuning, .diag-tuning-check { min-width: 0; overflow-wrap: anywhere; }
+.diag-tuning-target { padding: .8rem 0; border-top: 1px solid var(--line); }
+.diag-tuning-target p { margin: .5rem 0; }
+.diag-tuning-target h3 { margin: .3rem 0 .6rem; }
+.diag-condition { display: inline-block; margin-right: .8rem; }
+.diag-threshold { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: baseline; }
+.diag-threshold b { color: var(--brand-strong); }
+.diag-threshold-compare { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .8rem; margin: .8rem 0; }
+.diag-threshold-compare small { display: block; color: var(--sub); margin-bottom: .3rem; }
+
+/* Compared builder candidates: the switcher above the team card and the side-by-side fact tables. */
+.builder-candidates { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 8px 0 4px; }
+.builder-candidates .muted { font-size: 12.5px; }
+.builder-compare { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.builder-compare th { text-align: left; font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 4px 14px 6px 0; }
+.builder-compare td { padding: 6px 14px 6px 0; vertical-align: middle; }
+.builder-compare tbody tr + tr td { border-top: 1px solid color-mix(in srgb, var(--line) 75%, transparent); }
+.builder-compare td:first-child { white-space: nowrap; }

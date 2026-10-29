@@ -1,7 +1,7 @@
 """Fact-QA orchestration (frontend/design.md §7.2): one question -> tool-grounded one-shot
 answer. The system prompt + tool definitions are a byte-stable request prefix (upstream
-auto-caching); at most QA_MAX_ROUNDS tool rounds over a read-only dex/meta tool surface
-(the §13 v1 cut), every tool result clipped server-side, then one forced final call with
+auto-caching); at most QA_MAX_ROUNDS tool rounds over read-only facts, indexed matchups
+and deterministic calculations, every tool result clipped server-side, then one forced final call with
 tool_choice=none. No conversation history — each question is independent.
 
 The answer contract mirrors agent prose (design §6): entities are named by ENGLISH
@@ -19,6 +19,7 @@ import threading
 import time
 from collections import Counter, OrderedDict
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Callable
 
 from . import calc_scenario
@@ -67,6 +68,12 @@ class QaFailed(RuntimeError):
         self.tokens = tokens
 
 
+class NameResolutionError(ValueError):
+    def __init__(self, doc: dict):
+        self.doc = doc
+        super().__init__("the dex refused an ambiguous name or form qualifier")
+
+
 SYSTEM_PROMPT = """\
 You are the fact-lookup assistant of a Pokemon Champions data site.
 
@@ -76,9 +83,9 @@ Rules:
   supplied code per question. Never invent, enumerate, repair or retry codes; if retrieval
   fails, explain that the team could not be loaded. Codes do not establish format or season.
 - Answer ONE factual question about Pokemon Champions: battle-dex facts (types, stats,
-  abilities, moves, items, natures), the current metagame (usage ranking, common
-  moves/items/abilities/natures/partners/SP spreads, representative real-team sets), or a
-  concrete damage / speed comparison.
+  abilities, moves, items, natures, type effectiveness), the current regulation, the metagame
+  (usage ranking, common moves/items/abilities/natures/partners/SP spreads, previous season,
+  trends, real-team usage, representative real-team sets), or a concrete damage / speed / KO question.
 - You MUST call at least one tool before stating ANY Pokemon Champions fact — never answer
   a factual question from memory. Ground every factual claim in tool output; never invent
   numbers, sets, or rankings. If you answer WITHOUT calling any tool, your reply must be a
@@ -88,16 +95,49 @@ Rules:
   zh/ja/en themselves. Do NOT translate names into English yourself: idioms like
   "Alolan Ninetales" miss the database (the canonical is "Ninetales-Alola").
 - A not_found result IS the answer for that entity, not a spelling to work around: the tools
-  already accept every language and minor typos. Say the Pokemon is not in the current battle
-  dex (not available under this ruleset) or has no usage data this season, as the result's
-  note states — never retry it under other spellings, languages or unrelated searches.
+  already accept every language, registered nicknames and minor typos. Follow the result's note:
+  a full official Pokemon name that is not found is not available under this ruleset; a name that
+  may be a nickname or abbreviation was not recognized, so ask for the official name instead of
+  calling it unavailable. A Pokemon in the dex without usage data has no usage data this season.
+  Never retry it under other spellings, languages or unrelated searches.
+- A result carrying nameMatches read a name approximately. Say how it was read ("X was read as
+  Y"); if the asked name is clearly a different Pokemon, move or item, say it was not found
+  instead of answering for the approximate match.
+- For the usage rank or usage data of ONE named Pokemon call meta_detail for it (it says when the
+  Pokemon is not in the dex); never infer absence from a ranking list. For the previous season pass
+  season=previous to meta_ranking / meta_detail and name that season (its seasonNote).
+- meta_explore covers the other usage questions: who_uses (which Pokemon run an item, move, ability or
+  nature), formats (singles vs doubles for one Pokemon), trend (one Pokemon's rank history and shifts),
+  movers (this season's risers, fallers, new entries) and real_teams (Top Meta from collected real teams
+  and its difference from the in-game usage), structure (how the format's real teams are built: speed
+  control modes, structural roles, Mega slots, common cores). In-game usage and real-team usage are
+  different sources: say which one each number comes from.
+- Questions about the high-level population — 高端 / 高分段 / 高水平 / 天梯顶端 / 上位 / 比赛 / 大赛 / 职业,
+  high-end / high ladder / top ladder / high-rated / top players / tournament / top cut, 上位帯 / 上位勢 /
+  高レート / 大会 / 入賞 — use meta_explore real_teams with scope=high: real teams with a top-8 event finish
+  or a top ladder rank / 2000+ rating. Say it is that filtered real-team sample (its size and composition),
+  not the whole ladder; the in-game usage describes every player.
+- For weaknesses, resistances, immunities or how effective one type is on another, call type_matchup
+  (it applies the defender's ability, e.g. Levitate); never state type effectiveness from memory.
+- For moves by type, category, power or priority (optionally only those one Pokemon learns) call
+  move_find; for the Pokemon that learn a move use dex_find.
+- For regulation facts (team size, how many Pokemon are picked, SP caps, Species/Item Clause, the Mega
+  limit, the current season and rule) call rules_facts.
+- For "what does X OHKO/2HKO in the meta" call ko_scan with direction attacking; for "what OHKOs/2HKOs
+  X" direction defending. Say it uses X's most common build and an observed-build field, and state each
+  row's KO caveats. For a stated build of X or one exact pair use calc_damage.
 - An ambiguous result means the name needs clarification. Show its candidates and ask which
   form the user meant; do not claim that the Pokemon is unavailable or has no usage data.
+  If its note says a lettered Mega form does not exist, state that instead: suggestions are
+  alternative forms, never equivalent names for the nonexistent form.
+- Preserve the form the user names. A bare species means its NON-MEGA form, even if its most
+  popular usage set holds a Mega Stone. Only explicit Mega / 超级 / メガ, X/Y/Z qualifiers
+  (including full-width Ｘ/Ｙ/Ｚ), or a stated Mega Stone request a Mega. Pass nicknames such as
+  地龙 / x喷 / y喷 unchanged to the tools. Never replace a physical build with a popular special Mega.
 - For "can X OHKO/2HKO Y", "how much does X's move do to Y" or "is X faster than Y",
   call calc_damage / calc_speed — NEVER estimate damage or speed from memory. Both sides
-  default to their most-used competitive set (a Mega form uses its real-team representative
-  set; a set holding its own Mega Stone is computed as that Mega form, with the Mega's ability,
-  so the tool may name "Mega X" for an asked "X"); ALWAYS disclose that assumption briefly when
+  default to a common set OF THE NAMED FORM (a bare species stays non-Mega; an explicitly
+  named Mega uses that Mega's real-team representative set and ability); ALWAYS disclose that assumption briefly when
   you state the result, and mention the
   assumed items when they matter. calc_damage/calc_speed resolve the sets INTERNALLY — they
   do not need a prior detail/repset lookup, and they still work when such a lookup missed:
@@ -111,12 +151,39 @@ Rules:
   physical bulk (极限物耐 / HB) = hp 32 + def 32 with a +Def nature; max special bulk (极限特耐 /
   HD) = hp 32 + spd 32 with a +SpD nature; max Attack (满攻 / 极限物攻) = atk 32 with a +Atk
   nature; fastest (最速) = spe 32 with a +Spe nature; 准速 = spe 32 with a neutral-Speed nature;
-  无振 = a neutral nature. A tool error naming an item or move not in Pokemon Champions is the
-  answer for that option: say so, never retry it under another spelling.
+  无振 = a neutral nature. A stated nature/SP without an item means no Choice Scarf: the tools then
+  drop a usual Scarf and say so. Add item Choice Scarf only when the question says 围巾 / Scarf /
+  スカーフ. A tool error naming an item or move not in Pokemon Champions is the answer for that
+  option: say so, never retry it under another spelling.
+- A calc result's koCaveats (Focus Sash, Sturdy, Multiscale, Disguise ...) qualify its KO chance:
+  state them with the KO result. conditions lists the weather and field actually applied (doubles
+  spread moves already include their spread modifier). A weatherNote means an ability would set
+  weather that was NOT applied: say so, and when it matters also calculate with that weather.
+- For "is X faster than Y" with stated builds or conditions (最速/准速/围巾, +1 Speed, paralysis,
+  Tailwind on one side, rain or sun for Swift Swim / Chlorophyll, who moves first under Trick
+  Room), call calc_speed ONCE with a_set / b_set and those conditions. It returns both final
+  speeds and who moves first. Priority moves are not modelled; say so when they matter.
 - For "what outspeeds X" / "which pokemon are faster than X" / "is X fast enough for the meta",
   call speed_ladder ONCE — it returns X plus the ranked field already sorted and split into
   outspeedsMe / ties / slowerThanMe. Do NOT loop calc_speed over the ranking: that runs out of
-  tool rounds before you have enough of the field, and the answer ends up incomplete.
+  tool rounds before you have enough of the field, and the answer ends up incomplete. When the
+  question states X's build (最速 X, 围巾 X, +1 X), pass it as speed_ladder's set; Tailwind (mine /
+  opponents / both), rain or sun for speed abilities, and Trick Room go in tailwind / weather / trick_room.
+- For "who counters X among the top N" / "环境前30谁能针对X", call matchup_counters ONCE.
+  It reads the precomputed observed-build matrix, not a simulation: C2 can switch in and win
+  the static 1v1, C1 can win on even footing but cannot safely switch in, C0 has no such answer.
+  Quote the candidate's ACTUAL form and item. Use complete observed floors, not just the modal
+  matchup; disclose retained-build coverage and low confidence. Doubles grades are isolated
+  pair references, not a full doubles-board guarantee. Never invent counters from type charts.
+  Answer from its conclusion sentences. If there are no complete C1/C2 floors, explain that and name the specific
+  item builds they answer AND their C0 blockers (e.g. Focus Sash); never say no Pokemon can counter X.
+  Each conclusion keeps a candidate's OWN item and the OPPONENT's item separate. Never swap
+  them or generalize one candidate's blockers to all candidates. Damage/KO refer only to the
+  example opponent item printed in that sentence, not all builds. When any
+  results are omitted, present examples and never claim the list is exhaustive. Do not add a
+  second ability bonus on top of calculated damage: the damage already includes that ability.
+- For recorded KO opponents or KO move shares, call meta_ko. KO opponent lists are species-level
+  ORDERINGS ONLY, not win rates or proof of a counter; quote each panel's own retained timestamp.
 - speed_ladder compares most-used sets (finalSpeed, s, outspeedsMe/ties/slowerThanMe). Use
   speedRange for "X's speed range" (X's observed real-team builds). For "reliably/稳定 faster" use
   each row's rel and p: "reliably faster" means that opponent's most-used set outspeeds at least
@@ -160,6 +227,17 @@ _SET_SCHEMA = {"type": "object", "description": "what the question states for th
     "boosts": {"type": "object", "description": "stat stages in battle atk/def/spa/spd/spe, -6..6"},
     "status": {"type": "string", "enum": list(calc_scenario.STATUSES)},
 }}
+_SPEED_SET_SCHEMA = {"type": "object", "description": "the build the question states for this side", "properties": {
+    "nature": {"type": "string"},
+    "sps": {"type": "object", "description": "SP per stat, 0-32 (only spe affects speed); replaces the "
+                                             "most-used spread"},
+    "item": {"type": "string", "description": "item (any language), or none"},
+    "ability": {"type": "string"},
+    "boosts": {"type": "object", "description": "stat stages, e.g. {\"spe\": 1}"},
+    "status": {"type": "string", "enum": list(calc_scenario.STATUSES)},
+}}
+_SEASON_SCHEMA = {"type": "string", "enum": ["current", "previous"],
+                  "description": "previous = the season before the current one (default current)"}
 _FIELD_SCHEMA = {"type": "object", "properties": {
     "weather": {"type": "string", "enum": list(calc_scenario.WEATHERS)},
     "terrain": {"type": "string", "enum": list(calc_scenario.TERRAINS)},
@@ -203,26 +281,126 @@ TOOLS: list[dict] = [
     }},
     {"type": "function", "function": {
         "name": "meta_ranking",
-        "description": "Current-season usage ranking (top N) for singles or doubles.",
+        "description": "Official in-game usage ranking (top N) for singles or doubles, this season or the "
+                       "previous one.",
         "parameters": {"type": "object", "properties": {
             "format": {"type": "string", "enum": ["single", "double"]},
             "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            "season": _SEASON_SCHEMA,
         }, "required": ["format"]},
     }},
     {"type": "function", "function": {
         "name": "meta_detail",
-        "description": "Current-season usage detail for ONE pokemon: common moves, items, "
-                       "abilities, natures, partners and SP spreads, for singles or doubles.",
+        "description": "Official in-game usage detail for ONE pokemon: rank, common moves, items, "
+                       "abilities, natures, partners and SP spreads, for singles or doubles, this season or "
+                       "the previous one.",
         "parameters": {"type": "object", "properties": {
             "format": {"type": "string", "enum": ["single", "double"]},
             "pokemon": {"type": "string", "description": "pokemon name in any language"},
+            "season": _SEASON_SCHEMA,
         }, "required": ["format", "pokemon"]},
+    }},
+    {"type": "function", "function": {
+        "name": "meta_explore",
+        "description": "Other usage views. who_uses: which Pokemon run an item / move / ability / nature "
+                       "(entry + entry_kind) and how often. formats: one Pokemon's singles vs doubles usage "
+                       "side by side. trend: one Pokemon's usage-rank history this season, its previous-season "
+                       "rank and how its moves/items shifted. movers: biggest rank risers/fallers and new "
+                       "entries in this season's top 30. real_teams: Top Meta counted from collected real "
+                       "teams (ranking, or one Pokemon's detail) and its difference from the in-game usage; "
+                       "scope high = what high-level players run (top tournament finishes, top ladder). "
+                       "structure: how the format's real teams are built (speed control, structural roles, "
+                       "Mega slots, common cores).",
+        "parameters": {"type": "object", "properties": {
+            "view": {"type": "string", "enum": ["who_uses", "formats", "trend", "movers", "real_teams",
+                                                "structure"]},
+            "format": {"type": "string", "enum": ["single", "double"]},
+            "pokemon": {"type": "string", "description": "formats / trend / real_teams detail"},
+            "entry": {"type": "string", "description": "who_uses: the item, move, ability or nature (any language)"},
+            "entry_kind": {"type": "string", "enum": ["item", "move", "ability", "nature"]},
+            "scope": {"type": "string", "enum": ["season", "rule", "high"],
+                      "description": "real_teams: this season (default), the whole rule, or high = the "
+                                     "high-performance slice (tournament top 8, ladder top 100 / 2000+)"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 40},
+        }, "required": ["view"]},
+    }},
+    {"type": "function", "function": {
+        "name": "type_matchup",
+        "description": "Type effectiveness from the fixed type chart with the DEFENDING Pokemon's ability "
+                       "modifiers (Levitate, Water Absorb, Thick Fat, Filter ...). Give pokemon (any language, "
+                       "bare name = non-Mega) or types; attack_type alone lists what that type hits super "
+                       "effectively. Use it for weaknesses, resistances and immunities. No damage numbers.",
+        "parameters": {"type": "object", "properties": {
+            "pokemon": {"type": "string"},
+            "types": {"type": "array", "items": {"type": "string"}, "maxItems": 2},
+            "attack_type": {"type": "string"},
+            "ability": {"type": "string", "description": "apply only this defending ability"},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "move_find",
+        "description": "Search the battle dex's MOVES by type, category, power, priority and accuracy, "
+                       "optionally only those one Pokemon can learn: physical priority moves, Ground moves "
+                       "with 100+ power, the special Fire moves a Pokemon learns.",
+        "parameters": {"type": "object", "properties": {
+            "type": {"type": "string"},
+            "category": {"type": "string", "enum": ["Physical", "Special", "Status"]},
+            "power": {"type": "string", "description": "comparison such as '>=100'"},
+            "priority": {"type": "string", "description": "comparison such as '>=1' (priority moves)"},
+            "accuracy": {"type": "string", "description": "comparison such as '>=90'"},
+            "learner": {"type": "string", "description": "only moves this Pokemon can learn"},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "rules_facts",
+        "description": "The current regulation's fixed facts: season and rule, team size, Pokemon picked per "
+                       "battle in singles/doubles, SP caps, Species and Item Clause, moves per Pokemon, one "
+                       "Mega Evolution per battle, and the seasons with their rules.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "meta_ko",
+        "description": "Recorded knock-out opponents and KO move shares for one pokemon. Opponent lists "
+                       "are species-level orderings, NOT counter verdicts or win rates. Preserves separate "
+                       "KO snapshot and retained-history timestamps; use matchup_counters for counters.",
+        "parameters": {"type": "object", "properties": {
+            "format": {"type": "string", "enum": ["single", "double"]},
+            "pokemon": {"type": "string"},
+        }, "required": ["format", "pokemon"]},
+    }},
+    {"type": "function", "function": {
+        "name": "matchup_counters",
+        "description": "ONE lookup of the precomputed KO/check matrix: which observed builds among the "
+                       "top-N usage pokemon can answer the NAMED FORM (bare name = non-Mega). Returns "
+                       "complete C2/C1 observed floors, actual candidate forms/items and KO witnesses, "
+                       "coverage, omissions and missing calculations. Reference facts, not win rates.",
+        "parameters": {"type": "object", "properties": {
+            "format": {"type": "string", "enum": ["single", "double"]},
+            "pokemon": {"type": "string"},
+            "top_n": {"type": "integer", "minimum": 1, "maximum": 60,
+                      "description": "usage rank cutoff (default 30)"},
+        }, "required": ["format", "pokemon"]},
+    }},
+    {"type": "function", "function": {
+        "name": "ko_scan",
+        "description": "ONE lookup of the precomputed static KO index over the top-N usage Pokemon's observed "
+                       "builds: which builds the NAMED FORM's most common build OHKOs or 2HKOs (attacking), or "
+                       "which builds OHKO or 2HKO it (defending), with moves, damage ranges and KO caveats. "
+                       "For a stated build or one exact pair use calc_damage.",
+        "parameters": {"type": "object", "properties": {
+            "format": {"type": "string", "enum": ["single", "double"]},
+            "pokemon": {"type": "string"},
+            "direction": {"type": "string", "enum": ["attacking", "defending"]},
+            "top_n": {"type": "integer", "minimum": 1, "maximum": 60,
+                      "description": "usage rank cutoff (default 30)"},
+        }, "required": ["format", "pokemon", "direction"]},
     }},
     {"type": "function", "function": {
         "name": "repset_lookup",
         "description": "Representative REAL-TEAM joint set(s) for one pokemon: ability, item, "
                        "nature, moves and SP spread as actually played together — more "
-                       "faithful than stitching independent usage modes. Accepts Mega forms.",
+                       "faithful than stitching independent usage modes. Bare name = non-Mega; "
+                       "explicit Mega = only that form's stone and ability.",
         "parameters": {"type": "object", "properties": {
             "format": {"type": "string", "enum": ["single", "double"]},
             "pokemon": {"type": "string", "description": "pokemon name in any language"},
@@ -248,14 +426,21 @@ TOOLS: list[dict] = [
                                                "opponents' own speed ranges or build variance; "
                                                "adds each opponent's real-team range and is "
                                                "slower. Default false."},
+            "set": {**_SPEED_SET_SCHEMA, "description": "the asked pokemon's build when the question "
+                                                         "states it (e.g. 最速 = +Spe nature, spe 32)"},
+            "tailwind": {"type": "string", "enum": ["mine", "opponents", "both"],
+                         "description": "Tailwind on the asked pokemon's side, on every opponent's, or both"},
+            "weather": {"type": "string", "enum": list(calc_scenario.WEATHERS)},
+            "terrain": {"type": "string", "enum": list(calc_scenario.TERRAINS)},
+            "trick_room": {"type": "boolean", "description": "order the field by who moves first under Trick Room"},
         }, "required": ["pokemon", "format"]},
     }},
     {"type": "function", "function": {
         "name": "calc_damage",
         "description": "Compute REAL damage of one attack: damage %, KO chance, and the "
                        "assumed sets. Both sides default to their most-used competitive set "
-                       "(usage modes; Mega forms use their real-team representative set); a set "
-                       "holding its own Mega Stone is computed as that Mega form with its ability. "
+                       "OF THE NAMED FORM (bare species = non-Mega; explicit Mega uses its own "
+                       "real-team representative set and ability). "
                        "attacker_set / defender_set state what the question says (nature, SP, item, "
                        "stat stages, status) on top of that; field sets weather, terrain and screens.",
         "parameters": {"type": "object", "properties": {
@@ -279,7 +464,8 @@ TOOLS: list[dict] = [
                        "compared item, with the result at 0 and 32 SP when it cannot be reached. Never "
                        "loop calc_damage over SP values. State the battle state in the sets exactly as "
                        "for calc_damage. The solved side holds only the item the question names (item "
-                       "omitted = none; its usual non-Mega item is added as a compared lane); the other "
+                       "omitted = none for non-Megas; an explicit Mega keeps its required stone; the "
+                       "usual non-Mega item is added as a compared lane); the other "
                        "side uses its most-used set unless stated. Answer from its conclusion lines.",
         "parameters": {"type": "object", "properties": {
             "attacker": {"type": "string"},
@@ -302,13 +488,21 @@ TOOLS: list[dict] = [
     }},
     {"type": "function", "function": {
         "name": "calc_speed",
-        "description": "Compare the final speed of two pokemon under their most-used sets "
-                       "(nature, Spe SP, item, ability). Returns both numbers and who is "
-                       "faster.",
+        "description": "Compare the final speed of two pokemon: common sets OF THE NAMED FORM (bare "
+                       "name = non-Mega) with the builds and conditions the question states on top. "
+                       "Returns both final speeds, who is faster and, under Trick Room, who moves "
+                       "first. Priority moves are not modelled.",
         "parameters": {"type": "object", "properties": {
             "pokemon_a": {"type": "string"},
             "pokemon_b": {"type": "string"},
             "format": {"type": "string", "enum": ["single", "double"]},
+            "a_set": _SPEED_SET_SCHEMA,
+            "b_set": _SPEED_SET_SCHEMA,
+            "a_tailwind": {"type": "boolean", "description": "Tailwind on pokemon_a's side"},
+            "b_tailwind": {"type": "boolean", "description": "Tailwind on pokemon_b's side"},
+            "weather": {"type": "string", "enum": list(calc_scenario.WEATHERS)},
+            "terrain": {"type": "string", "enum": list(calc_scenario.TERRAINS)},
+            "trick_room": {"type": "boolean", "description": "report who moves first under Trick Room"},
         }, "required": ["pokemon_a", "pokemon_b"]},
     }},
 ]
@@ -378,6 +572,37 @@ FINAL_RETRY = ("That was a tool call, and no tools are available any more. Reply
                "answer in plain text only, using the tool results you already have.")
 
 
+# The high-level population in the words players use (zh / ja / en). Detection is deterministic so a small
+# model does not answer "what do top players run" from the in-game usage of the whole ladder. A usage-rank
+# cut ("前30", "上位30", "使用率上位") is not this population.
+_HIGH_END = re.compile(
+    r"高端|高分段|高分|高水平|高手|顶尖|顶级玩家|顶端|天梯前列|天梯上位|上位圈|强者|职业选手|职业|"
+    r"比赛|赛事|大赛|赛场|八强|四强|冠军队|[12]\d{3}\s*分|"
+    r"(?<!使用率)(?<!採用率)(?<!环境)(?<!環境)上位(?![\s]*[0-9０-９]|替代|互换|互換)|上位帯|上位勢|上位層|最上位|高レート|"
+    r"レート上位|大会|入賞|ベスト\s*[48４８]|優勝|トップ層|"
+    r"\bhigh[- ]?(?:end|level|elo|rated|rating|ladder|tier)\b|\btop[- ](?:ladder|rated|players?|cut|level)\b|"
+    r"\btop\s*8\b|\btournaments?\b|\bregionals?\b|\bnationals?\b|\bworlds\b|\bchampionships?\b|"
+    r"\bpro players?\b",
+    re.IGNORECASE)
+
+
+# The hint is for what that population USES; a calculation that merely mentions a tournament is not one.
+_USAGE_CUE = re.compile(
+    r"带|用|配|常见|流行|招式|道具|特性|性格|队友|组合|搭档|多少|几|排名|哪些|谁|"
+    r"持ち物|型|技|構築|構成|多い|採用|使用|人気|誰|どれ|何|"
+    r"\b(?:runs?|use[sd]?|using|common|popular|items?|moves?|sets?|builds?|teams?|picks?|which|what|most)\b",
+    re.IGNORECASE)
+
+
+def _population_hint(question: str) -> str:
+    match = _HIGH_END.search(question or "")
+    if match is None or not _USAGE_CUE.search(question or ""):
+        return ""
+    return (f"\n[host note: the question mentions the high-level population (\"{match.group(0)}\"). For what that "
+            "population uses, call meta_explore view=real_teams with scope=high and name it as high-performance "
+            "real teams; other parts of the question use the usual tools.]")
+
+
 def _reject_tool_markup(content: str, tokens: int) -> str:
     if _TOOL_MARKUP.search(content):
         raise QaFailed("model leaked tool-call markup into the answer", tokens)
@@ -430,7 +655,9 @@ def _dex_vocabulary() -> tuple[re.Pattern, frozenset[str], dict[str, frozenset[s
             local.add(alias)
             equivalents.setdefault(canonical, set()).add(alias)
     alternation = "|".join(re.escape(n) for n in sorted(canon, key=len, reverse=True) if n)
-    return (re.compile(rf"(?<![\w-])(?:{alternation})(?![\w-])"), frozenset(local),
+    # ASCII-only boundaries: a canonical written flush against CJK prose ("对Garchomp的") is still a
+    # name, while `\w` (CJK included) would hide it from the gloss and evidence checks.
+    return (re.compile(rf"(?<![A-Za-z0-9_-])(?:{alternation})(?![A-Za-z0-9_-])"), frozenset(local),
             {name: frozenset(aliases) for name, aliases in equivalents.items()})
 
 
@@ -529,6 +756,18 @@ _REGION_FORMS = {"alolan": "Alola", "galarian": "Galar", "hisuian": "Hisui",
 _REGION_RE = re.compile(r"^(Alolan|Galarian|Hisuian|Paldean)\s+(.+)$", re.IGNORECASE)
 
 
+# Approximate (fuzzy) name readings made while one tool runs; _run_tool discloses them in its result.
+_NAME_MATCHES = threading.local()
+NAME_MATCH_NOTE = ("a name was read approximately (nameMatches). Say how it was read; if the asked name "
+                   "is clearly a different entity, say it was not found instead of answering for this one")
+
+
+def _note_fuzzy(entry: dict) -> None:
+    bucket = getattr(_NAME_MATCHES, "items", None)
+    if bucket is not None and entry.get("match_type") == "fuzzy":
+        bucket.append({"query": str(entry.get("query")), "readAs": str(entry.get("canonical"))})
+
+
 def _resolve_query(pool: Any, name: str, kind: str = "pokemon",
                    timeout: float = 15.0) -> str:
     """Snap one tool-argument name to dex canonical when possible (trilingual fuzzy);
@@ -545,7 +784,14 @@ def _resolve_query(pool: Any, name: str, kind: str = "pokemon",
             timeout=timeout)
         for e in doc if isinstance(doc, list) else []:
             if isinstance(e, dict) and e.get("ok") and e.get("canonical"):
+                _note_fuzzy(e)
                 return str(e["canonical"])
+        ambiguous = next((e for e in doc if isinstance(e, dict)
+                          and (e.get("error") or {}).get("code") == "ambiguous"), None) if isinstance(doc, list) else None
+        if ambiguous:
+            raise NameResolutionError(ambiguous)
+    except NameResolutionError:
+        raise
     except Exception:
         pass
     return name
@@ -689,6 +935,11 @@ def _snapshot_identity() -> str:
                 for e in entries:
                     if e.is_file():
                         st = e.stat()
+                        # SQLite's shared reader index changes while the same database
+                        # is merely read. It contains no battle facts. An empty WAL is
+                        # likewise bookkeeping; a non-empty WAL CAN carry real writes.
+                        if e.name.endswith(".sqlite-shm") or (e.name.endswith(".sqlite-wal") and st.st_size == 0):
+                            continue
                         stats.append((e.name, st.st_mtime_ns, st.st_size))
         except OSError:
             stats = [("<unreadable>", 0, 0)]
@@ -727,6 +978,60 @@ def _modal_combatant(pool: Any, fmt: str, name: str, timeout: float,
             return combatant, provenance
         hit = _cache_put(key, (combatant, provenance))
     return copy.deepcopy(hit[0]), hit[1]
+
+
+def _named_combatant(pool: Any, fmt: str, name: str, timeout: float,
+                     budget: float | None = None, snapshot: str | None = None) -> tuple[dict, str]:
+    """A directly named species stays in that form. Ranked FIELD rows still use modal battle forms.
+
+    When usage is dominated by a Mega Stone, fetch a joint non-Mega archetype instead of merely
+    removing that stone: its nature/SP may belong to a completely different special-attacking Mega.
+    Cache the form-specific choice; never cache a failed representative-set read.
+    """
+    snapshot = snapshot or _modal_snapshot(pool)
+    key = (snapshot, "named", fmt, name)
+    hit = _cache_get(key)
+    if hit is not None:
+        return copy.deepcopy(hit[0]), hit[1]
+    card = pool.request_json("dex", ["pokemon", name, "--format", "json"], timeout=timeout)
+    if not isinstance(card, dict) or card.get("error") or card.get("ok") is False:
+        raise calc_scenario.ScenarioError(json.dumps(_english_only(card), ensure_ascii=False))
+    combatant, src = _modal_combatant(pool, fmt, name, timeout, budget, snapshot)
+    if card.get("is_mega"):
+        combatant["name"] = card["name"]
+        combatant["item"] = card["required_item"]
+        if combatant.get("ability") not in card["abilities"]:
+            combatant["ability"] = card["abilities"][0]
+        return combatant, src
+    stones = _stones(card)
+    if combatant.get("item") not in stones and combatant["name"] == card["name"]:
+        return combatant, src
+    # A stone-dominated species needs its OWN joint build. This is bounded and cold only once
+    # per data snapshot; it never ranges over the full ranking.
+    neutral = {"name": card["name"], "ability": card["abilities"][0], "nature": "Serious",
+               "sps": {k: 0 for k in _SPREAD_KEYS}}
+    try:
+        doc = pool.request_json("team", ["repset", name, "--game-format", fmt,
+                                         "--max-clusters", "12", "--format", "json"],
+                                timeout=_repset_budget(timeout, budget))
+    except Exception:
+        doc = None
+    if not isinstance(doc, dict) or doc.get("error") or not isinstance(doc.get("archetypes"), list):
+        return neutral, "non-Mega set unavailable — neutral nature, zero SP, no item (not cached)"
+    arch = next((a for a in doc["archetypes"] if isinstance(a, dict)
+                 and a.get("species") == card["name"] and a.get("item") not in stones
+                 and a.get("ability") in card["abilities"]), None)
+    if arch:
+        combatant = {"name": card["name"], **{k: arch[k] for k in ("item", "ability", "nature") if arch.get(k)}}
+        sps = spread_from_sps(arch.get("sps"))
+        if sps:
+            combatant["sps"] = {k: sps.get(k, 0) for k in _SPREAD_KEYS}
+        src = "real-team representative set (non-Mega only)"
+    else:
+        combatant = neutral
+        src = "no non-Mega real-team sample — neutral nature, zero SP, no item"
+    _cache_put(key, (combatant, src))
+    return copy.deepcopy(combatant), src
 
 
 def _cache_get(key: tuple) -> Any:
@@ -1063,7 +1368,8 @@ def _field_ranges(pool: Any, fmt: str, field: list[str], cards: dict, timeout: f
     return found
 
 
-def _ladder_note(name: str, has_dist: bool, opponent_ranges: bool) -> str:
+def _ladder_note(name: str, has_dist: bool, opponent_ranges: bool, stated: bool = False,
+                 conditions: dict | None = None) -> str:
     """What every field of the ladder means — the model reads this, so it must be exact."""
     parts = ["s = final speed of an opponent's most-used set (set = nature, Spe SP, item; a Mega Stone "
              "holder as its Mega form, once Mega Evolved); finalSpeed/set = mine. outspeedsMe/ties/"
@@ -1079,6 +1385,12 @@ def _ladder_note(name: str, has_dist: bool, opponent_ranges: bool) -> str:
             f">={tie} tie; otherwise 'depends on build'. Opponents' own builds vary"
             + (" and are ranged in r, separately." if opponent_ranges
                else " and are not ranged unless opponent_ranges is set."))
+    elif conditions:
+        parts.append("rel = 'under stated conditions': the most-used sets are compared under the stated "
+                     "battle conditions; shares of observed builds do not apply.")
+    elif stated:
+        parts.append("rel = 'vs stated build': mine is the build the question states (set), compared "
+                     "exactly; no share of observed builds applies.")
     else:
         parts.append("rel = 'modal only': with no observed distribution of mine (speedRange says why), "
                      "only the most-used sets are compared.")
@@ -1089,9 +1401,75 @@ def _ladder_note(name: str, has_dist: bool, opponent_ranges: bool) -> str:
                      "from usage data and can sit outside r; cov = % of its real-team rows those "
                      "archetypes hold. rr compares r with speedRange: whole range faster/slower, "
                      "faster or tie, slower or tie, ranges overlap, no range.")
-    parts.append("Not modelled: Tailwind, Trick Room, weather/terrain/Unburden speed abilities, "
-                 "paralysis, stat boosts.")
+    if conditions:
+        applied = [f"{conditions[k]} {k}" for k in ("weather", "terrain") if conditions.get(k)]
+        if applied:
+            parts.append(f"Applied to every row: {' and '.join(applied)}, including speed abilities such as "
+                         "Swift Swim, Chlorophyll, Sand Rush, Slush Rush and Surge Surfer.")
+        if conditions.get("tailwind"):
+            side = {"mine": "my side only", "opponents": "every opponent's side", "both": "both sides"}
+            parts.append(f"Tailwind doubles speed on {side[conditions['tailwind']]}.")
+        if conditions.get("trickRoom"):
+            parts.append("Trick Room: the slower Pokemon moves first, so movesBeforeMe are the slower rows and "
+                         "movesAfterMe the faster ones; a speed tie stays random.")
+        parts.append("Not modelled for the field: paralysis, stat boosts and Unburden.")
+    else:
+        parts.append("Not modelled for the field: Tailwind, Trick Room, weather/terrain/Unburden speed "
+                     "abilities, paralysis, stat boosts (pass tailwind / weather / terrain / trick_room; "
+                     "calc_speed models the rest for two named pokemon).")
     return " ".join(parts)
+
+
+LADDER_TAILWIND = ("mine", "opponents", "both")
+
+
+def _ladder_conditions(args: dict) -> dict:
+    """The battle conditions a speed-ladder question states; {} = plain most-used sets."""
+    weather = str(args.get("weather") or "").strip().lower()
+    terrain = str(args.get("terrain") or "").strip().lower()
+    tailwind = args.get("tailwind")
+    if (weather and weather not in calc_scenario.WEATHERS) or (terrain and terrain not in calc_scenario.TERRAINS) \
+            or (tailwind not in (None, "", *LADDER_TAILWIND)):
+        raise calc_scenario.ScenarioError(f"weather is one of {', '.join(calc_scenario.WEATHERS)}; terrain one of "
+                                          f"{', '.join(calc_scenario.TERRAINS)}; tailwind one of "
+                                          f"{', '.join(LADDER_TAILWIND)}")
+    out: dict[str, Any] = {}
+    if weather:
+        out["weather"] = calc_scenario.WEATHERS[weather]
+    if terrain:
+        out["terrain"] = calc_scenario.TERRAINS[terrain]
+    if tailwind:
+        out["tailwind"] = tailwind
+    if args.get("trick_room") is True:
+        out["trickRoom"] = True
+    return out
+
+
+def _ladder_field(conditions: dict, mine: bool) -> dict | None:
+    field = {k: conditions[k] for k in ("weather", "terrain") if conditions.get(k)}
+    if conditions.get("tailwind") in ("both", "mine" if mine else "opponents"):
+        field["tailwind"] = True
+    return field or None
+
+
+def _speed_input(combatant: dict, field: dict | None = None) -> dict:
+    """One speedline input. An absent Spe SP stays absent (the engine's own default), as before."""
+    item: dict[str, Any] = {"name": combatant["name"]}
+    if combatant.get("nature"):
+        item["nature"] = combatant["nature"]
+    spe = (combatant.get("sps") or {}).get("spe")
+    if spe is not None:
+        item["sps"] = {"spe": spe}
+    for k in ("item", "ability"):
+        if combatant.get(k):
+            item[k] = combatant[k]
+    if (combatant.get("boosts") or {}).get("spe"):
+        item["boosts"] = {"spe": combatant["boosts"]["spe"]}
+    if combatant.get("status") and combatant["status"] != "Healthy":
+        item["status"] = combatant["status"]
+    if field:
+        item["field"] = dict(field)
+    return item
 
 
 def _set_text(nature: Any, spe: Any, item: Any) -> str:
@@ -1099,7 +1477,8 @@ def _set_text(nature: Any, spe: Any, item: Any) -> str:
 
 
 def _ladder_doc(fmt: str, rows: list[tuple[str, dict, str]], asked: dict | None,
-                ranges: dict[str, dict | None], opponent_ranges: bool = False) -> dict:
+                ranges: dict[str, dict | None], opponent_ranges: bool = False, stated: bool = False,
+                conditions: dict | None = None) -> dict:
     """The model-facing ladder: the asked pokemon's most-used set and observed speed distribution, then
     the field split by most-used-set speed, each row labelled by the share of the asked pokemon's
     observed builds it outspeeds (and, opted in, its own range). Past the tool-result budget the
@@ -1119,6 +1498,10 @@ def _ladder_doc(fmt: str, rows: list[tuple[str, dict, str]], asked: dict | None,
     elif asked is not None:
         speed_range = {"none": f"only {asked['n']} real-team rows of {mine['n']} record a Spe SP "
                                f"(a distribution needs {SPEED_RANGE_MIN_ROWS})"}
+    elif conditions:
+        speed_range = {"none": "battle conditions are stated; the most-used sets are compared under them"}
+    elif stated:
+        speed_range = {"none": "the question states this build; it is compared as stated"}
     else:
         speed_range = {"none": "real-team speed data unavailable for this answer"}
     field = []
@@ -1129,7 +1512,7 @@ def _ladder_doc(fmt: str, rows: list[tuple[str, dict, str]], asked: dict | None,
         if dist:
             row["rel"], row["p"] = _speed_share(dist, row["s"])
         else:
-            row["rel"] = "modal only"
+            row["rel"] = "under stated conditions" if conditions else "vs stated build" if stated else "modal only"
         if opponent_ranges:
             rng = ranges.get(sp) or {}
             if rng.get("r"):
@@ -1145,7 +1528,7 @@ def _ladder_doc(fmt: str, rows: list[tuple[str, dict, str]], asked: dict | None,
     out: dict[str, Any] = {
         "pokemon": mine["n"], "format": fmt, "finalSpeed": base, "set": mine["set"],
         "basis": mine_src, "speedRange": speed_range,
-        "note": _ladder_note(mine["n"], bool(dist), opponent_ranges),
+        "note": _ladder_note(mine["n"], bool(dist), opponent_ranges, stated, conditions),
         "outspeedsMe": [r for r in field if base is not None and r["s"] > base],
         "ties": [r for r in field if base is not None and r["s"] == base],
         "slowerThanMe": [r for r in field if base is not None and r["s"] < base],
@@ -1162,6 +1545,13 @@ def _ladder_doc(fmt: str, rows: list[tuple[str, dict, str]], asked: dict | None,
         while not fits() and len(out["slowerThanMe"]) > 3:
             r = out["slowerThanMe"].pop()
             out["moreSlower"].insert(0, f"{r['n']} {r['s']}")
+    if conditions:
+        out = {**{k: v for k, v in out.items() if k not in ("outspeedsMe", "ties", "slowerThanMe", "moreSlower")},
+               "conditions": conditions,
+               **({"movesBeforeMe": out["slowerThanMe"], "ties": out["ties"], "movesAfterMe": out["outspeedsMe"]}
+                  if conditions.get("trickRoom") else
+                  {"outspeedsMe": out["outspeedsMe"], "ties": out["ties"], "slowerThanMe": out["slowerThanMe"]}),
+               **({"moreSlower": out["moreSlower"]} if "moreSlower" in out else {})}
     return out
 
 
@@ -1274,9 +1664,10 @@ def _compact_ranking(raw: Any) -> Any:
 # A miss must END the search for that entity. Without saying why it missed, models spend every
 # remaining tool round re-asking under other spellings and languages (seen live: Flutter Mane in
 # en/zh/ja, a Mega form under three names) and reach the forced-final round still wanting a tool.
-NOT_IN_DEX = ("not in the Champions battle dex, so not available under the current ruleset; the "
-              "lookup already accepts zh/ja/en names and minor typos, so other spellings will "
-              "not find it")
+NOT_IN_DEX = ("no Pokemon in the Champions battle dex matches this name; the lookup already tried zh/ja/en "
+              "names, registered nicknames and minor typos, so other spellings will not find it. A full "
+              "official Pokemon name that is not found is not available under the current ruleset; a "
+              "nickname or abbreviation was simply not recognized, so ask for the official name")
 NO_USAGE = ("in the battle dex but has no usage data in this format this season (outside the "
             "tracked ranking)")
 
@@ -1286,14 +1677,24 @@ def _not_found(doc: Any) -> bool:
             and (doc.get("error") or {}).get("code") == "not_found")
 
 
-def _meta_detail(pool: Any, fmt: str, name: str, timeout: float) -> Any:
+def _meta_detail(pool: Any, fmt: str, name: str, timeout: float, season: list[str] | None = None) -> Any:
     """Usage detail, or a miss that says which kind of miss it is. The meta keys a Mega form by
     its BASE species (whose page carries the Mega-stone sets), so a Mega query is answered from
-    the base species' page and says so."""
-    doc = pool.request_json("meta", ["detail", "--format", fmt, "--pokemon", name,
+    the base species' page and says so. `season` holds meta CLI season arguments (none = current)."""
+    season = season or []
+    doc = pool.request_json("meta", ["detail", "--format", fmt, "--pokemon", name, *season,
                                      "--output", "json"], timeout=timeout)
     if not _not_found(doc):
-        return _compact_detail(doc)
+        detail = _compact_detail(doc)
+        stones = _stones(_dex_cards(pool, [name], timeout).get(name)) if isinstance(detail, dict) else {}
+        share = sum(i.get("pct") or 0 for i in (detail.get("items") or []) if isinstance(i, dict)
+                    and i.get("name") in stones) if stones else 0
+        if share >= 50:
+            # The species page mixes its Mega builds in: say so, or a non-Mega question gets Mega sets.
+            detail = {"note": f"Mega Stones are {share:.1f}% of {name}'s items, so these moves, natures "
+                              f"and SP panels mostly describe its Mega builds, not the non-Mega form; for "
+                              f"the non-Mega form use real-team sets or say its sample is thin", **detail}
+        return detail
     try:
         card = pool.request_json("dex", ["pokemon", name, "--format", "json"], timeout=timeout)
     except Exception:
@@ -1308,13 +1709,55 @@ def _meta_detail(pool: Any, fmt: str, name: str, timeout: float) -> Any:
         return _english_only(card)
     base = card.get("base_species")
     if card.get("is_mega") and isinstance(base, str) and base and base != name:
-        base_doc = pool.request_json("meta", ["detail", "--format", fmt, "--pokemon", base,
+        base_doc = pool.request_json("meta", ["detail", "--format", fmt, "--pokemon", base, *season,
                                               "--output", "json"], timeout=timeout)
         if isinstance(base_doc, dict) and not base_doc.get("error"):
             return {"note": f"the metagame records {name} under its base species {base}: this "
                             f"usage data is {base}'s, Mega-stone sets included",
                     **_compact_detail(base_doc)}
     return {"note": NO_USAGE, **doc}
+
+
+def _stated_side(pool: Any, fmt: str, raw_name: str, spec: Any, side: str, timeout: float,
+                 budget: float | None, snapshot: str, *, solved: bool = False
+                 ) -> tuple[dict, str, str | None, list[str]]:
+    """One combatant: the named form's most-used set with the question's stated parts on top. Returns
+    (combatant, basis, usual_item, notes). A solved side holds only a stated item; its usual non-Mega
+    item comes back as `usual_item` for a compared lane. A stated nature/SP without an item describes a
+    build without a Speed item, so a usual Choice Scarf is dropped and the note says so."""
+    species = _resolve_query(pool, raw_name, "pokemon", timeout)
+    spec = dict(spec) if isinstance(spec, dict) else spec
+    states_item = isinstance(spec, dict) and "item" in spec
+    card = _dex_cards(pool, [species], timeout).get(species) or {}
+    if card.get("is_mega") and states_item:
+        stated = calc_scenario.resolve_strict(pool, str(spec["item"]), "item", timeout)
+        if stated != card.get("required_item"):
+            raise calc_scenario.NotInGame(f"{species} requires {card.get('required_item')}")
+    elif states_item:
+        stated = calc_scenario.resolve_strict(pool, str(spec["item"]), "item", timeout)
+        if stated in _stones(card):
+            # A stated stone requests that Mega's defaults, not the base form's nature/SP
+            # carried across a late form conversion.
+            species = _stones(card)[stated]
+            card = _dex_cards(pool, [species], timeout).get(species) or {}
+    combatant, src = _named_combatant(pool, fmt, species, timeout, budget, snapshot)
+    usual_item = None
+    if not states_item and solved and not card.get("is_mega") and combatant.get("item"):
+        usual_item = combatant.pop("item")
+    combatant = calc_scenario.apply_set(pool, combatant, spec, side, timeout)
+    note = calc_scenario.drop_unstated_speed_item(combatant, spec, side)
+    return combatant, src, usual_item, [note] if note else []
+
+
+def _weather_note(sides: list[dict], field: dict) -> str | None:
+    if field.get("weather"):
+        return None
+    setters = [f"{c['name']}'s {c['ability']} sets {calc_scenario.WEATHER_ABILITIES[c['ability']]}"
+               for c in sides if c.get("ability") in calc_scenario.WEATHER_ABILITIES]
+    if not setters:
+        return None
+    return ("no weather was applied; " + "; ".join(setters) + " on entry or Mega Evolution. "
+            "Pass field.weather to include it.")
 
 
 def _calc_sides(pool: Any, args: dict, timeout: float, budget: float | None,
@@ -1329,30 +1772,20 @@ def _calc_sides(pool: Any, args: dict, timeout: float, budget: float | None,
         raise calc_scenario.ScenarioError("attacker, defender and move are required; format is single or double")
     move = calc_scenario.resolve_strict(pool, names["move"], "move", timeout)
     if move is None:
-        raise calc_scenario.ScenarioError(f"move {names['move']!r} is not in Pokemon Champions")
+        raise calc_scenario.NotInGame(f"move {names['move']!r} is not in Pokemon Champions")
     snapshot = _modal_snapshot(pool)
     sides, usual_item, notes = [], None, []
     for side in ("attacker", "defender"):
-        species = _resolve_query(pool, names[side], "pokemon", timeout)
-        combatant, src = _modal_combatant(pool, fmt, species, timeout, budget, snapshot)
         spec = args.get(f"{side}_set")
         spec = dict(spec) if isinstance(spec, dict) else spec
         legacy = _clean_name(args.get(f"{side}_item")) if args.get(f"{side}_item") else None
         if legacy and (spec is None or isinstance(spec, dict) and "item" not in spec):
             spec = {**(spec or {}), "item": legacy}
-        states_item = isinstance(spec, dict) and "item" in spec
-        states_build = isinstance(spec, dict) and any(spec.get(k) for k in ("nature", "sps"))
-        if not states_item and (side == solved or states_build) and combatant.get("item"):
-            stones = _stones(_dex_cards(pool, [combatant["name"]], timeout).get(combatant["name"]))
-            if side == solved:
-                usual = combatant.pop("item")
-                usual_item = usual if usual not in stones else None
-            elif combatant["item"] in stones:
-                # A build the question states (nature / SP) without an item is that species' own build: the
-                # usual Mega Stone would silently turn it into another form with other stats and ability.
-                notes.append(f"{side}: stated build without an item, so its usual {combatant.pop('item')} "
-                             f"(Mega Stone) is not assumed")
-        sides.append((calc_scenario.apply_set(pool, combatant, spec, side, timeout), src))
+        combatant, src, usual, side_notes = _stated_side(pool, fmt, names[side], spec, side, timeout,
+                                                         budget, snapshot, solved=side == solved)
+        usual_item = usual or usual_item
+        notes += side_notes
+        sides.append((combatant, src))
     # After the overrides: the item a side finally holds decides its battle form (a Specs override keeps
     # Gengar base; a stone override makes the Mega).
     (atk, src_a), (dfd, src_d) = _battle_forms(pool, sides, timeout)
@@ -1363,6 +1796,19 @@ def _calc_sides(pool: Any, args: dict, timeout: float, budget: float | None,
     return {"format": fmt, "attacker": atk, "defender": dfd, "basis": {"attacker": src_a, "defender": src_d},
             "move": move, "field": calc_scenario.field_payload(fmt, args.get("field")),
             "crit": bool(args.get("crit")), "usual_item": usual_item, "notes": notes}
+
+
+def _conditions(s: dict, mapped: dict) -> dict:
+    """The field the calc actually applied, so the answer never guesses at modifiers."""
+    field = s["field"]
+    out: dict[str, Any] = {"weather": field.get("weather") or "none", "terrain": field.get("terrain") or "none"}
+    if field.get("defenderSide"):
+        out["screens"] = sorted(field["defenderSide"])
+    if (field.get("attackerSide") or {}).get("helping_hand"):
+        out["helpingHand"] = True
+    if s["format"] == "double" and mapped.get("isSpread"):
+        out["spreadModifier"] = "included (the move hits both foes)"
+    return out
 
 
 def _calc_tool(pool: Any, name: str, args: dict, timeout: float,
@@ -1385,7 +1831,12 @@ def _calc_tool(pool: Any, name: str, args: dict, timeout: float,
         mapped = mappers.map_damage(doc)
         result = {"description": mapped.get("description"), "koChance": mapped.get("koChance"),
                   "minPercent": mapped.get("minPercent"), "maxPercent": mapped.get("maxPercent"),
-                  "hits": mapped.get("hits"), "assumedSets": assumed}
+                  "hits": mapped.get("hits"), "conditions": _conditions(s, mapped)}
+        if mapped.get("koCaveats"):
+            result["koCaveats"] = mapped["koCaveats"]
+        if (note := _weather_note([atk, dfd], s["field"])):
+            result["weatherNote"] = note
+        result["assumedSets"] = assumed
         if s["notes"]:
             result["notes"] = s["notes"]
         return label, clip_json(result)
@@ -1397,10 +1848,18 @@ def _calc_tool(pool: Any, name: str, args: dict, timeout: float,
             continue
         item = calc_scenario.resolve_strict(pool, text, "item", timeout)
         if item is None:
-            raise calc_scenario.ScenarioError(f"item {text!r} is not in Pokemon Champions; drop it from compare_items")
+            raise calc_scenario.NotInGame(f"item {text!r} is not in Pokemon Champions; drop it from compare_items")
         compared.append(item)
     if s["usual_item"] and s["usual_item"] not in compared and len(compared) < calc_scenario.COMPARE_ITEMS_MAX:
         compared.append(s["usual_item"])
+    if compared and solved in ("attacker", "defender"):
+        mover = atk if solved == "attacker" else dfd
+        card = _dex_cards(pool, [mover["name"]], timeout).get(mover["name"]) or {}
+        if card.get("is_mega") and any(item != card.get("required_item") for item in compared):
+            raise calc_scenario.NotInGame(f"{mover['name']} requires {card.get('required_item')}; "
+                                          "other items cannot be compared on this Mega form")
+        if any(item in _stones(card) for item in compared):
+            raise calc_scenario.NotInGame("a Mega Stone changes form; calculate the explicitly named Mega separately")
 
     def run(cli: str, rows: list[dict]) -> list[dict]:
         docs = pool.request_json(cli, ["batch"], json.dumps(rows, ensure_ascii=False), timeout=timeout)
@@ -1423,15 +1882,51 @@ def _calc_tool(pool: Any, name: str, args: dict, timeout: float,
         label = ("calc.threshold", f"SP threshold {atk['name']} {move} vs {dfd['name']}",
                  {"attacker": atk["name"], "move": move, "defender": dfd["name"], "format": s["format"]})
     result = {"assumedSets": assumed, **solution}
+    if (note := _weather_note([atk, dfd], s["field"])):
+        result["weatherNote"] = note
+    if args.get("goal") == "ohko":
+        result["note"] = ("The OHKO probability is for this one hit. Post-hit recovery such as Sitrus Berry "
+                          "does not reduce this probability. The solved side's item is the one in each lane, "
+                          "not necessarily its usual representative-set item.")
     if s["notes"]:
         result["notes"] = s["notes"]
     return label, clip_json(result, cap=QA_TOOL_RESULT_CHARS * 2)
 
 
+_REFUSAL_TOOL_IDS = {"calc_damage": "calc.damage", "calc_threshold": "calc.threshold", "type_matchup": "dex.types",
+                     "calc_speed": "calc.speed", "speed_ladder": "speed_ladder"}
+
+
 def _run_tool(pool: Any, name: str, args: dict,
               timeout: float = QA_TOOL_TIMEOUT,
               budget: float | None = None, supplied_codes: frozenset[str] = frozenset(),
-              consume_team_code: Callable[[], None] | None = None) -> tuple[tuple[str, str, dict] | None, str]:
+              consume_team_code: Callable[[], None] | None = None,
+              projection_dir: Path | None = None) -> tuple[tuple[str, str, dict | None] | None, str]:
+    """`_run_tool_once` plus the disclosure of any approximate name reading it made: a fuzzy match
+    such as Gastrodon -> Bastiodon must reach the model as a reading, never as a silent swap."""
+    _NAME_MATCHES.items = []
+    try:
+        traced, content = _run_tool_once(pool, name, args, timeout, budget, supplied_codes,
+                                         consume_team_code, projection_dir)
+    finally:
+        matches, _NAME_MATCHES.items = _NAME_MATCHES.items, None
+    if matches:
+        try:
+            doc = json.loads(content)
+        except ValueError:
+            doc = None
+        if isinstance(doc, dict):
+            unique = list({(m["query"], m["readAs"]): m for m in matches}.values())
+            content = json.dumps({"nameMatches": unique, "nameNote": NAME_MATCH_NOTE, **doc},
+                                 ensure_ascii=False, separators=(",", ":"))
+    return traced, content
+
+
+def _run_tool_once(pool: Any, name: str, args: dict,
+                   timeout: float = QA_TOOL_TIMEOUT,
+                   budget: float | None = None, supplied_codes: frozenset[str] = frozenset(),
+                   consume_team_code: Callable[[], None] | None = None,
+                   projection_dir: Path | None = None) -> tuple[tuple[str, str, dict | None] | None, str]:
     """Execute one whitelisted tool call. Returns ((tool_id, label, params) or None, content).
     Bad arguments and CLI error shapes become CONTENT (the model reads the miss and says
     so); only infrastructure faults bubble up via WorkerError -> content too. `timeout` is
@@ -1465,48 +1960,145 @@ def _run_tool(pool: Any, name: str, args: dict,
                 clip_json(_english_only(doc))
         if name == "dex_find":
             return _dex_find(pool, args, timeout)
-        if name == "meta_ranking":
+        if name in ("meta_ranking", "meta_detail"):
+            from . import qa_facts
             fmt = args.get("format")
-            if fmt not in ("single", "double"):
-                return None, json.dumps({"error": "bad meta_ranking arguments"})
-            limit = max(1, min(int(args.get("limit") or 30), 50))
-            doc = pool.request_json("meta", ["ranking", "--format", fmt, "--limit",
-                                             str(limit), "--output", "json"], timeout=timeout)
-            return ("meta.ranking", f"meta ranking {fmt} top{limit}",
-                    {"format": fmt, "limit": limit}), \
-                clip_json(_compact_ranking(doc), cap=QA_TOOL_RESULT_CHARS * 2)
-        if name == "meta_detail":
+            q = _clean_name(args.get("pokemon")) if name == "meta_detail" else ""
+            if fmt not in ("single", "double") or q is None:
+                return None, json.dumps({"error": f"bad {name} arguments"})
+            try:
+                season, disclosed = qa_facts.season_args(args.get("season"))
+            except ValueError as exc:
+                return None, json.dumps({"error": str(exc)})
+            extra = {"season": disclosed["season"]} if disclosed else {}
+            if name == "meta_ranking":
+                limit = max(1, min(int(args.get("limit") or 30), 50))
+                doc = _compact_ranking(pool.request_json("meta", ["ranking", "--format", fmt, "--limit", str(limit),
+                                                                  *season, "--output", "json"], timeout=timeout))
+                traced = ("meta.ranking", f"meta ranking {fmt} top{limit}", {"format": fmt, "limit": limit, **extra})
+            else:
+                q = _resolve_query(pool, q, "pokemon", timeout)
+                doc = _meta_detail(pool, fmt, q, timeout, season)
+                traced = ("meta.detail", f"meta detail {fmt} {q}", {"format": fmt, "pokemon": q, **extra})
+            if disclosed and isinstance(doc, dict):
+                doc = {"seasonNote": disclosed["note"], **doc}
+            return traced, clip_json(doc, cap=QA_TOOL_RESULT_CHARS * 2 if name == "meta_ranking"
+                                     else QA_TOOL_RESULT_CHARS)
+        if name in ("type_matchup", "move_find", "rules_facts", "meta_explore"):
+            from . import qa_facts
+            if name == "type_matchup":
+                return qa_facts.type_matchup(pool, args, timeout)
+            if name == "move_find":
+                return qa_facts.move_find(pool, args, timeout)
+            if name == "rules_facts":
+                return qa_facts.rules_facts()
+            return qa_facts.meta_explore(pool, args, timeout, projection_dir)
+        if name == "ko_scan":
+            from . import qa_matchups
+            fmt = args.get("format")
+            q = _clean_name(args.get("pokemon"))
+            direction = args.get("direction")
+            if fmt not in ("single", "double") or q is None or direction not in ("attacking", "defending"):
+                return None, json.dumps({"error": "bad ko_scan arguments"})
+            q = _resolve_query(pool, q, "pokemon", timeout)
+            card = pool.request_json("dex", ["pokemon", q, "--format", "json"], timeout=timeout)
+            if _not_found(card):
+                return ("dex.pokemon", f"dex pokemon {q}", {"kind": "pokemon", "name": q}), \
+                    clip_json({"note": NOT_IN_DEX, **card})
+            if not isinstance(card, dict) or card.get("error") or card.get("ok") is False:
+                return None, clip_json(_english_only(card))
+            top_n = max(1, min(60, int(args.get("top_n") or 30)))
+            doc = qa_matchups.read_ko(projection_dir, fmt, card["name"], direction, top_n)
+            return ("team.ko_scan", f"KO scan {fmt} {card['name']} {direction} top{top_n}",
+                    {"format": fmt, "pokemon": card["name"], "direction": direction, "limit": top_n}), \
+                clip_json(doc, cap=QA_TOOL_RESULT_CHARS * 3)
+        if name in ("meta_ko", "matchup_counters"):
+            from .. import mappers
+            from . import qa_matchups
             fmt = args.get("format")
             q = _clean_name(args.get("pokemon"))
             if fmt not in ("single", "double") or q is None:
-                return None, json.dumps({"error": "bad meta_detail arguments"})
+                return None, json.dumps({"error": f"bad {name} arguments"})
             q = _resolve_query(pool, q, "pokemon", timeout)
-            doc = _meta_detail(pool, fmt, q, timeout)
-            return ("meta.detail", f"meta detail {fmt} {q}",
-                    {"format": fmt, "pokemon": q}), clip_json(doc)
+            card = pool.request_json("dex", ["pokemon", q, "--format", "json"], timeout=timeout)
+            if not isinstance(card, dict) or card.get("error"):
+                return None, clip_json(_english_only(card))
+            if name == "matchup_counters":
+                top_n = max(1, min(60, int(args.get("top_n") or 30)))
+                doc = qa_matchups.read_counters(projection_dir, fmt, q, top_n)
+                if not doc.get("error"):
+                    doc = {**{k: v for k, v in doc.items() if k not in ("rows", "conditionalRows")},
+                           "conclusions": qa_matchups.conclusions(doc)}
+                    doc["note"] = ("Each conclusion is ONE concrete candidate build. C2 means safe switch-in "
+                                   "then static 1v1; C1 means even-footing only. A C0 floor is CONDITIONAL, "
+                                   "with its own listed blockers. Do not merge blockers between candidates. "
+                                   "Damage applies only to its example target item. Coverage shares refer to "
+                                   "coverageSpecies, not a win rate or a proportion within this Mega form. "
+                                   "Low-confidence observed-build reference; doubles is an isolated pair.")
+                    # A sentence can stand for several identical-reading builds; count sentences.
+                    doc["displayedConclusions"] = len(doc["conclusions"])
+                    doc["omittedConclusions"] = 0
+                    while len(json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > QA_TOOL_RESULT_CHARS * 3:
+                        if not doc["conclusions"]:
+                            raise ValueError("QA matchup metadata exceeds its result budget")
+                        doc["conclusions"].pop()
+                        doc["displayedConclusions"] -= 1
+                        doc["omittedConclusions"] += 1
+                return ("team.counters", f"matchup counters {fmt} {q} top{top_n}",
+                        {"format": fmt, "pokemon": q, "limit": top_n}), clip_json(doc, cap=QA_TOOL_RESULT_CHARS * 3)
+            source = q
+            raw = pool.request_json("meta", ["ko", "--format", fmt, "--pokemon", source,
+                                             "--output", "json"], timeout=timeout)
+            if _not_found(raw) and card.get("is_mega"):
+                source = card["base_species"]
+                raw = pool.request_json("meta", ["ko", "--format", fmt, "--pokemon", source,
+                                                 "--output", "json"], timeout=timeout)
+            if not isinstance(raw, dict) or raw.get("error"):
+                return None, clip_json(_english_only(raw))
+            dto = _english_only(mappers.map_ko(raw, raw, {}))
+            doc = {k: dto[k] for k in ("name", "format", "season", "rule", "updatedAt", "coverage", "panels")}
+            doc["panels"] = {key: None if rows is None else [
+                {k: r[k] for k in ("rank", "name", "nationalDex", "percentage", "formCollapsed") if k in r}
+                for r in rows] for key, rows in doc["panels"].items()}
+            doc["note"] = ("Recorded KO opponents are species-level orderings, not win rates or counter verdicts. "
+                           f"This record is for {source}; do not attribute it to another form. "
+                           "A retained panel keeps its own historical timestamp.")
+            return ("meta.ko", f"meta KO {fmt} {q}", {"format": fmt, "pokemon": q}), \
+                clip_json(doc, cap=QA_TOOL_RESULT_CHARS * 2)
         if name == "repset_lookup":
             fmt = args.get("format") or "single"
             q = _clean_name(args.get("pokemon"))
             if fmt not in ("single", "double") or q is None:
                 return None, json.dumps({"error": "bad repset_lookup arguments"})
             q = _resolve_query(pool, q, "pokemon", timeout)
+            card = pool.request_json("dex", ["pokemon", q, "--format", "json"], timeout=timeout)
+            if not isinstance(card, dict) or card.get("error"):
+                return None, clip_json(_english_only(card))
             doc = pool.request_json("team", ["repset", q, "--game-format", fmt,
-                                             "--format", "json"],
+                                             "--max-clusters", "12", "--format", "json"],
                                     timeout=_repset_budget(timeout, budget))
             arches = []
-            for a in (doc.get("archetypes") or [])[:2] if isinstance(doc, dict) else []:
+            for a in (doc.get("archetypes") or []) if isinstance(doc, dict) else []:
                 if isinstance(a, dict):
+                    if card.get("is_mega"):
+                        if a.get("item") != card.get("required_item"):
+                            continue
+                        own = card.get("abilities") or []
+                        a = {**a, "species": card["name"],
+                             "ability": a.get("ability") if a.get("ability") in own else own[0]}
+                    elif a.get("species") != card["name"] or a.get("item") in _stones(card):
+                        continue
                     arches.append({"species": a.get("species"), "ability": a.get("ability"),
                                    "item": a.get("item"), "nature": a.get("nature"),
                                    "moves": a.get("moves"),
                                    "sps": spread_from_sps(a.get("sps")),
                                    "share": a.get("share"),
                                    "confidence": a.get("confidence")})
-            out: dict[str, Any] = {"resolved": (doc.get("query") or {}).get("resolved")
-                                   if isinstance(doc, dict) else None,
-                                   "format": fmt, "archetypes": arches}
+                    if len(arches) == 2:
+                        break
+            out: dict[str, Any] = {"resolved": q, "format": fmt, "archetypes": arches}
             if not arches:
-                out["note"] = "no real-team sample for this pokemon in this format"
+                out["note"] = "no real-team sample for this exact form in this format; do not substitute a Mega"
             return ("team.repset", f"repset {fmt} {q}",
                     {"format": fmt, "pokemon": q}), clip_json(out)
         if name == "speed_ladder":
@@ -1519,6 +2111,7 @@ def _run_tool(pool: Any, name: str, args: dict,
             except (TypeError, ValueError):
                 limit = 20
             opponent_ranges = args.get("opponent_ranges") in (True, "true")
+            conditions = _ladder_conditions(args)
             from .. import mappers      # local import, same as the other calc branches: `mappers`
             #                                is function-local here, so using it before this line
             #                                is an UnboundLocalError, not a NameError.
@@ -1536,7 +2129,16 @@ def _run_tool(pool: Any, name: str, args: dict,
             # enough of the field to answer.
             started = time.monotonic()
             snapshot = _modal_snapshot(pool)
-            modal = [_modal_combatant(pool, fmt, n, timeout, budget, snapshot) for n in ordered]
+            stated = args.get("set") if isinstance(args.get("set"), dict) and args.get("set") else None
+            ladder_notes: list[str] = []
+            if stated:
+                mine, mine_src, _usual, ladder_notes = _stated_side(pool, fmt, ordered[0], stated, "set",
+                                                                    timeout, budget, snapshot)
+                first = (mine, f"stated in the question, on top of the {mine_src}")
+            else:
+                first = _named_combatant(pool, fmt, ordered[0], timeout, budget, snapshot)
+            modal = [first] + [
+                _modal_combatant(pool, fmt, n, timeout, budget, snapshot) for n in ordered[1:]]
             # Two dex batches serve the battle forms, their abilities and the range reads: every name,
             # then the Mega forms those can become and an asked Mega's base species.
             cards = _dex_cards(pool, set(ordered) | {c["name"] for c, _ in modal}, timeout)
@@ -1550,18 +2152,8 @@ def _run_tool(pool: Any, name: str, args: dict,
             entries = [(ordered[0], sides[0])] + [
                 (sp, s) for sp, s in zip(ordered[1:], sides[1:]) if s[0]["name"] != sides[0][0]["name"]]
             sides = [s for _sp, s in entries]
-            items = []
-            for combatant, _src in sides:
-                it: dict[str, Any] = {"name": combatant["name"]}
-                if combatant.get("nature"):
-                    it["nature"] = combatant["nature"]
-                spe = (combatant.get("sps") or {}).get("spe")
-                if spe is not None:
-                    it["sps"] = {"spe": spe}
-                for k in ("item", "ability"):
-                    if combatant.get(k):
-                        it[k] = combatant[k]
-                items.append(it)
+            items = [_speed_input(combatant, _ladder_field(conditions, mine=i == 0))
+                     for i, (combatant, _src) in enumerate(sides)]
             doc = pool.request_json("speedline", ["batch"],
                                     json.dumps(items, ensure_ascii=False),
                                     timeout=max(timeout, 45.0) if budget is None
@@ -1582,23 +2174,25 @@ def _run_tool(pool: Any, name: str, args: dict,
                 return SPEED_RANGE_TIMEOUT if budget is None else min(
                     SPEED_RANGE_TIMEOUT, (budget - (time.monotonic() - started)) / 2)
 
-            asked = None if read_timeout() < 5 else _asked_distribution(
+            # A stated build is compared as stated, not as a share of the observed builds; the observed
+            # builds' speeds are plain speeds, so stated battle conditions compare the most-used sets.
+            asked = None if stated or conditions or read_timeout() < 5 else _asked_distribution(
                 pool, fmt, sides[0][0]["name"], cards, timeout, read_timeout(), snapshot)
             ranges: dict[str, dict | None] = {}
-            if opponent_ranges and read_timeout() >= 5:
+            if opponent_ranges and not conditions and read_timeout() >= 5:
                 ranges = _field_ranges(pool, fmt, [sp for sp, _r, _s in rows[1:]], cards, timeout,
                                        read_timeout(), snapshot)
-            out = _ladder_doc(fmt, rows, asked, ranges, opponent_ranges)
+            out = _ladder_doc(fmt, rows, asked, ranges, opponent_ranges and not conditions,
+                              stated=bool(stated), conditions=conditions)
+            if ladder_notes:
+                out["notes"] = ladder_notes
             params = {"pokemon": out["pokemon"], "format": fmt, "limit": limit}
             if opponent_ranges:
                 params["opponent_ranges"] = True
             return ("speed_ladder", f"speed ladder: {out['pokemon']} ({fmt})", params), \
                 clip_json(out)
         if name in ("calc_damage", "calc_threshold"):
-            try:
-                return _calc_tool(pool, name, args, timeout, budget)
-            except calc_scenario.ScenarioError as exc:
-                return None, json.dumps({"error": str(exc)})
+            return _calc_tool(pool, name, args, timeout, budget)
         if name == "calc_speed":
             from .. import mappers
             fmt = args.get("format") or "single"
@@ -1606,44 +2200,76 @@ def _run_tool(pool: Any, name: str, args: dict,
             b_n = _clean_name(args.get("pokemon_b"))
             if fmt not in ("single", "double") or None in (a_n, b_n):
                 return None, json.dumps({"error": "bad calc_speed arguments"})
-            a_n = _resolve_query(pool, a_n, "pokemon", timeout)
-            b_n = _resolve_query(pool, b_n, "pokemon", timeout)
+            weather = str(args.get("weather") or "").strip().lower()
+            terrain = str(args.get("terrain") or "").strip().lower()
+            if (weather and weather not in calc_scenario.WEATHERS) or (terrain and terrain not in calc_scenario.TERRAINS):
+                raise calc_scenario.ScenarioError(f"weather is one of {', '.join(calc_scenario.WEATHERS)}; "
+                                                  f"terrain one of {', '.join(calc_scenario.TERRAINS)}")
             snapshot = _modal_snapshot(pool)
-            sides = _battle_forms(pool, [_modal_combatant(pool, fmt, n, timeout, budget, snapshot)
-                                         for n in (a_n, b_n)], timeout)
+            stated, notes = [], []
+            for key, raw_name in (("a", a_n), ("b", b_n)):
+                spec = args.get(f"{key}_set") if isinstance(args.get(f"{key}_set"), dict) else None
+                combatant, src, _usual, side_notes = _stated_side(pool, fmt, raw_name, spec, f"{key}_set",
+                                                                  timeout, budget, snapshot)
+                stated.append((combatant, f"stated in the question, on top of the {src}" if spec else src))
+                notes += side_notes
+            a_n, b_n = (c["name"] for c, _src in stated)
+            sides = _battle_forms(pool, stated, timeout)
             items = []
-            for combatant, _src in sides:
-                item: dict[str, Any] = {"name": combatant["name"]}
-                if combatant.get("nature"):
-                    item["nature"] = combatant["nature"]
-                spe = (combatant.get("sps") or {}).get("spe")
-                if spe is not None:
-                    item["sps"] = {"spe": spe}
-                for k in ("item", "ability"):
-                    if combatant.get(k):
-                        item[k] = combatant[k]
-                items.append(item)
+            for (combatant, _src), key in zip(sides, ("a", "b")):
+                field = {k: v for k, v in (("weather", calc_scenario.WEATHERS.get(weather)),
+                                           ("terrain", calc_scenario.TERRAINS.get(terrain)),
+                                           ("tailwind", args.get(f"{key}_tailwind") is True)) if v}
+                items.append(_speed_input(combatant, field))
             doc = pool.request_json("speedline", ["batch"],
                                     json.dumps(items, ensure_ascii=False), timeout=timeout)
             rows = []
-            for (combatant, src), raw in zip(sides, doc if isinstance(doc, list) else []):
+            for (combatant, src), item, raw in zip(sides, items, doc if isinstance(doc, list) else []):
                 if isinstance(raw, dict) and not raw.get("error"):
                     m = mappers.map_speedline(raw)
-                    rows.append({"name": m["name"], "finalSpeed": m["finalSpeed"],
-                                 "nature": m["nature"], "speSp": m["speedSPs"],
-                                 "item": combatant.get("item"), "basis": src})
+                    row = {"name": m["name"], "finalSpeed": m["finalSpeed"], "nature": m["nature"],
+                           "speSp": m["speedSPs"], "item": combatant.get("item"), "basis": src}
+                    for key in ("ability", "status", "boosts"):
+                        if item.get(key):
+                            row[key] = item[key]
+                    if (item.get("field") or {}).get("tailwind"):
+                        row["tailwind"] = True
+                    rows.append(row)
                 else:
                     rows.append({"name": combatant["name"],
                                  "error": "speed could not be computed"})
             speeds = [r.get("finalSpeed") for r in rows]
-            faster = None
+            result: dict[str, Any] = {"combatants": rows, "faster": None}
             if len(speeds) == 2 and all(isinstance(s, (int, float)) for s in speeds):
-                faster = ("tie" if speeds[0] == speeds[1]
-                          else rows[0]["name"] if speeds[0] > speeds[1] else rows[1]["name"])
+                result["faster"] = ("tie" if speeds[0] == speeds[1]
+                                    else rows[0]["name"] if speeds[0] > speeds[1] else rows[1]["name"])
+                if args.get("trick_room") is True:
+                    result["trickRoom"] = True
+                    result["movesFirst"] = ("speed tie" if speeds[0] == speeds[1]
+                                            else rows[0]["name"] if speeds[0] < speeds[1] else rows[1]["name"])
+            if weather or terrain:
+                result["conditions"] = {"weather": calc_scenario.WEATHERS.get(weather) or "none",
+                                        "terrain": calc_scenario.TERRAINS.get(terrain) or "none"}
+            result["note"] = ("finalSpeed includes the stated items, speed abilities under the stated "
+                              "weather/terrain, stat stages, paralysis and Tailwind. Priority moves and "
+                              "Quick Claw are not modelled.")
+            if notes:
+                result["notes"] = notes
             return ("calc.speed", f"speed {a_n} vs {b_n}",
-                    {"a": a_n, "b": b_n, "format": fmt}), \
-                clip_json({"combatants": rows, "faster": faster})
+                    {"a": a_n, "b": b_n, "format": fmt}), clip_json(result)
         return None, json.dumps({"error": f"unknown tool {name!r}"})
+    except NameResolutionError as exc:
+        # The dex answered: this name is ambiguous. That reading grounds the reply.
+        kind = exc.doc.get("kind") if exc.doc.get("kind") in DEX_KINDS else "pokemon"
+        query = str(exc.doc.get("query") or "")[:100]
+        return (f"dex.{kind}", f"dex {kind} {query}", {"kind": kind, "name": query}), \
+            clip_json(_english_only(exc.doc))
+    except calc_scenario.NotInGame as exc:
+        # The dex refused a stated item/move/ability for this game: a grounded answer too.
+        return (_REFUSAL_TOOL_IDS.get(name, "dex.item"), f"dex check: {exc}"[:200], None), \
+            json.dumps({"error": str(exc)})
+    except calc_scenario.ScenarioError as exc:
+        return None, json.dumps({"error": str(exc)})
     except Exception as e:  # WorkerError / JSON decode — the model can still answer honestly
         return None, json.dumps({"error": f"tool failed: {type(e).__name__}"})
 
@@ -1699,7 +2325,10 @@ Write a SHORT interpretation (about 120 words, plain text, no markdown):
 - for each, what kind of change would address it (which member or slot to reconsider),
 - grounded ONLY in the report facts — never invent numbers, matchups or members; when you
   cite a check grade, use observedFloor and name the opponent; name witness builds only when useful.
-- the `team` list is the COMPLETE roster of MY team — advise ONLY those members. Every other
+- `team.pokemon` is the COMPLETE roster of MY team; `team.format` and `team.pickSize`
+  fix the battle format and selection size. Never mix singles and doubles selection.
+  Respect the goal and locked member slots in `analysis`; no change has been tested here.
+  Advise ONLY those members. Every other
   Pokemon anywhere in the data (above all `checks.byOpponent[].opponent`) is an OPPONENT, never
   mine: never tell it to carry a move/item, never treat it as if it were on my team.
 Name every Pokemon, move, item, ability and nature by its ENGLISH CANONICAL name exactly as
@@ -1834,6 +2463,27 @@ _FIELD_TERMS: dict[str, dict[str, str]] = {
     "bearers": {"zh": "承担该功能的成员", "ja": "その機能を担うメンバー",
                 "en": "the members providing it"},
     "topK": {"zh": "统计的对手数量", "ja": "対象とした相手数", "en": "the opponent count"},
+    # Diagnosis tool and receipt names an assisted reading can echo.
+    "test_change": {"zh": "副本复验", "ja": "コピーでの検証", "en": "the copy test"},
+    "tune_member": {"zh": "SP 调校", "ja": "SP調整", "en": "SP tuning"},
+    "team_evidence": {"zh": "证据读取", "ja": "根拠の読み取り", "en": "the evidence read"},
+    "member_options": {"zh": "候选配置查询", "ja": "候補の照会", "en": "the option lookup"},
+    "selection_options": {"zh": "选出枚举", "ja": "選出の列挙", "en": "the selection enumeration"},
+    "comparisonPerformed": {"zh": "前后对比", "ja": "前後比較", "en": "the before/after comparison"},
+    "currentTurnComparisonPerformed": {"zh": "本轮前后对比", "ja": "今回の前後比較",
+                                       "en": "this turn's before/after comparison"},
+    "allThresholdsMet": {"zh": "阈值是否全部达成", "ja": "閾値の達成状況", "en": "whether every threshold was met"},
+    "tuningId": {"zh": "调校回执", "ja": "調整の記録", "en": "the tuning receipt"},
+    "verificationId": {"zh": "复验回执", "ja": "検証の記録", "en": "the test receipt"},
+    "wall_no_ko": {"zh": "能挡住但无法击倒", "ja": "受けられるが倒せない", "en": "walls it without a KO"},
+    "loss": {"zh": "落败", "ja": "負け"},
+    "verifiedChanges": {"zh": "本轮复验", "ja": "今回の検証", "en": "this turn's tests"},
+    "previousVerifiedChanges": {"zh": "此前的复验", "ja": "以前の検証", "en": "the earlier tests"},
+    "readEvidence": {"zh": "已读取的证据", "ja": "読み取った根拠", "en": "the evidence read"},
+    "goalTargets": {"zh": "目标对象", "ja": "目標の対象", "en": "the named targets"},
+    "teamFloors": {"zh": "整队观测下限", "ja": "チーム全体の観測下限", "en": "the team floors"},
+    "teamFloorChanges": {"zh": "整队观测下限变化", "ja": "チーム下限の変化", "en": "the team-floor changes"},
+    "memberCellChanges": {"zh": "成员格变化", "ja": "メンバー評価の変化", "en": "the member-cell changes"},
 }
 # Section paths. The bare one-word sections are CJK-only entries: `defense` or `checks` alone is
 # an ordinary English word that an English answer may legitimately use, while in zh/ja prose it
@@ -1915,7 +2565,7 @@ def _diagnose_explain_projection(report: dict, lang: str = "en") -> dict:
     partial evidence encouraged confident but incorrect causal explanations in real calls.
     """
     trimmed = {k: report.get(k) for k in
-               ("legality", "defense", "offense", "speed", "roles", "checks")}
+               ("analysis", "legality", "defense", "offense", "speed", "roles", "checks")}
     roles = trimmed.get("roles")
     if isinstance(roles, dict) and isinstance(roles.get("coverage"), list):
         coverage = []
@@ -1947,7 +2597,7 @@ def _diagnose_explain_projection(report: dict, lang: str = "en") -> dict:
             if not isinstance(row, dict):
                 continue
             projected = {k: row.get(k) for k in
-                         ("opponent", "usageRank", "observedFloor", "witnessVariantIds",
+                         ("ref", "opponent", "usageRank", "observedFloor", "witnessVariantIds",
                           "floorBy", "representativeGrade", "representedCoverage",
                           "calculationComplete")}
             rows.append(projected)
@@ -1988,23 +2638,45 @@ def _scrub_internal_tokens(text: str, lang: str) -> str:
     # stops a prefix from matching inside a longer path. Case-sensitive on purpose: the move
     # `Protect` and the role key `protect` differ only by case.
     alternation = "|".join(re.escape(t) for t in sorted(mapping, key=len, reverse=True))
-    pattern = re.compile(rf"`?(?<![\w.])({alternation})(?![\w.])`?")
-    return pattern.sub(lambda m: mapping[m.group(1)], text)
+    # ASCII boundaries: an echo written flush against CJK ("为wall_no_ko") is still an echo. A space
+    # the model set around it goes too when the replacement and its neighbour are both CJK.
+    pattern = re.compile(rf"( ?)`?(?<![A-Za-z0-9_.])({alternation})(?![A-Za-z0-9_.])`?( ?)")
+
+    def swap(m: re.Match) -> str:
+        word = mapping[m.group(2)]
+        before, after = m.string[m.start() - 1:m.start()], m.string[m.end():m.end() + 1]
+        lead = "" if _CJK.match(word[0]) and _CJK.match(before or "x") else m.group(1)
+        tail = "" if _CJK.match(word[-1]) and _CJK.match(after or "x") else m.group(3)
+        return lead + word + tail
+
+    return pattern.sub(swap, text)
 
 
-def explain_diagnose(provider: LlmProvider, report: dict, lang: str) -> tuple[str, int]:
+def explain_diagnose(provider: LlmProvider, report: dict, lang: str, executor=None) -> tuple[str, int]:
     """One tool-less LLM call turning a diagnose report's facts into a short reading
     (the local agent's interpretation layer, ported as an OPT-IN online add-on). Returns
     (text, tokens burned); raises LlmUnavailable / QaFailed like the QA pipeline."""
+    from ..team_evidence import input_requirements
+
+    if any(m["missingFields"] for m in input_requirements(report.get("team") or {})) \
+            or (report.get("analysis") or {}).get("status") == "needs_input":
+        raise QaFailed("diagnose needs input", 0)
+    if executor is not None:
+        from .diagnosis import explain
+        return explain(provider, report, lang, executor)
     trimmed = _diagnose_explain_projection(report, lang)
     # State the complete user team explicitly and FIRST. The richer thinking profile needs
     # the actual sets to explain a plan rather than emitting a generic coverage summary; this
     # is the visitor's own submitted data, not private metagame evidence.
     team = [{k: m.get(k) for k in
-             ("species", "item", "ability", "nature", "moves", "spread")}
+             ("species", "item", "ability", "nature", "moves", "spread", "completeness")}
             for m in ((report.get("team") or {}).get("pokemon") or [])
             if isinstance(m, dict) and m.get("species")]
-    trimmed = {"team": team, **trimmed}
+    fmt = (report.get("team") or {}).get("format")
+    if fmt not in ("single", "double"):
+        raise QaFailed("diagnose format missing", 0)
+    trimmed = {"team": {"format": fmt, "pickSize": 4 if fmt == "double" else 3,
+                        "pokemon": team}, **trimmed}
     thinking = getattr(provider, "thinking_enabled", False)
     report_json = clip_json(trimmed, cap=DIAGNOSE_EXPLAIN_INPUT_BYTES)
     user_content = f"[lang={lang}] [report]{report_json}\n[/report]"
@@ -2037,7 +2709,8 @@ def explain_diagnose(provider: LlmProvider, report: dict, lang: str) -> tuple[st
 
 def answer(pool: Any, provider: LlmProvider, question: str, lang: str,
            on_progress: Callable[[dict], None] | None = None,
-           consume_team_code: Callable[[], None] | None = None) -> dict:
+           consume_team_code: Callable[[], None] | None = None,
+           projection_dir: Path | None = None) -> dict:
     """Run the full pipeline. Returns {"answer", "toolTrace", "grounded", "tokens"} plus the
     metric split the §9 benchmark consumes ("promptTokens"/"completionTokens"/"cacheHitTokens"/
     "llmCalls"/"toolBytes"); raises QaFailed (tokens attached) when the model never produces
@@ -2056,7 +2729,7 @@ def answer(pool: Any, provider: LlmProvider, question: str, lang: str,
     supplied_codes = frozenset(code.upper() for code in team_code_skill().explicit_codes(question))
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"[lang={lang}] {question}"},
+        {"role": "user", "content": f"[lang={lang}] {question}{_population_hint(question)}"},
     ]
     trace: list[dict] = []
     tokens = 0
@@ -2143,10 +2816,12 @@ def answer(pool: Any, provider: LlmProvider, question: str, lang: str,
                 answered.add(key)
                 traced, content = _run_tool(pool, str(fn.get("name") or ""), args,
                                             timeout=min(QA_TOOL_TIMEOUT, rem), budget=rem,
-                                            supplied_codes=supplied_codes,consume_team_code=consume_team_code)
+                                            supplied_codes=supplied_codes, consume_team_code=consume_team_code,
+                                            projection_dir=projection_dir)
                 metrics["toolBytes"] += len(content.encode("utf-8"))
                 if traced is not None:
-                    trace.append({"tool": traced[0], "label": traced[1], "params": traced[2]})
+                    trace.append({"tool": traced[0], "label": traced[1],
+                                  **({"params": traced[2]} if traced[2] is not None else {})})
                     report()
             messages.append({"role": "tool", "tool_call_id": str(tc.get("id") or ""),
                              "content": content})

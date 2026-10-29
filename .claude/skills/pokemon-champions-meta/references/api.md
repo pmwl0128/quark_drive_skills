@@ -8,6 +8,33 @@ contract. This file provides usage guidance and export behavior rather than a se
 
 All query commands accept optional `--season` and `--rule`. If neither is passed, the command uses the current season/rule from `data/current.json`. If only `--rule` is passed, it resolves to the current season if the rule matches, otherwise the latest recorded season for that rule.
 
+### Competitive Top Meta
+
+```bash
+python scripts/meta_query.py topmeta --format double --scope high --pokemon 烈咬陆鲨
+python scripts/meta_query.py topmeta --format single --scope rule --limit 10
+python scripts/meta_query.py topmeta --format double --scope season --pokemon Garchomp --view full
+```
+
+`topmeta` is JSON-only, compact by default. `--limit N` is a positive display limit for summary tables
+and panels (default 6); it preserves population ranks. `--view full` returns untruncated evidence and
+rejects a display limit. `--pokemon` (alias `--species`) or positional names accept trilingual dex
+names. `queries[]` aligns to supplied names, including fuzzy corrections and misses.
+
+The result is `top_meta.v1`: population, scope, partitions, sample, per-panel denominators and tiers,
+thresholds, and `compared_with` with its own clock/window. High scope also carries criteria and
+composition. Season scope only reads the published season; a missing historical table is
+`not_found`, never replaced by the current season. Rule/high compare with the current in-game
+snapshot only within the same rule. `projection.omitted` identifies every truncated table/panel.
+
+The sibling team installation supplies the published table and pure comparison/projection code.
+Absent installation returns `engine_unavailable` (exit 1); a missing table returns `not_found`
+(exit 0). Neither path updates data or substitutes a different population. `data_granularity` is
+`species_aggregate`: Mega-only distributions cannot be reconstructed from these marginals.
+Such a query carries `queries[].error.code:unsupported_mechanic` and exits 1; any other requested
+species' facts remain visible. `available_reference` names a broader population, not an answer to
+the requested Mega-only question.
+
 Ranking:
 
 ```bash
@@ -22,6 +49,20 @@ python scripts/meta_query.py detail --format single --pokemon 雷丘
 python scripts/meta_query.py detail --format double --pokemon garchomp --panel moves --output json
 ```
 
+Inference prior for a calculator case:
+
+```bash
+python scripts/meta_query.py inference-prior --format double --pokemon "Mega Garchomp Z"
+```
+
+`inference-prior` exports the base species' in-game detail panels, keeping only the first ten
+entries in each nature/item/ability panel with usage at least 1%. Names are canonical English;
+percentages remain source percentages, not normalized probabilities. The response includes the
+season, rule, format and detail snapshot clock. Mega queries name the requested form and the
+base species whose panels supplied the prior. These are species-level marginals, not joint build
+frequencies or a Mega-only distribution. The calculator case must apply form-specific legal
+abilities, fixed Mega stone, confirmed facts and its empty-panel fallback itself.
+
 Search by panel entry:
 
 ```bash
@@ -31,6 +72,36 @@ python scripts/meta_query.py search --format both --panel moves --type ground --
 ```
 
 Search options can be combined. `--name` may be repeated and all name terms must match one of the entry fields. `--type` and `--category` filter move metadata when the cache provides it.
+
+Who uses an entry, format comparison, and stored changes:
+
+```bash
+python scripts/meta_query.py who-uses --kind item --entry "Choice Scarf" --format double
+python scripts/meta_query.py compare --pokemon Garchomp --output json
+python scripts/meta_query.py trend --pokemon Garchomp --format single
+python scripts/meta_query.py movers --format double
+python scripts/meta_query.py report --format double
+```
+
+`who-uses` returns the usage top 60 separately from lower-ranked Pokemon, ordered by each
+Pokemon's own panel percentage. That percentage is not the share of all teams. Results below
+1% are counted but not listed; `--limit` controls the top-60 display count. `compare` keeps
+the existing top-name lists and adds each format's own `panel_shares` and `updated_at`.
+Partner percentages may be unknown (`null`); do not interpret that as zero.
+
+`trend` reads the stored rolling refresh history of the requested season. A null rank means
+unranked at that update, and null panel usage means the entry was not listed. Mega requests
+are explicitly mapped to their base species in this species-level history. The panel shifts
+cover the first and last stored updates, not necessarily the whole season; a missing history
+returns `not_found` rather than silently using another season. `movers` uses that same window
+for the current top 30; `last_update` reports counts from the latest update only. These
+views are JSON-only. `movers.omitted` reports rows beyond the display limit. They never
+treat refresh dates as a Top Meta trend.
+
+For structure of observed real teams, run the sibling team skill's
+`python scripts/team.py landscape --game-format double --format json` from its own directory.
+It reports speed control, structural signals, Mega registration and common pairs for one
+format/rule, not the in-game usage population. It has no high-performance sample filter.
 
 KO axis:
 

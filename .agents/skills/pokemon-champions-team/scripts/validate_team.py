@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from team_io import Team, STATS, BuildContext  # noqa: E402
 from dexlink import lookup_pokemon, lookup_items, DexUnavailable  # noqa: E402
 from rules import get_ruleset  # noqa: E402
-from mega import form_base_species  # noqa: E402
+from mega import form_base_species, legal_member_abilities  # noqa: E402
 import team_i18n as i18n  # noqa: E402
 
 
@@ -177,20 +177,10 @@ def validate(team: Team, context: BuildContext | None = None) -> ValidationResul
         facts = {}
         dex_ok = False
 
-    # Mega abilities: a base-form member holding a Mega stone may legally run the MEGA form's ability
-    # (e.g. Charizard @ Charizardite Y with Drought, Metagross @ Metagrossite with Tough Claws). Resolve
-    # each held stone -> Mega form -> that form's abilities, keyed by base species, and allow the
-    # ability to be in (base ∪ mega). Without this, real Mega sets were flagged illegal (the M4
-    # admission gate surfaced this against real tournament teams, 2026-06-22). Species Clause (enforced
-    # below) means at most one member per base species, so keying the allowance by base is safe.
-    # Bind the Mega-ability allowance to the member's OWN held stone, NOT a team-wide union by base
-    # species: keying by base let Charizard @ Charizardite Y borrow Mega Charizard X's Tough Claws off
-    # a teammate's Charizardite X (audit 2026-06-23). A stone enables exactly its Mega form(s).
-    # AND gate it by base species: a stone only grants its Mega form's ability to the species that can
-    # actually Mega-evolve into that form. Without this, Garchomp @ Charizardite Y + Drought passed as
-    # high-confidence valid — a non-Charizard can hold the stone but never becomes Mega Charizard Y, so
-    # it can't have Drought (audit 2026-06-24). Stored as norm(stone) -> [(form base species, abilities)].
-    stone_form_abil: dict[str, list[tuple[str, set[str]]]] = {}
+    # A base+own-stone registration may name either stage's ability. The dex's host
+    # mapping decides which Mega is reachable; Species Clause grouping is insufficient.
+    item_facts: dict[str, dict] = {}
+    form_info: dict[str, dict] = {}
     held_stones = sorted({m.item for m in team.pokemon if m.item})
     if dex_ok and held_stones:
         try:
@@ -198,18 +188,6 @@ def validate(team: Team, context: BuildContext | None = None) -> ValidationResul
             forms = sorted({f for it in item_facts.values() for f in (it.get("required_by") or [])})
             form_info = {f: ff for f, ff in (lookup_pokemon(forms) if forms else {}).items()
                          if ff.get("found")}
-            for stone, it in item_facts.items():
-                entries: list[tuple[str, set[str]]] = []
-                for f in (it.get("required_by") or []):
-                    ff = form_info.get(f)
-                    if not ff:
-                        continue
-                    fbase = _norm(form_base_species(f, ff) or f)
-                    fabil = {_norm(a) for a in (ff.get("abilities") or [])}
-                    if fabil:
-                        entries.append((fbase, fabil))
-                if entries:
-                    stone_form_abil[_norm(stone)] = entries
         except DexUnavailable:
             pass
 
@@ -233,16 +211,13 @@ def validate(team: Team, context: BuildContext | None = None) -> ValidationResul
                             r.err('val_move_illegal', sp=sp, mv=mv)
                 elif m.moves:
                     r.skip('val_skip_learnset_empty', sp=sp)
-                # ability legality (base abilities + the Mega form's abilities for THIS member's stone,
-                # but only when the stone's Mega form shares THIS member's base species — a foreign
-                # stone grants nothing, see stone_form_abil above).
+                # Shared with correction suggestions: exact host + held stone, not base group.
                 base = form_base_species(sp, fact) or sp
-                abil = {_norm(x) for x in fact.get("abilities", [])}
-                mega_ab: set[str] = set()
-                for fbase, fabil in (stone_form_abil.get(_norm(m.item), []) if m.item else []):
-                    if fbase == _norm(base):
-                        mega_ab |= fabil
-                allowed = abil | mega_ab
+                own_item = item_facts.get(m.item) or {}
+                canonical_item = own_item.get("name") or m.item
+                allowed = {_norm(a) for a in legal_member_abilities(
+                    fact.get("name") or sp, canonical_item, fact,
+                    {canonical_item: own_item}, form_info)}
                 if m.ability and allowed and _norm(m.ability) not in allowed:
                     r.err('val_ability_illegal', sp=sp, ability=m.ability)
                 # mega item match
@@ -275,6 +250,8 @@ def validate(team: Team, context: BuildContext | None = None) -> ValidationResul
             if dups:
                 r.err('val_dup_moves', sp=sp, dups=', '.join(dups))
 
+        if not m.spread:
+            r.warn('val_sp_missing', sp=sp)
         # SP caps (dex-independent, definitive)
         if m.spread:
             # Shape first: an unknown key ("speed"), a non-int value, or a negative would either

@@ -29,6 +29,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from query_identity import corrections
+
 import team_i18n as i18n
 from typechart import TYPES
 from diagnose import _ROLE_MOVES, _ROLE_LABELS   # the functional-role taxonomy fill matches need.role against
@@ -57,10 +59,12 @@ FIELD_STATUS: dict[str, dict[str, str]] = {
     "keep_mega":     {"status": "enforced_by_skill", "consumer": "select marks the matching mega_option user_keep + echoes matched:false"},
     "mega_posture":  {"status": "enforced_by_skill", "consumer": "slate-evaluate checks candidate registered-Mega count against explicit none/single/multi intent; environment uses the frame's observed registration distribution"},
     "benchmarks":    {"status": "enforced_by_skill", "consumer": "tune SP cliffs (the viability floor — height is the user's)"},
+    "goals":         {"status": "enforced_by_skill", "consumer": "slate appends answer targets to its battery and reports exact-form inclusion and observed CHECK floors; descriptive, never an elimination rule"},
     "need":          {"status": "enforced_by_skill", "consumer": "fill gap spec"},
     "replace":       {"status": "enforced_by_skill", "consumer": "replace impact diff"},
     "direct_final":   {"status": "enforced_by_skill", "consumer": "checkpoint suppresses the pause contract when the user explicitly delegated final convergence"},
     "skip_checkpoint": {"status": "enforced_by_skill", "consumer": "checkpoint suppresses the pause contract when the user explicitly requested no mid-build pause"},
+    "checkpoint_required": {"status": "enforced_by_skill", "consumer": "checkpoint asks for intermediate candidate, confidence or adoption choices only when the user requests that steering"},
     "frame_required": {"status": "enforced_by_skill", "consumer": "slate-evaluate refuses a build-flow slate without --frame-output; answer-audit backstops missing frame receipts"},
     "meta_conformance": {"status": "enforced_by_skill", "consumer": "landscape observed_cores + fill candidate VIEW order; slate disables observed-registration deviation gates for off_meta — never a score"},
     "variance_tolerance": {"status": "enforced_by_skill", "consumer": "diagnose luck_lines fact (sub-100%-accuracy damaging moves from dex accuracy) — surfaced either way; averse FLAGS them, never a score"},
@@ -197,7 +201,8 @@ def _collect_names(ctx: dict[str, Any], avoid_species_side: list[str]) -> list[s
     for b in ctx["benchmarks"]:
         if isinstance(b.get("member"), str):
             names.append(b["member"])
-        if isinstance(b.get("vs"), str):            # vs may be a raw Speed int — ints are not names
+        if isinstance(b.get("vs"), str) and not (b.get("kind") == "outspeed"
+                                                and b["vs"].strip().lstrip("+").isdigit()):
             names.append(b["vs"])
     if isinstance(ctx["replace"].get("member"), str):
         names.append(ctx["replace"]["member"])
@@ -226,6 +231,8 @@ def context_fingerprint(raw_ctx: Any, env: dict[str, Any] | None) -> str:
 def audit(ctx: dict[str, Any], team: dict[str, Any] | None, *,
           resolve_fn: Callable[[list[str]], dict[str, dict]],
           item_fn: Callable[[list[str]], dict[str, dict]] | None = None,
+          normalize_fn: Callable | None = None,
+          battle_team_fn: Callable | None = None,
           contract_errors: list[dict] | None = None,
           env: dict[str, Any] | None = None) -> dict[str, Any]:
     """Classify the structured intent into facts + three-level gaps. Pure given resolve_fn/item_fn.
@@ -239,7 +246,12 @@ def audit(ctx: dict[str, Any], team: dict[str, Any] | None, *,
     `env` is the resolved environment stamp."""
     contract_errors = contract_errors or []
     raw_ctx = ctx                         # the receipt fingerprints the INPUT as written, pre-sanitize
+    nested_flags, nested_errors = [], []
+    if normalize_fn:
+        ctx, nested_flags, nested_errors = normalize_fn(ctx if isinstance(ctx, dict) else {})
     ctx = _safe(ctx)
+    if team and battle_team_fn:
+        team = battle_team_fn(team)
     team_members = [m.get("species") for m in ((team or {}).get("pokemon") or [])
                     if isinstance(m, dict) and m.get("species")]
     # avoid: item side first (same split as the loader; item hits are facts, not species misses).
@@ -254,10 +266,13 @@ def audit(ctx: dict[str, Any], team: dict[str, Any] | None, *,
 
     # --- name resolution facts (P1 canonicalization made these silent-safe; the audit SURFACES them:
     # ambiguity/typo = a targeted single question, per 模糊请求 §conflict) -----------------------------
-    unresolved: list[dict[str, Any]] = []
+    unresolved: list[dict[str, Any]] = [
+        {**e, "name_kind": e.get("kind"),
+         "kind": "ambiguous_name" if e.get("match_type") == "ambiguous" else "unresolved_name"}
+        for e in nested_errors]
     for n in unique_names:
         r = _rec(records, n)
-        if not r or (r.get("ok") and r.get("canonical")):
+        if not r or (r.get("ok") and r.get("canonical")) or any(e["query"] == n for e in unresolved):
             continue
         unresolved.append({
             "query": n,
@@ -443,6 +458,7 @@ def audit(ctx: dict[str, Any], team: dict[str, Any] | None, *,
         "missing_required": missing_required,
         "conflicts": conflicts,
         "unresolved_names": unresolved,
+        "name_resolution": corrections({("pokemon", name): record for name, record in records.items()}) + nested_flags,
         "safe_defaults": safe_defaults,
         "gaps": gaps,
         "audit_receipt": {

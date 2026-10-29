@@ -32,6 +32,10 @@ class ChatResult:
     # doesn't report it.
     cache_hit_tokens: int = 0
     cache_miss_tokens: int = 0
+    reasoning_tokens: int | None = None  # subset of completion_tokens, never added to the bill twice
+    finish_reason: str | None = None
+    usage_known: bool = True
+    model: str | None = None
 
 
 class LlmProvider(Protocol):
@@ -250,7 +254,12 @@ class OpenAICompatibleProvider:
         details = usage.get("prompt_tokens_details") or {}
         hit = int(usage.get("prompt_cache_hit_tokens") or details.get("cached_tokens") or 0)
         miss = int(usage.get("prompt_cache_miss_tokens") or (prompt - hit if details else 0))
-        return ChatResult(message, prompt, int(usage.get("completion_tokens") or 0), hit, miss)
+        reasoning = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+        return ChatResult(message, prompt, int(usage.get("completion_tokens") or 0), hit, miss,
+                          reasoning_tokens=int(reasoning) if reasoning is not None else None,
+                          finish_reason=doc["choices"][0].get("finish_reason"),
+                          usage_known="prompt_tokens" in usage and "completion_tokens" in usage,
+                          model=doc.get("model") or cfg.model)
 
 
 @dataclass(frozen=True)
@@ -447,7 +456,10 @@ class AnthropicMessagesProvider:
         cache_create = int(usage.get("cache_creation_input_tokens") or 0)
         input_tokens = int(usage.get("input_tokens") or 0) + cache_hit + cache_create
         return ChatResult(message, input_tokens, int(usage.get("output_tokens") or 0),
-                          cache_hit, int(usage.get("input_tokens") or 0) + cache_create)
+                          cache_hit, int(usage.get("input_tokens") or 0) + cache_create,
+                          finish_reason=doc.get("stop_reason"),
+                          usage_known="input_tokens" in usage and "output_tokens" in usage,
+                          model=doc.get("model") or cfg.model)
 
 
 class FallbackProvider:
@@ -532,6 +544,15 @@ def _is_own_mega_stone(species: str, item: str) -> bool:
     return species in hosts or species.removeprefix("Mega ") in hosts
 
 
+@lru_cache(maxsize=1)
+def _species_clause_groups() -> dict[str, str]:
+    """Dex grouping includes lettered Mega forms and regional forms alike."""
+    db = SKILLS_ROOT / "pokemon-champions-dex" / "data" / "champions_dex.sqlite"
+    with sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True) as connection:
+        return {name: base or name for name, base in connection.execute(
+            "select canonical, base_species from pokemon")}
+
+
 def _echo_builder_reply(messages: list[dict]) -> str | None:
     """A grounded deterministic candidate for zero-cost release/browser rehearsals.
 
@@ -557,9 +578,13 @@ def _echo_builder_reply(messages: list[dict]) -> str | None:
     skeletons = [row for row in (payload.get("skeletons") or []) if isinstance(row, dict)]
     constraints = payload.get("constraints") if isinstance(payload.get("constraints"), dict) else {}
     wanted: list[str] = []
+    groups = _species_clause_groups()
+
+    def base_name(species: str) -> str:
+        return groups.get(species, species)
 
     def want(name: object) -> None:
-        if isinstance(name, str) and name and name not in wanted:
+        if isinstance(name, str) and name and all(base_name(n) != base_name(name) for n in wanted):
             wanted.append(name)
 
     locked = [name for name in (constraints.get("locked") or [])
@@ -568,12 +593,12 @@ def _echo_builder_reply(messages: list[dict]) -> str | None:
         want(name)
     # Reserve the two Mega slots before broad skeleton/ranking fill. A future frame with six core
     # candidates must not crowd all Megas out of the deterministic release rehearsal.
-    locked_bases = {name.removeprefix("Mega ") for name in locked}
+    locked_bases = {base_name(name) for name in locked}
     for option in mega_options:
         if len([name for name in wanted if name.startswith("Mega ")]) >= 2:
             break
         species = option.get("species")
-        if isinstance(species, str) and species.removeprefix("Mega ") not in locked_bases:
+        if isinstance(species, str) and base_name(species) not in locked_bases:
             want(species)
     for skeleton in skeletons[:1]:
         for candidate in skeleton.get("core_candidates") or []:
@@ -593,9 +618,6 @@ def _echo_builder_reply(messages: list[dict]) -> str | None:
     used_items: set[str] = set()
     used_bases: set[str] = set()
     members: list[dict] = []
-
-    def base_name(species: str) -> str:
-        return species.removeprefix("Mega ")
 
     for species in wanted:
         if len(members) >= 6 or base_name(species) in used_bases:
@@ -643,6 +665,12 @@ class EchoProvider:
 
     def chat(self, messages: list[dict], tools: list[dict], *, max_tokens: int,
              tool_choice: str, timeout: float) -> ChatResult:
+        if any("DIAGNOSIS_TOOL_WORKFLOW" in str(m.get("content") or "")
+               for m in messages if m.get("role") == "system"):
+            return ChatResult({"role": "assistant", "content": json.dumps({
+                "overview": "Echo rehearsal: current team facts were read without a model.",
+                "plan": "No tactical plan or configuration change was verified in this rehearsal.",
+                "priorities": []})}, model="echo")
         if any("team-assembly engine" in str(message.get("content") or "")
                for message in messages if message.get("role") == "system"):
             reply = _echo_builder_reply(messages)

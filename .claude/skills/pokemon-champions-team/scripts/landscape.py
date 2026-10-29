@@ -31,6 +31,8 @@ import team_profile
 import team_i18n as i18n
 from mega_facts import mega_slot_distribution
 from repset import MIN_SAMPLE
+import query_identity
+import topmeta
 
 # Below this many observed teams the distributions are too sparse to read as norms — flagged, never
 # silently served as solid (mirrors repset's per-species honesty, at library scale).
@@ -42,15 +44,35 @@ MAX_CORES = 20
 ASPECTS = ("offense", "defense")
 
 
+def high_sample(teams: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Select published joint records by the shared performance bar, without inventing identities.
+
+    The caller supplies native current-rule rows only. Public rows cannot reproduce Top Meta's
+    private cross-partition player dedup, so the counting unit remains a shipped library record.
+    """
+    selected = []
+    composition = Counter({tier: 0 for tier in topmeta.HIGH_TIERS})
+    for team in teams:
+        tier = topmeta.high_tier((team.get("provenance") or {}).get("performance"))
+        if tier is not None:
+            selected.append(team)
+            composition[tier] += 1
+    return selected, {
+        "scope": "high", "sample_unit": "shipped_team_record",
+        "criteria": topmeta.high_criteria(), "composition": dict(composition),
+        "examined_records": len(teams), "eligible_records": len(selected),
+        "excluded_records": len(teams) - len(selected),
+        "cross_partition_identity_dedup": False, "handover_included": False,
+        "same_counting_units_as_topmeta": False,
+    }
+
+
 def _team_species(team: dict[str, Any]) -> list[str]:
     return sorted({m.get("species") for m in team.get("pokemon", []) if m.get("species")})
 
 
 def _matches(team: dict[str, Any], flt: dict[str, Any]) -> bool:
-    """A filter entry {species, item?} matches when some member runs that species — holding that item
-    when one is given. The item lets a doubles Mega be filtered as its library encoding (BASE species
-    + stone), mirroring repset's format-aware resolution (external audit 2026-07-02: a 'Mega X' name
-    matched zero doubles teams because the library never stores that species string)."""
+    """Exact battle-form membership, optionally qualified by a held item. Project both sides first."""
     return any(m.get("species") == flt["species"]
                and (not flt.get("item") or m.get("item") == flt["item"])
                for m in team.get("pokemon", []))
@@ -67,14 +89,16 @@ def landscape_from_teams(teams: list[dict[str, Any]], *, fmt: str,
                          max_cores: int = MAX_CORES,
                          aspects: list[str] | None = None) -> dict[str, Any]:
     """Aggregate structural distributions over `teams` (one format's real library). Pure given the
-    injected fact tables; `filter_members` ({species, item?} entries — item = the doubles-Mega stone
-    isolation) narrows observed_cores to teams matching ALL of them. `aspects` opts into the full
+    injected fact tables; `filter_members` ({species, item?} entries) narrows observed_cores to teams
+    matching ALL actual forms. `aspects` opts into the full
     offense/defense presence distributions (see ASPECTS)."""
     aspects = [a for a in (aspects or []) if a]
     bad = sorted(set(aspects) - set(ASPECTS))
     if bad:
         raise ValueError(f"unknown landscape aspect(s): {', '.join(bad)}; "
                          f"allowed: {', '.join(ASPECTS)}")
+    teams, identities = query_identity.battle_view(teams, filter_members, dex_fn=dex_fn, item_fn=item_fn)
+    filter_members = [{**f, "species": identities(f) or "\0UNRESOLVED_FORM"} for f in filter_members or []]
     sample = len(teams)
     profiles = [team_profile.profile(t, dex_fn=dex_fn, move_fn=move_fn, item_fn=item_fn)
                 for t in teams]
@@ -205,6 +229,7 @@ def landscape_from_teams(teams: list[dict[str, Any]], *, fmt: str,
                      "instead.")
     return {
         "kind": "landscape",
+        "identity_basis": "dex_battle_form", "identity_gaps": identities.gaps,
         "format": fmt,
         "sample_count": sample,
         "source_kind": "observed_real_teams",
@@ -227,6 +252,15 @@ def landscape_from_teams(teams: list[dict[str, Any]], *, fmt: str,
 
 def format_landscape_md(d: dict[str, Any]) -> str:
     lines = [i18n.t('land_header', fmt=d["format"], n=d["sample_count"], conf=d["confidence"])]
+    population = d.get("population") or {}
+    if population.get("scope") == "high":
+        criteria = population["criteria"]
+        lines.append(i18n.t('land_high_sample', n=d["sample_count"],
+                            total=population["examined_records"],
+                            placing=criteria["tournament_top8"]["placing_at_most"],
+                            field=criteria["tournament_top8"]["field_size_at_least"],
+                            rank=criteria["ladder_top"]["rank_at_most"],
+                            rating=criteria["ladder_top"]["or_rating_at_least"]))
     if d.get("thin"):
         lines.append("> ⚠️ " + i18n.t('land_thin', n=d["sample_count"], bar=THIN_BAR))
     lines.append(f"\n## {i18n.t('land_modes')}")

@@ -70,6 +70,7 @@ import team_profile
 import team_i18n as i18n
 from canonhash import content_hash as _content_hash
 from landscape import THIN_BAR, _matches, _team_species, _filter_label
+import query_identity
 from mega_facts import OBSERVED_NORM_MIN_SAMPLE, mega_slot_distribution
 from repset import MIN_SAMPLE, representative_sets_from_teams
 
@@ -101,7 +102,7 @@ def frame_fingerprint(audit_fp: str | None, skeletons: list[dict[str, Any]],
     skeletons + anchor + format. Extracted so the slate gate RECOMPUTES the same construction from the
     saved frame output (tamper-evident: an edited skeleton — e.g. a widened core cluster to sneak an
     ungrounded set past the binding — will not reproduce this fingerprint)."""
-    return _content_hash({"audit": audit_fp,
+    return _content_hash({"audit": audit_fp, "identity_basis": "dex_battle_form",
                           "skeletons": [_content_hash(s, 16) for s in skeletons],
                           "anchor": sorted(anchor or []), "format": fmt}, 24)
 
@@ -112,6 +113,7 @@ def make_receipt(audit_fp: str | None, skeletons: list[dict[str, Any]],
     fingerprint is tamper-evident (recomputed by slate from the saved frame output)."""
     return {
         "kind": "frame_receipt",
+        "identity_basis": "dex_battle_form",
         "fingerprint": frame_fingerprint(audit_fp, skeletons, anchor, fmt),
         "framed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "audit_fingerprint": audit_fp,
@@ -230,6 +232,10 @@ def _grounding_for(species: str, fmt: str, group_teams: list[dict[str, Any]],
                 "primary": {k: primary.get(k) for k in
                             ("item", "ability", "nature", "moves", "sps", "spread_origin",
                              "share", "coverage", "confidence")},
+                **({"configuration_basis": primary["configuration_basis"],
+                    "registration_modes": primary["registration_modes"],
+                    "registration_sample": primary["registration_sample"]}
+                   if primary.get("registration_modes") else {}),
                 "clusters": clusters,               # the (item,ability) pairs the binding accepts as grounded
                 "set_source": src,
                 "grounding_ref": ref,
@@ -410,8 +416,8 @@ def _skeleton(sig: tuple[str, ...], group: list[tuple[dict, dict]], *, fmt: str,
 def _anchor_entry(member: dict[str, Any], fmt: str, all_teams: list[dict[str, Any]],
                   meta_fn: Callable[[str], dict | None] | None) -> dict[str, Any]:
     """A fallback skeleton's anchor slot. Nothing co-occurs with it (that is why we are here), so the
-    share fields are empty facts rather than invented ones; its own repset is still tried, since an
-    anchor form can be stored under a name the pool filter did not match."""
+    share fields are empty facts rather than invented ones; its own exact-form repset is still tried
+    against the wider evidence pool."""
     sp = member["species"]
     grounding = _grounding_for(sp, fmt, [], all_teams, member.get("item"))
     prim = (grounding or {}).get("primary") or {}
@@ -497,6 +503,7 @@ def _fallback_skeletons(resolved: dict[str, Any], anchor_members: list[dict[str,
     source, pool = resolved.get("source"), resolved.get("pool") or []
     # A pool outside the current library brings its own prefetched fact tables (team.py).
     dex_fn, move_fn, item_fn = resolved.get("fact_fns") or (dex_fn, move_fn, item_fn)
+    pool, _ = query_identity.battle_view(pool, filter_members, dex_fn=dex_fn, item_fn=item_fn)
     common = dict(fmt=fmt, dex_fn=dex_fn, move_fn=move_fn, item_fn=item_fn, order=order,
                   meta_fn=meta_fn)
     if source == "history":
@@ -526,11 +533,13 @@ def frame_from_teams(teams: list[dict[str, Any]], *, fmt: str,
                      ) -> dict[str, Any]:
     """Build grounded skeletons over `teams` (one format's real library). Pure given the injected fact
     tables + optional `meta_fn` (auxiliary marginals only). `filter_members` ({species, item?} — item =
-    the doubles-Mega stone isolation, landscape's rule) narrows to the anchor pool; empty = the generic
+    optional held-item isolation) narrows to the exact actual-form anchor pool; empty = the generic
     (whole-library) build. `order` = the meta_conformance knob (common_first | rare_first).
     `fallback_fn(filter_members)` -> the resolved fallback-table recipe ({source, pool, ...}) or
     None; read only when the anchor pool is empty (the fallback ladder, module docstring)."""
-    filter_members = [f for f in (filter_members or []) if f.get("species")]
+    teams, identities = query_identity.battle_view(teams, filter_members, dex_fn=dex_fn, item_fn=item_fn)
+    filter_members = [{**f, "species": identities(f) or "\0UNRESOLVED_FORM"}
+                      for f in (filter_members or []) if f.get("species")]
     anchor_labels = [_filter_label(f) for f in filter_members]
     anchor_species = {f["species"] for f in filter_members}
 
@@ -653,6 +662,7 @@ def frame_from_teams(teams: list[dict[str, Any]], *, fmt: str,
                      "emitted for them) — not silently merged into a shown frame.")
     return {
         "kind": "frame",
+        "identity_basis": "dex_battle_form", "identity_gaps": identities.gaps,
         "format": fmt,
         "anchor": anchor_labels or None,
         "order": order,
@@ -735,6 +745,8 @@ def format_frame_md(d: dict[str, Any]) -> str:
                              f"{i18n.t('frame_within_group')} {cc['within_group_share']}) {gset}{src}")
                 lines.append(f"    - {i18n.t('frame_set_guidance')}: {moves}{sp_s} · "
                              f"{i18n.t('confidence')} {cc['confidence']}")
+                if note := query_identity.registration_note(g):
+                    lines.append(f"    - {note}")
             else:
                 lines.append(f"- **{cc['species']}** ({cc['role']}, "
                              f"{i18n.t('frame_within_group')} {cc['within_group_share']}) — "

@@ -17,7 +17,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import team_i18n as i18n
-from rules import SPREAD_STAT_KEYS
+from rules import SPREAD_STAT_KEYS, get_ruleset
+from stat_keys import canonical_spread
 
 # --- versioning -------------------------------------------------------------
 SCHEMA_VERSION = 1                      # the version this skill emits
@@ -49,7 +50,7 @@ MEMBER_FIELDS = {"species", "name", "item", "ability", "moves", "attacks", "natu
 CONTEXT_FIELDS = {"season", "rule", "format", "locked", "owned_only", "owned", "wants",
                   "keep_mega", "mega_posture", "avoid", "avoid_soft", "prefer", "exclude_tactics", "meta_conformance", "style_lean",
                   "variance_tolerance", "benchmarks", "need", "replace", "direct_final", "skip_checkpoint",
-                  "frame_required"}
+                  "frame_required", "checkpoint_required", "goals"}
 # The posture knob's values (proven = common-first views, off_meta = rare-first). A VIEW ordering
 # consumed by landscape; never a score.
 META_CONFORMANCE = {"proven", "off_meta"}
@@ -171,6 +172,10 @@ def _check_member(m: Any, path: str, out: list[ContractError]) -> None:
         if not isinstance(sp, dict):
             _err(out, Code.TYPE, f"{path}.spread", i18n.Msg('ct_spread_object'))
         else:
+            try:
+                sp = canonical_spread(sp)
+            except ValueError as exc:
+                _err(out, Code.TYPE, f"{path}.spread", str(exc))
             for k, v in sp.items():
                 if k not in STAT_KEYS:
                     _warn(out, Code.UNKNOWN_FIELD, f"{path}.spread.{k}", i18n.Msg('ct_unknown_stat', k=k))
@@ -200,7 +205,7 @@ def check_context(d: Any) -> list[ContractError]:
         _err(out, Code.ENUM, "format", i18n.Msg('ct_format_enum', allowed=sorted(FORMATS), got=fmt))
     if d.get("owned_only") is not None and not isinstance(d.get("owned_only"), bool):
         _err(out, Code.TYPE, "owned_only", i18n.Msg('ct_owned_only_bool'))
-    for key in ("direct_final", "skip_checkpoint", "frame_required"):
+    for key in ("direct_final", "skip_checkpoint", "frame_required", "checkpoint_required"):
         if d.get(key) is not None and not isinstance(d.get(key), bool):
             _err(out, Code.TYPE, key, i18n.Msg('ct_bool', k=key))
     # keep_mega is a NAME (species / Mega form) — it gets dex-canonicalized on load and fed to the
@@ -237,6 +242,22 @@ def check_context(d: Any) -> list[ContractError]:
                     _err(out, Code.ENUM, "exclude_tactics",
                          i18n.Msg('ct_exclude_tactics_enum', tok=tok, allowed=sorted(EXCLUDE_TACTICS)))
     benches = d.get("benchmarks")
+    goals = d.get("goals")
+    if goals is not None:
+        if not isinstance(goals, list):
+            _err(out, Code.TYPE, "goals", "goals must be a list of {kind:answer|include, species}")
+        else:
+            for i, goal in enumerate(goals):
+                path = f"goals[{i}]"
+                if not isinstance(goal, dict):
+                    _err(out, Code.TYPE, path, "goal must be {kind:answer|include, species}")
+                    continue
+                for key in set(goal) - {"kind", "species"}:
+                    _err(out, Code.UNKNOWN_FIELD, f"{path}.{key}", "unsupported goal field")
+                if goal.get("kind") not in ("answer", "include"):
+                    _err(out, Code.ENUM, path + ".kind", "goal kind must be answer or include")
+                if not _is_str(goal.get("species")) or not goal["species"].strip():
+                    _err(out, Code.TYPE, path + ".species", "goal species must be a nonempty Pokemon name")
     if benches is not None:
         if not isinstance(benches, list):
             _err(out, Code.TYPE, "benchmarks", i18n.Msg('ct_benchmarks_list'))
@@ -274,7 +295,7 @@ def check_replace(r: Any, path: str = "replace") -> list[ContractError]:
     return out
 
 
-NEED_FIELDS = {"resist", "offense_type", "role", "min_speed", "coverage_move_type"}
+NEED_FIELDS = {"resist", "offense_type", "role", "min_speed", "coverage_move_type", "answer"}
 
 
 def check_need(n: Any, path: str = "need") -> list[ContractError]:
@@ -290,6 +311,11 @@ def check_need(n: Any, path: str = "need") -> list[ContractError]:
         if v is not None and not (_is_str(v) or (isinstance(v, list) and all(_is_str(x) for x in v))):
             _err(out, Code.TYPE, f"{path}.{key}", i18n.Msg('ct_string_or_list', key=key))
     ms = n.get("min_speed")
+    if "answer" in n:
+        value = n["answer"]
+        if not ((isinstance(value, str) and value.strip()) or
+                (isinstance(value, list) and value and all(isinstance(x, str) and x.strip() for x in value))):
+            _err(out, Code.TYPE, f"{path}.answer", "answer must be a nonempty Pokemon name/variant id or list")
     if ms is not None and not _is_int(ms):
         _err(out, Code.TYPE, f"{path}.min_speed", i18n.Msg('ct_min_speed_int'))
     return out
@@ -355,6 +381,51 @@ def check_benchmark(b: Any, path: str = "benchmark") -> list[ContractError]:
     for set_field in ("attacker_set", "opponent_set"):
         if b.get(set_field) is not None and not isinstance(b.get(set_field), dict):
             _err(out, Code.TYPE, f"{path}.{set_field}", f"{set_field} must be an object")
+        elif isinstance(b.get(set_field), dict):
+            # The target's identity comes only from `vs`; arbitrary calc fields must not override it.
+            allowed = {"ability", "item", "nature", "spread", "sps", "moves", "boosts", "status"}
+            for key in b[set_field].keys() - allowed:
+                _err(out, Code.TYPE, f"{path}.{set_field}.{key}",
+                     "unsupported opponent-set field; identity is supplied only by vs")
+            for field in ("ability", "item", "nature"):
+                if b[set_field].get(field) is not None and not _is_str(b[set_field][field]):
+                    _err(out, Code.TYPE, f"{path}.{set_field}.{field}", f"{field} must be a name or null")
+            if "moves" in b[set_field] and (not isinstance(b[set_field]["moves"], list)
+                                             or any(not _is_str(m) for m in b[set_field]["moves"])):
+                _err(out, Code.TYPE, f"{path}.{set_field}.moves", "moves must be a list of names")
+            if "boosts" in b[set_field] or "status" in b[set_field]:
+                if kind == "outspeed":
+                    _err(out, Code.TYPE, f"{path}.{set_field}", "outspeed does not model opponent boosts/status")
+                state = {k: b[set_field][k] for k in ("boosts", "status") if k in b[set_field]}
+                _check_member_state(state, "survive", f"{path}.{set_field}", out)
+            normalized = {}
+            for field in ("spread", "sps"):
+                raw = b[set_field].get(field)
+                if raw is None:
+                    continue
+                where = f"{path}.{set_field}.{field}"
+                if not isinstance(raw, dict):
+                    _err(out, Code.TYPE, where, "SP allocation must be an object")
+                    continue
+                try:
+                    spread = canonical_spread(raw)
+                except ValueError as exc:
+                    _err(out, Code.TYPE, where, str(exc))
+                    continue
+                normalized[field] = spread
+                rs = get_ruleset()
+                for key, value in spread.items():
+                    if key not in STAT_KEYS:
+                        _err(out, Code.ENUM, f"{where}.{key}", "unknown SP stat; use hp/atk/def/spa/spd/spe")
+                    elif not _is_int(value):
+                        _err(out, Code.TYPE, f"{where}.{key}", "SP must be an integer")
+                    elif not 0 <= value <= rs.sp_per_stat_cap:
+                        _err(out, Code.RANGE, f"{where}.{key}", f"SP must be 0..{rs.sp_per_stat_cap}")
+                if all(_is_int(v) for v in spread.values()) and sum(spread.values()) > rs.sp_total_cap:
+                    _err(out, Code.RANGE, where, f"SP total exceeds {rs.sp_total_cap}")
+            if len(normalized) == 2 and any(normalized["spread"].get(k, 0) != normalized["sps"].get(k, 0)
+                                            for k in set(normalized["spread"]) | set(normalized["sps"])):
+                _err(out, Code.TYPE, f"{path}.{set_field}", "spread and sps disagree; supply one allocation")
     _check_member_state(b.get("member_state"), kind, f"{path}.member_state", out)
     conds = b.get("conditions")
     if conds is not None:

@@ -1,5 +1,6 @@
 /** Diagnostic facts and their evidence views; input, jobs and persistence stay in DiagnoseTab. */
-import type { DiagnoseFactsDto } from "@pokemon-champions/protocol";
+import type { DiagnoseFactsDto, DiagnosisChangeCardDto } from "@pokemon-champions/protocol";
+import { ChangeCards } from "./ChangeCards.tsx";
 import { createContext, memo, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { EntityHover } from "../../../components/EntityHover.tsx";
 import { TypeBadge } from "../../../components/TypeBadge.tsx";
@@ -147,14 +148,18 @@ function CheckRowDetail({ row, team, format }: {
             <div className="md-line md-caveat">
               {t("matchup.ourKo")}: {damageText.name(cell.offense.move)}{" "}
               <span className="num">{cell.offense.minPercent}–{cell.offense.maxPercent}%</span>
-              {" · "}{damageText.ko(offenseKoChanceDiag(cell.offense))}
+              {" · "}{cell.offense.koCaveats?.length || cell.offense.disguiseAdjusted || !cell.offense.koExact
+                ? t("diag.rawDamage") : damageText.ko(offenseKoChanceDiag(cell.offense))}
+              {cell.offense.koCaveats?.map((c, i) => <p key={i}>{damageText.caveat(c)}</p>)}
             </div>
           )}
           {cell.incoming && (
             <div className="md-line md-caveat">
               {t("matchup.incoming")}: {damageText.name(cell.incoming.move)}{" "}
               <span className="num">{cell.incoming.minPercent}–{cell.incoming.maxPercent}%</span>
-              {" · "}{damageText.ko(offenseKoChanceDiag(cell.incoming))}
+              {" · "}{cell.incoming.koCaveats?.length || cell.incoming.disguiseAdjusted || !cell.incoming.koExact
+                ? t("diag.rawDamage") : damageText.ko(offenseKoChanceDiag(cell.incoming))}
+              {cell.incoming.koCaveats?.map((c, i) => <p key={i}>{damageText.caveat(c)}</p>)}
             </div>
           )}
           <div className="md-line md-caveat num">
@@ -430,7 +435,7 @@ function ModePressure({ report }: { report: DiagnoseFactsDto }) {
   );
 }
 
-function ReportView({ report }: { report: DiagnoseFactsDto }) {
+function ReportView({ report, onAdopt }: { report: DiagnoseFactsDto; onAdopt?: (card: DiagnosisChangeCardDto) => void }) {
   const t = useAssistT();
   const navigate = useNavigate();
   const prose = useProseRenderer();
@@ -447,6 +452,7 @@ function ReportView({ report }: { report: DiagnoseFactsDto }) {
   const errorIssues = issues.filter((i) => i.severity === "error");
   const noticeIssues = issues.filter((i) => i.severity !== "error");
   const bare = speciesOnlyCount(report.team);
+  const needsInput = report.analysis?.status === "needs_input";
   const megaHolders = useMegaHolders(report.team);
   const allCheckRows = report.checks?.byOpponent ?? [];
   const visibleCheckRows = showAllChecks ? allCheckRows : allCheckRows.slice(0, 10);
@@ -501,9 +507,22 @@ function ReportView({ report }: { report: DiagnoseFactsDto }) {
   return (
     <MemberSets.Provider value={memberOf}>
       <div className="panel result-panel builder-result">
-        {bare.some && (
+        {bare.some && !report.analysis && (
           <p className="notice diag-partial">{t("diag.partial")}</p>
         )}
+        {needsInput && <section className="notice diag-partial diag-needs-input" role="status">
+          <h2>{t("diag.needsInput")}</h2>
+          <p>{t("diag.needsInput.note")}</p>
+          <ul>{report.analysis!.members.filter((m) => m.missingFields.length > 0).map((m) => <li key={m.slot}>
+            <SpeciesChips names={[m.species]} />{" · "}
+            {m.missingFields.map((f) => t(`diag.missing.${f}`)).join(" / ")}
+          </li>)}</ul>
+        </section>}
+        {report.analysis?.goal && <p>{t("diag.goal.label")}: {report.analysis.goal}</p>}
+        {!!report.analysis?.lockedSlots.length && <p>{t("diag.locked")}:{" "}
+          <SpeciesChips names={report.analysis.members.filter((m) => report.analysis!.lockedSlots.includes(m.slot))
+            .map((m) => m.species)} />
+        </p>}
         {errorIssues.length > 0 ? (
           <ul className="diag-errors">
             {errorIssues.map((issue, i) => <li key={i}>{prose(issueText(issue))}</li>)}
@@ -541,6 +560,7 @@ function ReportView({ report }: { report: DiagnoseFactsDto }) {
       </div>
       <Summary report={report} />
       <div className="diag-grid">
+      {report.assistance && <ChangeCards assistance={report.assistance} format={teamFormat} onAdopt={onAdopt} />}
 
       {/* Opt-in LLM reading — a decorated aside; the deterministic report stands alone. */}
       {report.explanation && (
@@ -554,7 +574,7 @@ function ReportView({ report }: { report: DiagnoseFactsDto }) {
       {report.explanationError === "budget_exhausted" && (
         <p className="notice" role="status">{t("budget.explainPaused")}</p>
       )}
-      {report.explanationError && report.explanationError !== "budget_exhausted" && (
+      {report.explanationError && !["budget_exhausted", "needs_input"].includes(report.explanationError) && (
         <p className="notice qa-error">
           {t(report.explanationError === "rate_limited"
             ? "diag.explainError.limit" : "diag.explainError.generic")}
@@ -703,6 +723,7 @@ function ReportView({ report }: { report: DiagnoseFactsDto }) {
           <div className="diag-col">
             <div className="panel builder-result diag-section">
               <h2>{t("diag.speed")}</h2>
+              {report.speed.order.length === 0 && <p className="muted">{t("diag.needsInput.short")}</p>}
               <ol className="diag-speed">
                 {(() => {
                   const top = Math.max(1, ...report.speed.order.map((o) => o.speed ?? 0));
@@ -724,6 +745,7 @@ function ReportView({ report }: { report: DiagnoseFactsDto }) {
       ) : (
       <div className="panel builder-result diag-section wide">
         <h2>{t("diag.speed")}</h2>
+        {report.speed.order.length === 0 && <p className="muted">{t("diag.needsInput.short")}</p>}
         <ol className="diag-speed">
           {(() => {
             const top = Math.max(1, ...report.speed.order.map((o) => o.speed ?? 0));
@@ -744,7 +766,7 @@ function ReportView({ report }: { report: DiagnoseFactsDto }) {
 
       {/* Archetype-counter surface sits directly before role coverage — the two role/
           coverage views read together. */}
-      <ModePressure report={report} />
+      {!needsInput && <ModePressure report={report} />}
 
       {!bare.all && <div className="panel builder-result diag-section wide">
         <h2>{t("diag.roles")}</h2>
@@ -854,9 +876,9 @@ function Summary({ report }: { report: DiagnoseFactsDto }) {
         <b className="diag-tile-value num">{shared.length ? t("diag.sum.types").replace("{n}", String(shared.length)) : t("diag.sum.weakNone")}</b>
         <span className="diag-tile-types">{shared.slice(0, 4).map((row) => <TypeBadge key={row.type} type={row.type} iconOnly />)}</span>
       </div>
-      <div className={`diag-tile${report.offense.hardGaps.length ? " warn" : " good"}`}>
+      <div className={`diag-tile${!report.offense.gapsConfirmed ? "" : report.offense.hardGaps.length ? " warn" : " good"}`}>
         <span className="diag-tile-label">{t("diag.sum.gaps")}</span>
-        <b className="diag-tile-value num">{report.offense.hardGaps.length
+        <b className="diag-tile-value num">{!report.offense.gapsConfirmed ? t("diag.needsInput.short") : report.offense.hardGaps.length
           ? t("diag.sum.types").replace("{n}", String(report.offense.hardGaps.length)) : t("diag.sum.weakNone")}</b>
         <span className="diag-tile-types">{report.offense.hardGaps.slice(0, 4).map((tp) => <TypeBadge key={tp} type={tp} iconOnly />)}</span>
       </div>
@@ -868,7 +890,8 @@ function Summary({ report }: { report: DiagnoseFactsDto }) {
       )}
       <div className="diag-tile">
         <span className="diag-tile-label">{t("diag.sum.roles")}</span>
-        <b className="diag-tile-value num">{present}<small>{t("diag.sum.of").replace("{n}", String(report.roles.coverage.length))}</small></b>
+        <b className="diag-tile-value num">{report.roles.coverageConfirmed ? present : t("diag.needsInput.short")}
+          {report.roles.coverageConfirmed && <small>{t("diag.sum.of").replace("{n}", String(report.roles.coverage.length))}</small>}</b>
         <span className="diag-meter" aria-hidden="true"><i style={{ width: `${report.roles.coverage.length ? present / report.roles.coverage.length * 100 : 0}%` }} /></span>
       </div>
     </section>

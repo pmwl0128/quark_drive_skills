@@ -110,6 +110,8 @@ class Tools:
                 {"type": "object", "properties": {"session": {"type": "string"}}},
                 self.open_link),
         }
+        from .mcp_operators import install
+        install(self, ToolError)
 
     def session_list(self, args: dict) -> Any:
         archived = args.get("archived") or "exclude"
@@ -176,6 +178,9 @@ class Tools:
         target = args.get("output_path")
         if target is not None and (not isinstance(target, str) or not target or "\0" in target):
             raise ToolError("`output_path` must be a non-empty file path")
+        if target:
+            from .operator_output import full_result_args
+            extra = full_result_args(op, extra)
         body: dict = {"ops": [{**extra, "op": op}]}
         if args.get("session"):
             body["session"] = _session_id(args)

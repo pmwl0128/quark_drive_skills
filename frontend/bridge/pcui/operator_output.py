@@ -6,6 +6,14 @@ from pathlib import Path
 from typing import Any
 
 
+def full_result_args(op: str, args: dict) -> dict:
+    """A saved result is an evidence input; request its full body before projecting the display."""
+    result = dict(args)
+    if op in {"review", "try", "counters", "ko-scan", "slate-evaluate", "matchup", "diagnose"}:
+        result["view"] = "full"
+    return result
+
+
 def execution_failed(row: Any) -> bool:
     if not isinstance(row, dict) or row.get("error") is not None or row.get("result") is None:
         return True

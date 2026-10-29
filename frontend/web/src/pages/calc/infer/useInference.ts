@@ -12,7 +12,7 @@ import { useBuildOptions } from "../../../components/build/inputs.tsx";
 import { withMega, type BuildOption } from "../../../lib/buildState.ts";
 import { useDamageStore } from "../tune/useDamageStore.ts";
 import {
-  bulkUse, buildSpace, frameOf, hitRequests, liveFrame, offenseUse,
+  bulkUse, buildSpace, frameOf, frameIssueOf, hitRequests, liveFrame, offenseUse,
   type HitFrame, type KnownFacts, type Observation, type RequestKit, type SpaceInfo,
 } from "./context.ts";
 import type { Candidate, Inference, InferKey, Mult, Prediction } from "./model.ts";
@@ -159,16 +159,22 @@ export function useInference({ adapter, kit, moves, foe, mine, mineTeam, observa
         : offenseUse(observation.move, category);
       if (!ours || !observation.mineSnapshot || !observation.foeSnapshot
         || withMega(observation.foeSnapshot, dex, items).entry?.name !== entry?.name || !("key" in use)) { skipped.add(observation.id); continue; }
-      out.push({ observation, frame: frameOf(observation, ours, foe), key: use.key });
+      const frame = frameOf(observation, ours, foe);
+      if (frameIssueOf(frame, observation.kind, plan?.space.abilities ?? [], kit)) { skipped.add(observation.id); continue; }
+      out.push({ observation, frame, key: use.key });
     }
     return { out, skipped };
-  }, [observations, mineTeam, foe, moves, dex, items, entry]);
+  }, [observations, mineTeam, foe, moves, dex, items, entry, plan, kit]);
 
   const liveMoves = useMemo(() => {
-    const into = mine.moves.map((move) => ({ move, use: bulkUse(move, moves.get(move)?.category) }));
-    const from = foe.moves.map((move) => ({ move, use: offenseUse(move, moves.get(move)?.category) }));
+    const use = (move: string, kind: "bulk" | "offense") =>
+      frameIssueOf(liveFrame(mine, foe, move, field), kind, plan?.space.abilities ?? [], kit)
+        ? { reason: "unreadable" as const }
+        : kind === "bulk" ? bulkUse(move, moves.get(move)?.category) : offenseUse(move, moves.get(move)?.category);
+    const into = mine.moves.map((move) => ({ move, use: use(move, "bulk") }));
+    const from = foe.moves.map((move) => ({ move, use: use(move, "offense") }));
     return { into, from };
-  }, [mine.moves, foe.moves, moves]);
+  }, [mine, foe, field, moves, plan, kit]);
 
   // -- fetch ------------------------------------------------------------------------------
   const requests = useMemo(() => {

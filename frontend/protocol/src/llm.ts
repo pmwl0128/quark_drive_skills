@@ -88,10 +88,10 @@ export const QaAnswerDtoSchema = z.object({
 export type QaAnswerDto = z.infer<typeof QaAnswerDtoSchema>;
 
 /* ---- builder wizard (llm.builder, design §7.3) ------------------------------------------
- * ONE static form -> a queued job running the full UEP gate chain server-side -> ONE team +
- * correctness confirmation (validate badge + answer-audit pass) + disclosed profile
- * defaults. No candidate comparison, no mid-run questions, no history: the client holds
- * only a job id and read-only progress (§7.3 — the server's state is the single truth). */
+ * ONE static form -> a queued job running the full UEP gate chain server-side -> a small set of
+ * compared candidates (never ranked) + correctness confirmation (validate badge + answer-audit
+ * pass) + disclosed profile defaults. No mid-run questions, no history: the client holds only a
+ * job id and read-only progress (§7.3 — the server's state is the single truth). */
 
 /** Tactic vocabulary (mirrors the team skill's tactic tokens). */
 export const BUILDER_TACTICS = [
@@ -113,7 +113,18 @@ export const BuilderRequestDtoSchema = z.object({
   owned: z.array(z.string().min(1).max(100)).max(30).optional(),
   avoid: z.array(z.string().min(1).max(100)).max(10).optional(),
   wants: z.array(z.enum(BUILDER_TACTICS)).optional(),
-  /** Optional high-effort generation. It consumes two builder quota units. */
+  /** Free-text goal in the visitor's words ("beat X", "around Y", tournament play). The server reads
+   * the Pokemon it names and high-level wording as an evaluation focus; it never becomes a hard
+   * constraint. */
+  goal: z.string().max(300).optional(),
+  /** Teams (species) earlier runs of the same brief already showed, newest first. The server draws
+   * their frames less and asks for teams that differ from them; only exact dex species names count. */
+  seen: z.array(z.array(z.object({
+    species: z.string().min(1).max(60),
+    /** A base species holding its own Mega stone is that Mega; otherwise the two are different members. */
+    item: z.string().max(60).nullish(),
+  })).max(6)).max(6).optional(),
+  /** Optional thinking mode for the final explanation. It consumes two builder quota units. */
   thinking: z.boolean().optional(),
 });
 export type BuilderRequestDto = z.infer<typeof BuilderRequestDtoSchema>;
@@ -196,6 +207,31 @@ export const MatchupThreatAssessmentDtoSchema = z.object({
 });
 export type MatchupThreatAssessmentDto = z.infer<typeof MatchupThreatAssessmentDtoSchema>;
 
+const BuilderThreatRowSchema = z.object({
+  opponent: z.string(),
+  member: z.string().nullish(),
+  move: z.string().nullish(),
+});
+
+/** One delivered candidate, with the same facts the single-team fields carry. */
+export const BuilderCandidateDtoSchema = z.object({
+  label: z.string().min(1),
+  team: z.unknown(),
+  legality: z.object({ status: z.string().min(1), confidence: z.string().nullish() }),
+  worstMatchup: BuilderThreatRowSchema.nullish(),
+  threats: z.array(BuilderThreatRowSchema).optional(),
+  matchupThreats: MatchupThreatAssessmentDtoSchema.optional(),
+  megaCount: z.number().int().nonnegative().optional(),
+  rationale: z.string().optional(),
+  repaired: z.boolean(),
+  /** Set on the candidate assembled around an observed answer to a goal Pokemon every earlier
+   * candidate left as a hole (the earlier candidates stay as they were). */
+  goalFor: z.string().optional(),
+});
+export type BuilderCandidateDto = z.infer<typeof BuilderCandidateDtoSchema>;
+
+const ObservedFloorSchema = z.enum(["C0", "C1", "C2"]).nullable();
+
 export const BuilderResultDtoSchema = z.object({
   /** team-json. Deliberately unknown-shaped at the protocol boundary: the SPA reads it with
    * the same lenient team readers the UEP panel uses (lib/team.ts) — the inner team shape is
@@ -238,8 +274,41 @@ export const BuilderResultDtoSchema = z.object({
   matchupThreats: MatchupThreatAssessmentDtoSchema.optional(),
   /** Mega-stone holders registered on the team (the game registers 6, picks few). */
   megaCount: z.number().int().nonnegative().optional(),
-  /** True when the single LLM repair round was used to reach this result. */
+  /** True when an LLM repair round was used to reach a delivered candidate. */
   repaired: z.boolean(),
+  /** Two or more delivered candidates, in assembly order (A, B ...). Absent when one team was
+   * delivered; the single-team fields above always describe candidates[0]. */
+  candidates: z.array(BuilderCandidateDtoSchema).min(2).optional(),
+  /** Where the candidates' team floors differ within the top-K battery: every opponent that is a
+   * hole (observed floor C1/C0) for at least one candidate. `null` = not a hole for that candidate
+   * (observed floor C2, or the pair was not calculated). Facts side by side, no winner. */
+  comparison: z.object({
+    labels: z.array(z.string()),
+    teamFloorDifferences: z.array(z.object({
+      opponent: z.string().min(1),
+      usageRank: z.number().int().positive().nullable(),
+      floors: z.record(z.string(), ObservedFloorSchema),
+    })),
+    holeCounts: z.record(z.string(), z.number().int().nonnegative()),
+    topK: z.number().int().positive(),
+  }).optional(),
+  /** The free-text goal and, per Pokemon it names, each candidate's observed floor against it
+   * (`floors` absent when that Pokemon is outside the top-K battery). */
+  goal: z.object({
+    text: z.string(),
+    floors: z.array(z.object({
+      pokemon: z.string().min(1),
+      inBattery: z.boolean(),
+      /** The host's reading of the wording: the visitor wants to beat it, or wants it on the team. */
+      intent: z.enum(["beat", "include"]).nullish(),
+      /** False when no observed top-K build answers every retained build of it (e.g. a Focus Sash
+       * build keeps every team floor at C0); absent when the index could not say. */
+      answerable: z.boolean().optional(),
+      floors: z.record(z.string(), ObservedFloorSchema).optional(),
+    })),
+  }).optional(),
+  /** Assembled candidates that failed their checks after a repair and were not delivered. */
+  droppedCandidates: z.number().int().nonnegative().optional(),
   /** Dev-key-only metric split (§9 benchmark); never present for real visitors. */
   debug: z.record(z.string(), z.number()).optional(),
 });

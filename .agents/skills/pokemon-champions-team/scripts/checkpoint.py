@@ -98,12 +98,6 @@ def build_checkpoint(slate_input: Any, slate_output: Any) -> dict[str, Any]:
                       "distribution; add an observed-mainline lane or explicitly choose a "
                       "different mega_posture before finalizing",
         })
-    if not ctx.get("benchmarks"):
-        open_decisions.append({
-            "kind": "tuning_benchmarks",
-            "reason": "no explicit survival, speed, or KO benchmark is present; continuing means "
-                      "tuning_summary must disclose that no cliff tuning was run",
-        })
     low_conf = [f["index"] for f in frames if f["survivor"] and _low_confidence(_candidate(slate_output, f["index"]))]
     if low_conf:
         open_decisions.append({
@@ -121,7 +115,11 @@ def build_checkpoint(slate_input: Any, slate_output: Any) -> dict[str, Any]:
                       "if that frame is presented",
         })
 
-    pause_decisions = [d for d in open_decisions if d.get("kind") != "tuning_benchmarks"]
+    # Candidate comparison, confidence and provenance are normally answer disclosures. They need
+    # an intermediate choice only when the user asks for that steering. Missing modal coverage
+    # still needs a repair or an explicit posture; it cannot silently become an accepted answer.
+    pause_decisions = [d for d in open_decisions
+                       if d["kind"] == "mega_registration_coverage" or ctx.get("checkpoint_required") is True]
     skip_requested = ctx.get("skip_checkpoint") is True or ctx.get("direct_final") is True
     pause = bool(survivors and pause_decisions and not skip_requested)
 
@@ -130,31 +128,27 @@ def build_checkpoint(slate_input: Any, slate_output: Any) -> dict[str, Any]:
     # available in every language the skill answers in — a Chinese-only string forced the orchestrator
     # to ad-hoc-translate for en/ja users (audit 2026-07-06).
     questions = []
-    if pause and any(d["kind"] == "candidate_frame" for d in open_decisions):
+    pause_kinds = {d["kind"] for d in pause_decisions}
+    if pause and "candidate_frame" in pause_kinds:
         questions.append({"id": "candidate_frame", "text": {
             "zh": "要继续推进哪些候选框架，还是先调整必须保留/避免的成员？",
             "ja": "どの候補フレームを進めますか？それとも先に必須／回避メンバーを調整しますか？",
             "en": "Which candidate frames should we carry forward, or adjust the must-keep / must-avoid members first?"}})
-    if pause and any(d["kind"] == "mega_registration_coverage" for d in open_decisions):
+    if pause and "mega_registration_coverage" in pause_kinds:
         questions.append({"id": "mega_registration_coverage", "text": {
             "zh": "当前候选没有覆盖其框架中观察最常见的 Mega 登记数量；补一条该路线，还是明确选择单/多/无 Mega 的其他登记姿态？",
             "ja": "現在の候補には各フレームで最頻のメガ登録数が含まれていません。そのルートを追加しますか、それとも単一・複数・メガなしの別方針を明示しますか？",
             "en": "No survivor is modal relative to its bound frame's observed Mega-registration distribution. Add a modal lane, or explicitly choose a different single/multi/none Mega posture?"}})
-    if pause and any(d["kind"] == "observed_team_overlap" for d in open_decisions):
+    if pause and "observed_team_overlap" in pause_kinds:
         questions.append({"id": "observed_team_overlap", "text": {
             "zh": "有候选与库中某支真实队完全一致——直接采用（会标注来源出处），还是据此另作一支更贴合你需求的？",
             "ja": "ある候補がライブラリの実チームと完全一致します——出典を明記してそのまま採用しますか？それを土台に、より要望に合う別案を作りますか？",
             "en": "A candidate exactly matches a real team in the library — adopt it as-is (with source provenance shown), or build a variant that fits your needs better?"}})
-    if pause and any(d["kind"] == "low_confidence_facts" for d in open_decisions):
+    if pause and "low_confidence_facts" in pause_kinds:
         questions.append({"id": "low_confidence_facts", "text": {
             "zh": "有候选依赖低置信度的对战事实（模态对手集/降级数据）——接受并在答案中标注，还是换用更确定的框架？",
             "ja": "ある候補は信頼度の低い対戦事実（最頻の相手構成／劣化データ）に依存しています——回答で明記して受け入れますか？より確実なフレームに切り替えますか？",
             "en": "A candidate relies on low-confidence battle facts (modal opponent sets / degraded data) — accept and flag it in the answer, or switch to a more certain frame?"}})
-    if pause and any(d["kind"] == "tuning_benchmarks" for d in open_decisions):
-        questions.append({"id": "tuning_benchmarks", "text": {
-            "zh": "是否要指定速度、耐久或击杀 benchmark；没有的话将只披露未运行针对性调参。",
-            "ja": "素早さ・耐久・確定数（KO）のベンチマークを指定しますか？なければ、狙った調整は未実施である旨のみ開示します。",
-            "en": "Set any speed, bulk, or KO benchmarks? Without them, the answer just discloses that no targeted tuning was run."}})
 
     return {
         "kind": "checkpoint",
@@ -166,13 +160,12 @@ def build_checkpoint(slate_input: Any, slate_output: Any) -> dict[str, Any]:
         "survivors": survivors,
         "candidate_frames": frames,
         "open_decisions": open_decisions,
+        "tuning_status": "benchmarks_present" if ctx.get("benchmarks") else "not_requested",
         "questions_to_ask": questions[:3],
         "trigger_policy": {
             "pause_when": [
-                "a build request has one or more slate survivors and unresolved candidate-frame, "
-                "Mega-registration coverage, confidence, or provenance decisions (missing tuning benchmarks "
-                "ALONE do not pause — see do_not_pause_when; every pausing decision carries a matching "
-                "questions_to_ask entry, so pause=true never comes back with an empty question list)",
+                "survivors miss observed modal Mega-registration coverage, or the user requested "
+                "intermediate steering (checkpoint_required:true) and an open decision remains",
                 "run after context-audit/landscape or observed grounding/slate-evaluate and before "
                 "tune or final answer",
             ],
@@ -181,8 +174,9 @@ def build_checkpoint(slate_input: Any, slate_output: Any) -> dict[str, Any]:
                 "review / audit / final-output intent encodes that upstream; checkpoint itself no "
                 "longer inspects a request-kind field — only these explicit flags suppress the pause)",
                 "there are zero survivors; revise the slate instead of asking for frame confirmation",
-                "there is exactly one survivor and the only open decision is absent tuning benchmarks "
-                "(continue and disclose not_run in tuning_summary)",
+                "candidate comparisons, confidence caveats and provenance can be delivered in the "
+                "answer without an intermediate choice; missing benchmarks are not a question "
+                "(disclose not_run in tuning_summary)",
                 "neutral 6-pick-N selection facts are already attached to slate survivors; checkpoint "
                 "does not pause merely because a team registers multiple Mega options",
             ],

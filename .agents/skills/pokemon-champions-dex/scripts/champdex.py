@@ -8,6 +8,7 @@ import re
 import sqlite3
 import sys
 import unicodedata
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,18 @@ SHORT_TO_SMOGON = {"hp": "hp", "at": "atk", "df": "def", "sa": "spa", "sd": "spd
 def canonical_stats(raw: dict[str, Any]) -> dict[str, Any]:
     """DB short stat keys (at/df/sa/sd/sp) -> canonical smogon keys (atk/def/spa/spd/spe)."""
     return {smogon: raw[short] for short, smogon in SHORT_TO_SMOGON.items() if short in raw}
+
+
+def official_names(c: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Official display vocabulary only; aliases and combat data stay in their own APIs."""
+    result = []
+    for kind, table in (("pokemon", "pokemon"), ("move", "moves"), ("ability", "abilities"),
+                        ("item", "items"), ("nature", "natures")):
+        for row in c.execute(f"select canonical from {table} order by canonical"):
+            canonical = row["canonical"]
+            zh, ja = _display_name(c, kind, canonical)
+            result.append({"kind": kind, "name": canonical, "name_zh": zh, "name_ja": ja})
+    return result
 
 
 def canonical_power(value: Any) -> Any:
@@ -89,8 +102,30 @@ def conn() -> sqlite3.Connection:
     return c
 
 
+@lru_cache(maxsize=8)
+def _query_aliases(data_dir: Path) -> dict[tuple[str, str], str]:
+    """Small lookup-only additions to the installed alias table, maintained by dex alone.
+
+    Keys may be any language. An ambiguous alias is omitted; membership is checked against the
+    installed entity table by resolve, so this library never adds a Pokemon or a battle fact.
+    """
+    path = data_dir / "query_aliases.json"
+    if not path.is_file():
+        return {}
+    groups: dict[tuple[str, str], set[str]] = {}
+    for kind, rows in json.loads(path.read_text(encoding="utf-8")).items():
+        for canonical, aliases in rows.items():
+            for alias in aliases:
+                groups.setdefault((kind, normalize(alias)), set()).add(canonical)
+    return {key: next(iter(values)) for key, values in groups.items() if len(values) == 1}
+
+
 def resolve(c: sqlite3.Connection, kind: str, text: str) -> str | None:
     norm = normalize(text)
+    if kind == "type":
+        for canonical, labels in i18n.TYPE_NAMES.items():
+            if norm in {normalize(canonical), *(normalize(label) for label in labels)}:
+                return canonical
     row = c.execute(
         "select canonical from aliases where kind=? and normalized=? limit 1",
         (kind, norm),
@@ -100,6 +135,7 @@ def resolve(c: sqlite3.Connection, kind: str, text: str) -> str | None:
     table = {"pokemon": "pokemon", "move": "moves", "ability": "abilities", "item": "items",
              "nature": "natures"}.get(kind)
     if table:
+        text = _query_aliases(DB_PATH.parent).get((kind, norm), text)
         row = c.execute(f"select canonical from {table} where lower(canonical)=lower(?) limit 1", (text,)).fetchone()
         if row:
             return row["canonical"]
@@ -284,7 +320,8 @@ def resolve_rich(c: sqlite3.Connection, kind: str, text: str, *, fuzzy: bool = T
 # forms (English "Mega" + Chinese base, etc.) do not, so exact/fuzzy both miss. This layer strips the
 # Mega affix, resolves the BASE species in any language, then maps it to that base's Mega form + stone.
 # It is compositional (not a fuzzy guess), so it runs BEFORE the fuzzy tier. X/Y megas disambiguate on a
-# trailing x/y token; a multi-Mega base with no disambiguator refuses (ambiguous), never guesses.
+# leading/trailing X/Y/Z token (NFKC includes full-width). A plain Mega form is literal when present;
+# otherwise a multi-Mega base with no disambiguator refuses (ambiguous), never guesses.
 _MEGA_AFFIXES = ("mega", "超级", "メガ", "めが")  # normalized (lowercase, NFKC); checked as prefix or suffix
 
 
@@ -301,22 +338,27 @@ def _strip_mega_affix(norm: str) -> str | None:
 def mega_compose(c: sqlite3.Connection, text: str) -> dict[str, Any] | None:
     """Resolve an affix+base Mega name to the canonical Mega form. Returns
     {canonical, required_item, match_type:'mega_compose'} on success, {ambiguous:True, candidates:[...]}
-    when the base has >1 Mega and no X/Y disambiguator, or None when this is not a composable Mega name."""
-    base_norm = _strip_mega_affix(normalize(text))
-    if base_norm is None:
-        return None
+    when the base has only lettered Megas and no qualifier, or None for a non-composable name."""
+    norm = normalize(text)
+    base_norm = _strip_mega_affix(norm)
+    explicit_mega = base_norm is not None
+    base_norm = base_norm if explicit_mega else norm
     variant = None
-    base = resolve(c, "pokemon", base_norm)   # try the WHOLE remainder first, in any language
+    base = resolve(c, "pokemon", base_norm) if explicit_mega else None
     if base is None:
-        # No whole-name hit: a trailing X/Y is a Mega disambiguator (Charizard/Mewtwo), never a
+        # No whole-name hit: an X/Y/Z is a Mega disambiguator, never a
         # letter of the base name — strip it and retry, so 'メガDelphox' (base itself ends in x) is
         # not mis-split into a dead 'delpho' stem and lost (audit 2026-07-05).
-        for v in ("x", "y"):
+        for v in ("x", "y", "z"):
             if base_norm.endswith(v) and len(base_norm) > 1:
                 variant, base_norm = v.upper(), base_norm[:-1]
                 break
+            if base_norm.startswith(v) and len(base_norm) > 1:
+                variant, base_norm = v.upper(), base_norm[1:]
+                break
         if variant is None:
             return None
+        base_norm = _strip_mega_affix(base_norm) or base_norm
         base = resolve(c, "pokemon", base_norm)
         if base is None:
             return None
@@ -334,6 +376,13 @@ def mega_compose(c: sqlite3.Connection, text: str) -> dict[str, Any] | None:
         for m in megas:
             if normalize(m["canonical"]).endswith(variant.lower()):
                 return {"canonical": m["canonical"], "required_item": m["required_item"], "match_type": "mega_compose"}
+        # A stated qualifier is never discarded, even for a species with only one other Mega.
+        return {"ambiguous": True, "candidates": [m["canonical"] for m in megas],
+                "note": f"{base_species} has no Mega {variant} form; suggestions are alternative forms, "
+                        "not equivalent names for the stated variant"}
+    plain = next((m for m in megas if m["canonical"] == f"Mega {base_species}"), None)
+    if plain:
+        return {"canonical": plain["canonical"], "required_item": plain["required_item"], "match_type": "mega_compose"}
     if len(megas) == 1:
         return {"canonical": megas[0]["canonical"], "required_item": megas[0]["required_item"], "match_type": "mega_compose"}
     return {"ambiguous": True, "candidates": [m["canonical"] for m in megas]}
@@ -341,6 +390,8 @@ def mega_compose(c: sqlite3.Connection, text: str) -> dict[str, Any] | None:
 
 def _display_name(c: sqlite3.Connection, kind: str, canonical: str) -> tuple[str | None, str | None]:
     """(display_name zh, display_name_ja) for a resolved canonical, or (None, None)."""
+    if kind == "type":
+        return i18n.TYPE_NAMES.get(canonical, (None, None))
     table = {"pokemon": "pokemon", "move": "moves", "ability": "abilities", "item": "items",
              "nature": "natures"}.get(kind)
     if not table:
@@ -452,6 +503,7 @@ def resolve_name(c: sqlite3.Connection, kind: str, text: str, *, fuzzy: bool = T
         if mc and mc.get("ambiguous"):
             return {"query": text, "ok": False, "kind": kind, "canonical": None, "match_type": "ambiguous",
                     "error": {"code": "ambiguous", "message": f"ambiguous Mega: {text}"},
+                    **({"note": mc["note"]} if mc.get("note") else {}),
                     "suggestions": [{"canonical": x} for x in mc["candidates"]]}
     if fuzzy:
         fm = _fuzzy_match(c, kind, norm)
@@ -524,20 +576,11 @@ def row_to_pokemon(row: sqlite3.Row, c: sqlite3.Connection, include_moves: bool 
 
 
 def get_one(c: sqlite3.Connection, kind: str, name: str, fuzzy: bool = True) -> dict[str, Any]:
-    rr = resolve_rich(c, kind, name, fuzzy=fuzzy)
+    rr = resolve_name(c, kind, name, fuzzy=fuzzy)
     canonical = rr["canonical"]
     if canonical is None:
-        nf = not_found(name)
-        pk = _possible_kinds(c, name, exclude_kind=kind)
-        if pk:
-            nf["possible_kinds"] = pk
-        if fuzzy and rr.get("alternatives"):
-            # Non-silent: a miss under fuzzy carries did-you-mean candidates (and flags genuine
-            # ambiguity) so the caller decides — it never auto-resolves to one of them.
-            nf["suggestions"] = rr["alternatives"]
-            if rr.get("ambiguous"):
-                nf["error"] = {"code": "ambiguous", "message": f"ambiguous name: {name}"}
-        return nf
+        return {**not_found(name), **{key: rr[key] for key in
+                ("error", "possible_kinds", "suggestions", "note") if key in rr}}
 
     if kind == "pokemon":
         row = c.execute("select * from pokemon where canonical=?", (canonical,)).fetchone()
@@ -607,7 +650,7 @@ def get_one(c: sqlite3.Connection, kind: str, name: str, fuzzy: bool = True) -> 
     if rr["match_type"] == "fuzzy":
         # Tag the correction so callers can record provenance and cap confidence (never silent).
         entity["resolution"] = {"match_type": "fuzzy", "score": rr["score"],
-                                "distance": rr["distance"], "from": rr["query_norm"]}
+                                "distance": rr["distance"], "from": normalize(name)}
     return entity
 
 
@@ -993,15 +1036,17 @@ SCHEMA = {
         "pokemon|move|ability|item|nature": "<name ...> [--format md|json] [--strict]; >1 name -> list; a miss -> error_shape",
         "batch": "<kind> <name ...> [--strict]; always a list; misses inline as error_shape. NOTE kind is "
                  "the FIRST positional — for plain name-cleaning prefer `resolve` (no kind-first foot-gun).",
-        "resolve": "<name ...> [--kind pokemon|move|ability|item|nature] [--strict]; the AI-facing name "
+        "resolve": "<name ...> [--kind pokemon|move|ability|item|nature|type] [--strict]; the AI-facing name "
                    "normalizer. Batch + fuzzy-by-default + Mega-compose (\"Mega耿鬼\"/\"超级耿鬼\"/\"メガ…\" and "
-                   "colloquial nicknames all resolve). ALWAYS a 1:1 list (never drops/merges an input). Each "
+                   "colloquial nicknames and X/Y/Z qualifiers, full-width included, all resolve). A stated "
+                   "qualifier never falls back to a different form. ALWAYS a 1:1 list (never drops/merges an input). Each "
                    "item: {query, ok, kind, canonical, display_name, display_name_ja, match_type: "
                    "exact|mega_compose|fuzzy|ambiguous|null, score, +is_mega/base_species/required_item for "
                    "pokemon, suggestions? on miss/ambiguous}.",
         "find|reverse": "<field> <value> ...; ANDed -> {conditions, count, learnset_warning, unresolved_conditions:[{field,value}], results:[pokemon]} (exact only, never fuzzy; unresolved_conditions lists condition keywords that are not a known alias — they filter literally, so a 0 count there is the keyword, not the data). OR `--where '<json>'` for a boolean AND/OR/NOT query (see where_query).",
         "find-move": "<field> <value> ...; reverse-search the MOVES table -> {conditions, count, unresolved_conditions, results:[move]}. Fields: type, category (Physical|Special|Status), power|priority|accuracy|pp (comparison expr like >=90/<40/2), name (substring). e.g. `find-move type Fire category Special power >=90` or `find-move priority >=1`. Also accepts `--where '<json>'` (see where_query).",
         "schema": "this contract",
+        "names": "no arguments; JSON list of official {kind,name,name_zh,name_ja} for pokemon/move/ability/item/nature; no aliases or combat data",
     },
     "where_query": {
         "flag": "find / find-move `--where '<json>'` (or '-' to read the JSON from stdin); overrides the "
@@ -1019,8 +1064,8 @@ SCHEMA = {
     "fuzzy": {
         "default": "pokemon/move/ability/item/batch resolve with a conservative typo fallback BY DEFAULT "
                    "(dex owns naming); exact short-circuits, so a correct name is unaffected. Never fires on a hit.",
-        "strict": "--strict disables the fallback (exact only) for callers where a miss must stay a miss "
-                  "(validation, integrity). find/reverse are always exact regardless.",
+        "strict": "--strict disables fuzzy fallback while retaining deterministic Mega composition and "
+                  "ambiguity refusal on entity/batch/resolve queries. find/reverse are always exact.",
         "on_hit": "entity gains `resolution: {match_type:'fuzzy', score:float, distance:int, from:'<normalized query>'}`",
         "on_miss": "error_shape may gain `suggestions:[{canonical,distance?,score?}]` (a qualifier-gate lead has no distance); ambiguous ties and qualifier conflicts set error.code='ambiguous' and resolve to NO canonical. Exact cross-kind hits are reported as `possible_kinds` (e.g. pokemon miss that is really an item).",
         "discipline": "ambiguity (>=2 canonicals tie at best distance) -> refuse, never guess; a gender qualifier in the query (♀/♂, -F/-M, female/male, (メス)/(オス)(のすがた), ...) that contradicts a split-gender fuzzy hit (Indeedee vs Indeedee-F) -> refuse as ambiguous with the qualified form first; Han disabled, Kana<=1, Latin<=2 edit distance, length-gated",
@@ -1071,10 +1116,10 @@ def _run_where(c: sqlite3.Connection, ns, where_fn, shorthand_fn):
 def main() -> int:
     global _MD_CONN
     parser = argparse.ArgumentParser(description="Query the offline Pokémon Champions dex.")
-    parser.add_argument("command", choices=["pokemon", "move", "ability", "item", "nature", "batch", "resolve", "find", "find-move", "reverse", "schema"])
+    parser.add_argument("command", choices=["pokemon", "move", "ability", "item", "nature", "batch", "resolve", "find", "find-move", "reverse", "schema", "names"])
     parser.add_argument("args", nargs="*")
     parser.add_argument("--format", choices=["md", "json"], default="md")
-    parser.add_argument("--kind", choices=["pokemon", "move", "ability", "item", "nature"], default="pokemon",
+    parser.add_argument("--kind", choices=["pokemon", "move", "ability", "item", "nature", "type"], default="pokemon",
                         help="resolve: which entity kind the names are (default: pokemon)")
     parser.add_argument("--lang", choices=list(i18n.LANGS),
                         help="language for human-readable md labels / notes (default: "
@@ -1098,6 +1143,12 @@ def main() -> int:
     c = conn()
     _MD_CONN = c
     try:
+        if ns.command == "names":
+            if ns.args or ns.where:
+                emit_error("names", "bad_input", "names accepts no names or filters", ns.format)
+                return 1
+            print(json.dumps(official_names(c), ensure_ascii=False, indent=2))
+            return 0
         if ns.command == "batch":
             if len(ns.args) < 2:
                 emit_error(" ".join(ns.args), "bad_input",

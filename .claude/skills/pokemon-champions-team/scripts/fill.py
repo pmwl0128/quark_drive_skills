@@ -27,7 +27,10 @@ from typechart import effectiveness, effectiveness_for_member  # noqa: E402
 from diagnose import _ROLE_MOVES, _ROLE_LABELS  # noqa: E402  (reuse the functional-move taxonomy)
 import repset  # noqa: E402
 import team_i18n as i18n  # noqa: E402
-from sources import mega_run_form  # noqa: E402  (stone -> Mega form; memoized, dex-authoritative)
+import query_identity
+import teamid
+from stat_keys import canonical_spread
+from mega import form_base_species
 
 POOL_K = 60                       # how deep into the usage ranking we draw the candidate pool from
 
@@ -124,11 +127,13 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
          ranking_fn: Callable[[str | None, int], list[dict]],
          repset_fn: Callable[..., list[dict]] | None = None,
          move_fn: Callable[[list[str]], dict[str, dict]] | None = None,
+         item_fn: Callable | None = None,
          season: str | None = None, rule: str | None = None,
          owned: list[str] | None = None, owned_only: bool = False,
          avoid: list[str] | None = None, locked: list[str] | None = None,
          avoid_items: list[str] | None = None,
          meta_conformance: str | None = None,
+         answer_cache: dict | None = None,
          pool_k: int = POOL_K) -> dict[str, Any]:
     """Build the candidate pool for `need` and present it in multiple explicit views (no score)."""
     fmt = (fmt or team.get("format") or "single").lower()
@@ -136,10 +141,8 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
         return {"kind": "fill", "format": fmt, "need": need, "candidates": [], "views": {},
                 "notes": ["no `need` given — nothing to fill"], "confidence": "low"}
 
-    on_team = {_norm(m.get("species")) for m in team.get("pokemon", []) if m.get("species")}
     avoid_n = {_norm(a) for a in (avoid or [])}
     owned_n = {_norm(o) for o in (owned or [])}
-    core = [s for s in (locked or [m.get("species") for m in team.get("pokemon", [])]) if s]
 
     # `owned_only` is a HARD constraint (project rules): with no owned roster we CANNOT fill
     # from it, so return empty + a warning rather than silently dropping the restriction (audit
@@ -164,9 +167,52 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
 
     pool = list(owned) if owned_only else [r.get("pokemon_en") or r.get("pokemon") or r.get("slug")
                                            for r in rows]
-    names = [nm for nm in pool if nm and _norm(nm) not in on_team and _norm(nm) not in avoid_n]
-
-    facts = dex_fn(names) or {}
+    teams = []
+    if repset_fn is not None:
+        try:
+            teams = (repset.load_teams_for_rule(fmt, rule) if rule and repset_fn is repset.load_teams
+                     else repset_fn(fmt, season=season)) or []
+        except (OSError, ValueError):
+            teams = []
+    elif rule or season:
+        try:
+            teams = repset.load_teams_for_rule(fmt, rule) if rule else repset.load_teams(fmt, season=season)
+        except (OSError, ValueError):
+            teams = []
+    if meta_conformance == "off_meta" and not owned_only:
+        # The library supplies evidence for the tail; never fabricate a pool entry from dex alone.
+        pool = list(dict.fromkeys([*pool, *(m["species"] for t in teams for m in t.get("pokemon") or []
+                                          if m.get("species"))]))
+    raw_teams = teams  # Witness ids bind published registration facts, before battle-form projection.
+    view, identities = query_identity.battle_view(
+        [team, *teams], [{"species": n} for n in [*pool, *(owned or []), *(locked or [])] if n],
+        dex_fn=dex_fn, item_fn=item_fn or (lambda _: {}))
+    battle_team, teams = view[0], view[1:]
+    facts = identities.facts
+    origin = {nm: nm for nm in pool if nm}
+    if owned_only:
+        for nm in list(origin):
+            base = form_base_species(nm, facts.get(nm))
+            if base:
+                origin.setdefault(base, nm)
+        missing = sorted(set(origin) - facts.keys())
+        if missing:
+            facts.update(dex_fn(missing) or {})
+    # A usage/owned pool entry supplies its dex-declared Mega options. Each option is a separate
+    # factual candidate; the parent's aggregate usage rank is never relabelled as a Mega rank.
+    for nm in list(origin):
+        for form in (facts.get(nm) or {}).get("mega_forms") or []:
+            if form.get("name"):
+                origin.setdefault(form["name"], origin[nm])
+    missing = sorted(set(origin) - facts.keys())
+    if missing:
+        facts.update(dex_fn(missing) or {})
+    def group(nm):
+        return _norm(form_base_species(nm, facts.get(nm)) or nm)
+    on_team = {group(m.get("species")) for m in team.get("pokemon", []) if m.get("species")}
+    owned_groups = {group(nm) for nm in owned or []}
+    names = [nm for nm in origin if group(nm) not in on_team and _norm(nm) not in avoid_n]
+    core = [s for s in (locked or [m.get("species") for m in battle_team.get("pokemon", [])]) if s]
 
     # coverage_move_type bridge: resolve each candidate's learnset move NAMES to dex (type, category)
     # ONCE (one batch lookup over the union), then keep only DAMAGING moves -> {dex_type: [moves]} per
@@ -190,26 +236,6 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
                     cov.setdefault(mf["type"], []).append(mv)
             cov_by_species[_norm(nm)] = cov
 
-    # Real-team library (co-occurrence + sample); empty/absent -> those views simply stay 0 (honest).
-    teams = []
-    if repset_fn is not None:
-        try:
-            if rule and repset_fn is repset.load_teams:
-                teams = repset.load_teams_for_rule(fmt, rule)
-            else:
-                teams = repset_fn(fmt, season=season) or []
-        except Exception:
-            teams = []
-    elif rule:
-        try:
-            teams = repset.load_teams_for_rule(fmt, rule)
-        except Exception:
-            teams = []
-    elif season:
-        try:
-            teams = repset.load_teams(fmt, season=season)
-        except Exception:
-            teams = []
     core_n = {_norm(c) for c in core}
 
     def _counts(species: str) -> tuple[int, int]:
@@ -223,29 +249,16 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
                     co += 1
         return sample, co
 
-    # Mega forms reached by a candidate's real builds. `facts` only covers the ranked base species, so
-    # without this a stone build would be priced on its BASE Speed — the very error the opponent cache
-    # had (Staraptor 100 vs Mega Staraptor 110). Resolved once, in one batch.
-    _mega_facts: dict[str, dict[str, Any]] = {}
+    # Cluster only within the selected actual form, including its deterministic ability projection.
     _arches_by_species: dict[str, list[dict[str, Any]]] = {}
     if teams:
-        _wanted: set[str] = set()
         for _nm in names:
             try:
                 _arches = repset.representative_sets_from_teams(_nm, fmt, teams) or []
                 _arches_by_species[_nm] = _arches
-                for _a in _arches:
-                    _mf = mega_run_form(_nm, _a.get("item")) if _a.get("item") else None
-                    if _mf and _mf not in facts:
-                        _wanted.add(_mf)
             except Exception:
                 _arches_by_species[_nm] = []
                 continue
-        if _wanted:
-            try:
-                _mega_facts = dex_fn(sorted(_wanted)) or {}
-            except Exception:
-                _mega_facts = {}
 
     def _builds(species: str) -> list[dict[str, Any]]:
         """The candidate's REAL (item,ability) builds, from the same team pool `_counts` scans.
@@ -263,18 +276,17 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
         out = []
         for a in arches:
             item = a.get("item")
-            mega_form = mega_run_form(species, item) if item else None
-            spe_sp = int((a.get("sps") or {}).get("sp") or 0)
+            mega_form = species if (facts.get(species) or {}).get("is_mega") else None
+            spe_sp = int(canonical_spread(a.get("sps") or {}).get("spe") or 0)
             # The build's OWN speed, not the species' theoretical ceiling: a 0-Speed bulky build and
             # a max-Speed Scarf build of one species sit nowhere near each other.
             b_base = (((facts.get(species) or {}).get("stats") or {}).get("spe"))
-            if mega_form:
-                mf = facts.get(mega_form) or _mega_facts.get(mega_form) or {}
-                b_base = (mf.get("stats") or {}).get("spe") or b_base
             out.append({
                 "item": item, "ability": a.get("ability"), "nature": a.get("nature"),
+                "moves": a.get("moves"), "spread_origin": a.get("spread_origin"),
                 "sps": a.get("sps"), "coverage": a.get("coverage"),
                 "confidence": a.get("confidence"),
+                **{k: a[k] for k in ("configuration_basis", "registration_modes", "registration_sample") if k in a},
                 "speed": champ_speed(b_base, spe_sp, a.get("nature")) if b_base is not None else None,
                 # Spends the team-level Mega resource (few stones registered, one evolution per
                 # battle), so this build is not a free pick the way an item swap is. The
@@ -288,7 +300,7 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
     candidates: list[dict[str, Any]] = []
     for nm in names:
         fact = facts.get(nm) or {}
-        if not fact.get("found", True) and "types" not in fact:
+        if not fact or (not fact.get("found", True) and "types" not in fact):
             continue
         addresses = _addresses(need, fact, cov_by_species.get(_norm(nm)))
         if addresses is None:
@@ -301,11 +313,19 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
             "max_speed": champ_speed(base_spe, SP_CAP, "Jolly") if base_spe is not None else None,
             "addresses": addresses,
             "usage_rank": rank_of.get(nm),
+            "pool_source": {"species": origin[nm], "usage_rank": rank_of.get(origin[nm]),
+                            "form_expanded": origin[nm] != nm},
             "co_occurrence": co,
             "tournament_sample": sample,
-            "owned": _norm(nm) in owned_n if owned_n else None,
+            "owned": group(nm) in owned_groups if owned_groups else None,
             **({"builds": builds} if (builds := _builds(nm)) else {}),
         })
+        if rank_of.get(origin[nm]) is None and sample:
+            witnesses = [teamid.compute_id(raw) for raw, t in zip(raw_teams, teams)
+                         if any(_norm(m.get("species")) == _norm(nm) for m in t.get("pokemon") or [])]
+            candidates[-1]["tail_evidence"] = {"sample": sample, "team_ids": witnesses[:3],
+                                              "truncated": len(witnesses) > 3,
+                                              "basis": "real-team appearances, not usage rank or competitive strength"}
 
     # Explicit, SEPARATE orderings — never merged into one score. usage = common-first; off_meta =
     # rare-first (a null usage_rank is the MOST off-meta and sorts first) — the meta_conformance knob
@@ -322,7 +342,8 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
     candidates.sort(key=(_off_meta_key if off_meta else _usage_key))   # default order mirrors the posture knob (a VIEW, not advice)
 
     notes = [
-        "Candidate pool = meta usage list filtered to those that ADDRESS the need; NOT the whole dex.",
+        "Candidate pool = usage/owned species plus their dex-declared Mega options, filtered to the need. "
+        "Counts, sets and avoid constraints use exact actual forms; on-team and owned checks use Species Clause groups.",
         "Multiple EXPLICIT views (usage / off_meta / co_occurrence / tournament_sample / owned) — NO "
         "composite score and NO single best pick. Default list order follows meta_conformance "
         "(proven/unset=usage common-first, off_meta=rare-first) — an ordering fact, not a ranking.",
@@ -353,8 +374,9 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
 
     confidence = "low" if not facts else "medium"
     out_extra = {"avoid_items_not_enforced": avoid_items} if avoid_items else {}
-    return {
+    output = {
         "kind": "fill", "format": fmt, "need": need,
+        "identity_basis": "dex_battle_form", "identity_gaps": identities.gaps,
         "pool_considered": len(names), "candidate_count": len(candidates),
         "candidates": candidates,
         "views": {"usage": by_usage, "off_meta": by_off_meta, "co_occurrence": by_cooc,
@@ -366,6 +388,24 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
                                {"source": "dex", "ref": "types / stats / abilities / learnset (need match)"},
                                {"source": "real-team", "ref": "co-occurrence + sample (when library present)"}]},
     }
+    if need.get("answer"):
+        import fill_answers
+        if answer_cache is None:
+            raise ValueError("answer requires the current validated opponent cache")
+        other = {k: v for k, v in need.items() if k != "answer"}
+        def build_matches(member):
+            fact = {**(facts.get(member["species"]) or {}), "abilities": [member["ability"]], "moves": member["moves"]}
+            coverage = {}
+            if other.get("coverage_move_type") and move_fn is not None:
+                for name, move in (move_fn(member["moves"]) or {}).items():
+                    if move.get("category") in ("Physical", "Special") and move.get("type"):
+                        coverage.setdefault(move["type"], []).append(name)
+            return _addresses(other, fact, coverage)
+        output["notes"] = [n for n in output["notes"] if not n.startswith("avoid ITEMS")]
+        return fill_answers.attach(output, need, answer_cache, fmt,
+            excluded_items=[*(avoid_items or []), *(m.get("item") for m in team.get("pokemon", []) if m.get("item"))],
+            build_matches=build_matches)
+    return output
 
 
 def format_fill_md(d: dict[str, Any]) -> str:

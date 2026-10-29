@@ -583,6 +583,9 @@ def cmd_run(ns) -> int:
         path = getattr(ns, field)
         if path:
             op[field] = json.loads(Path(path).read_text(encoding="utf-8"))
+    if ns.out:
+        from .operator_output import full_result_args
+        op = full_result_args(op["op"], op)
     out = _http(daemon, "POST", "/api/team/session", {**body, "ops": [op]}, timeout=630)
     result = out[0] if isinstance(out, list) and len(out) == 1 else out
     ok = (isinstance(result, dict) and result.get("rc") == 0

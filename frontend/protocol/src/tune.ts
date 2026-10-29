@@ -107,6 +107,10 @@ export const TuneCardDtoSchema = z.object({
     nature: z.string().nullable().optional(),
   }).passthrough().optional(),
   assumptions: z.array(z.string()).optional(),
+  nature_alternatives: z.array(LaneSchema.extend({
+    nature: z.string(), plus_stat: z.string().nullable().optional(), penalty_stat: z.string().nullable().optional(),
+    saves_sp: z.number().optional(), unlock: z.boolean().optional(),
+  })).optional(),
 }).passthrough();
 export type TuneCardDto = z.infer<typeof TuneCardDtoSchema>;
 

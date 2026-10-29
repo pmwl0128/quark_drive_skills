@@ -62,6 +62,8 @@ const FAIL_COPY = {
 
 /** The server takes at most this many owned species (and says so if sent more). */
 const OWNED_MAX = 30;
+/** The goal text the server reads (protocol BuilderRequestDto.goal). */
+const GOAL_MAX = 300;
 
 function splitNames(raw: string, cap: number): string[] {
   return raw.split(/[,，、;；\n]/).map((s) => s.trim()).filter(Boolean).slice(0, cap);
@@ -87,6 +89,41 @@ function writeDraft(draft: BuildInput): void {
 /** A record's job snapshot, read back through the DTO schema (null when none, or unreadable). */
 function jobOf(record: AssistRecord<BuildInput>): BuilderJobDto | null {
   return readResult(record, BuilderJobDtoSchema);
+}
+
+const SEEN_MAX = 6;   // mirrors builder.SEEN_TEAMS
+
+/** The brief as a comparable key: what is built from it (thinking only changes the explanation). */
+function briefKey(input: BuildInput): string {
+  return JSON.stringify([input.format, input.posture, input.anchor.trim(), input.owned.trim(),
+    input.avoid.trim(), [...input.wants].sort(), (input.goal ?? "").trim()]);
+}
+
+type SeenMember = { species: string; item?: string | null };
+
+/** The teams earlier runs of the same brief already showed, newest first: a rerun asks for others. */
+function seenTeams(records: AssistRecord<BuildInput>[], input: BuildInput): SeenMember[][] {
+  const key = briefKey(input);
+  const teams: SeenMember[][] = [];
+  for (const record of records) {
+    if (record.status !== "done" || briefKey(record.input) !== key) continue;
+    const result = jobOf(record)?.result;
+    for (const team of result?.candidates?.map((c) => c.team) ?? (result?.team ? [result.team] : [])) {
+      const members = membersOf(team);
+      if (members.length && teams.length < SEEN_MAX) teams.push(members);
+    }
+  }
+  return teams;
+}
+
+/** Species and item per member: a base species holding its own Mega stone battles as that Mega. */
+function membersOf(team: unknown): SeenMember[] {
+  const members = (team as { pokemon?: unknown } | null)?.pokemon;
+  if (!Array.isArray(members)) return [];
+  return members.flatMap((m) => {
+    const { species, item } = (m ?? {}) as { species?: unknown; item?: unknown };
+    return typeof species === "string" ? [{ species, item: typeof item === "string" ? item : null }] : [];
+  });
 }
 
 /** Jobs being followed, by record. Module scope: a job keeps filling its record while the tab shows
@@ -132,6 +169,7 @@ function briefFacts(input: BuildInput, t: ReturnType<typeof useAssistT>, anchorN
     t(`builder.posture.${input.posture}`),
     input.anchor.trim() ? anchorName(input.anchor.trim()) : t("builder.anyCore"),
     ...input.wants.map((w) => t(`tactic.${w}` as Parameters<typeof t>[0])),
+    ...(input.goal?.trim() ? [input.goal.trim().length > 24 ? `${input.goal.trim().slice(0, 24)}…` : input.goal.trim()] : []),
   ];
 }
 
@@ -224,18 +262,22 @@ export function BuilderPage({ embedded = false, active = true, fill = null, onCo
   const [owned, setOwned] = useState(draft.owned ?? "");
   const [avoid, setAvoid] = useState(draft.avoid ?? "");
   const [wants, setWants] = useState<Set<string>>(new Set(draft.wants ?? []));
+  const [goal, setGoal] = useState(draft.goal ?? "");
   const [thinking, setThinking] = useState(draft.thinking ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<StartError | null>(null);
   const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
   useEffect(() => {
-    writeDraft({ format, posture, anchor, owned, avoid, wants: [...wants], thinking });
-  }, [format, posture, anchor, owned, avoid, wants, thinking]);
+    writeDraft({ format, posture, anchor, owned, avoid, wants: [...wants], goal, thinking });
+  }, [format, posture, anchor, owned, avoid, wants, goal, thinking]);
 
   const { records, ready } = useAssistRecords<BuildInput>("build");
   const [selected, setSelected] = useState<string | null>(readSelected("build"));
   const current = records.find((r) => r.id === selected) ?? records[0] ?? null;
   const select = (id: string | null) => { setSelected(id); saveSelected("build", id); };
+  // The compared candidate on screen; a different record opens on its first candidate again.
+  const [shownCandidate, setShownCandidate] = useState("A");
+  useEffect(() => { setShownCandidate("A"); }, [current?.id]);
   // The form opens on its own when there is nothing to read; a record on screen folds it to its brief.
   const [composing, setComposing] = useState<boolean | null>(null);
   const open = composing ?? (ready && !current);
@@ -295,7 +337,9 @@ export function BuilderPage({ embedded = false, active = true, fill = null, onCo
       return { ok: true };
     } } : null);
   const currentJob = current ? jobOf(current) : null;
-  const builtTeam = current?.status === "done" ? currentJob?.result?.team ?? null : null;
+  const builtTeam = current?.status === "done"
+    ? currentJob?.result?.candidates?.find((c) => c.label === shownCandidate)?.team ?? currentJob?.result?.team ?? null
+    : null;
   useLibrarySource(active && builtTeam && current ? { id: "builder-keep", origin: "builder", kind: "team",
     label: bt("transfer.builder.save"), read: () => toTeamDoc(builtTeam, current.input.format) } : null);
   const ownedDrop = useLibraryDrop(["builder-box", "builder-mon"]);
@@ -307,12 +351,14 @@ export function BuilderPage({ embedded = false, active = true, fill = null, onCo
     setOwned(input.owned);
     setAvoid(input.avoid);
     setWants(new Set(input.wants));
+    setGoal(input.goal ?? "");
     setThinking(input.thinking && !thinkingUnavailable);
   };
 
   const submit = async (brief?: BuildInput) => {
     if (!adapter.builder || submitting) return;
-    const input: BuildInput = brief ?? { format, posture, anchor, owned, avoid, wants: [...wants], thinking };
+    const input: BuildInput = brief ?? { format, posture, anchor, owned, avoid, wants: [...wants], goal, thinking };
+    const seen = seenTeams(records, input);
     setError(null);
     setSubmitting(true);
     const req: BuilderRequestDto = {
@@ -323,6 +369,8 @@ export function BuilderPage({ embedded = false, active = true, fill = null, onCo
       ...(input.owned.trim() ? { owned: splitNames(input.owned, OWNED_MAX) } : {}),
       ...(input.avoid.trim() ? { avoid: splitNames(input.avoid, 10) } : {}),
       ...(input.wants.length ? { wants: input.wants as BuilderRequestDto["wants"] } : {}),
+      ...(input.goal?.trim() ? { goal: input.goal.trim().slice(0, GOAL_MAX) } : {}),
+      ...(seen.length ? { seen } : {}),
       ...(input.thinking && !thinkingUnavailable ? { thinking: true } : {}),
     };
     try {
@@ -365,7 +413,8 @@ export function BuilderPage({ embedded = false, active = true, fill = null, onCo
     if (job?.result) {
       return (
         <>
-          <ResultBoundary><BuildResult record={current} job={job} onRerun={() => rerun(current)} /></ResultBoundary>
+          <ResultBoundary><BuildResult record={current} job={job} onRerun={() => rerun(current)}
+            candidate={shownCandidate} onCandidate={setShownCandidate} /></ResultBoundary>
           <BuildRun record={current} live={false} />
         </>
       );
@@ -453,6 +502,12 @@ export function BuilderPage({ embedded = false, active = true, fill = null, onCo
             <label htmlFor="builder-avoid">{t("builder.avoid")}</label>
             <textarea id="builder-avoid" rows={1} value={avoid}
                       onChange={(e) => setAvoid(e.target.value)} />
+          </div>
+          <div className="builder-field">
+            <label htmlFor="builder-goal">{t("builder.goal")}</label>
+            <textarea id="builder-goal" rows={2} value={goal} maxLength={GOAL_MAX}
+                      onChange={(e) => setGoal(e.target.value)}
+                      placeholder={t("builder.goalHint")} />
           </div>
           <div className="builder-field">
             <label>{t("builder.tactics")}</label>

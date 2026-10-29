@@ -1,7 +1,7 @@
 interface:
   display_name: "Pokémon Champions Team"
-  short_description: "Build, validate, and review Pokémon Champions teams"
-  default_prompt: "Use $pokemon-champions-team to build or review a Pokémon Champions team with the mandatory audited workflow."
+  short_description: "Build Champions teams; query speed, matchups and KO facts"
+  default_prompt: "Use $pokemon-champions-team for audited team work, type and rule facts, metagame speed comparisons, observed answers or qualified OHKO/2HKO tables. The mandatory UEP gates apply to whole-team proposals."
 
 policy:
   allow_implicit_invocation: true

@@ -59,7 +59,7 @@ def resolve_names(names: list[str], kind: str = "pokemon", *, fuzzy: bool = True
     caller resolves a de-duplicated set — context_audit/libsearch build `sorted(set(...))` first — so
     this never loses a record in practice; the dex CLI itself keeps the strict positional 1:1 list).
     This is how the team side normalizes USER-typed condition values (species/move/item/ability/nature)
-    for `search` without re-implementing dex's resolution rules (DRY)."""
+    for `search` and type facts without re-implementing dex's resolution rules (DRY)."""
     if not names:
         return {}
     args = ["resolve", *names, "--kind", kind]
@@ -69,6 +69,10 @@ def resolve_names(names: list[str], kind: str = "pokemon", *, fuzzy: bool = True
     if isinstance(rows, dict):
         rows = [rows]
     return {name: row for name, row in zip(names, rows)}
+
+
+def official_names() -> list[dict[str, Any]]:
+    return _run(["names"])
 
 
 def lookup_pokemon(names: list[str], *, fuzzy: bool = False) -> dict[str, dict[str, Any]]:
@@ -141,6 +145,36 @@ def canonicalize_species(team: Any, *, fuzzy: bool = True) -> list[dict[str, Any
             flags.append({"from": m.species, "to": f["name"], "match_type": r.get("match_type"),
                           "score": r.get("score"), "distance": r.get("distance")})
         m.species = f["name"]                          # exact-alias or fuzzy -> canonical downstream
+    return flags
+
+
+def canonicalize_fields(team: Any, *, fuzzy: bool = True) -> list[dict[str, Any]]:
+    """Normalize authored item/ability/nature/moves through the public resolver; flag every typo.
+
+    Unresolved/ambiguous values remain verbatim for strict validation. Stored evidence is never
+    passed through this cleanup: callers own the mutable Team copy and preserve receipt inputs.
+    """
+    members = list(getattr(team, "pokemon", []))
+    flags = []
+    batches = {}
+    for field, kind in (("item", "item"), ("ability", "ability"), ("nature", "nature"), ("moves", "move")):
+        values = sorted({value for member in members
+                         for value in (getattr(member, field, []) if field == "moves"
+                                       else [getattr(member, field, None)]) if isinstance(value, str) and value})
+        batches[field] = resolve_names(values, kind, fuzzy=fuzzy)
+    for field, records in batches.items():
+        for index, member in enumerate(members):
+            original = getattr(member, field, []) if field == "moves" else [getattr(member, field, None)]
+            normalized = []
+            for position, value in enumerate(original):
+                rec = records.get(value) or {}
+                canonical = rec.get("canonical") if rec.get("ok") else None
+                normalized.append(canonical or value)
+                if canonical and rec.get("match_type") == "fuzzy":
+                    flags.append({"field": f"pokemon[{index}].{field}" + (f"[{position}]" if field == "moves" else ""),
+                                  "from": value, "to": canonical, "match_type": "fuzzy",
+                                  "score": rec.get("score"), "distance": rec.get("distance")})
+            setattr(member, field, normalized if field == "moves" else normalized[0])
     return flags
 
 

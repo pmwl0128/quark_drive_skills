@@ -514,17 +514,31 @@ def _mega_by_base(facts: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]
             and ff.get("base_species")}
 
 
+def _ability_phases(member: Any, facts: dict[str, dict[str, Any]],
+                    mega_by_base: dict[str, dict[str, Any]]) -> tuple[str | None, str | None, bool]:
+    """Retain entry and Mega abilities even when retrieval has already projected the battle form."""
+    f = facts.get(member.species) or {}
+    base, unknown = _certain_ability(member.ability, f.get("abilities"))
+    registration = getattr(member, "_registration", None) or {}
+    source = facts.get(registration.get("species")) or {}
+    if (f.get("is_mega") and registration.get("species") == f.get("base_species")
+            and member.item and member.item == f.get("required_item") and source.get("found")):
+        entry = registration.get("ability")
+        if entry is None or entry in (source.get("abilities") or []):
+            entry, entry_unknown = _certain_ability(entry, source.get("abilities"))
+            return entry, base, entry_unknown
+    mf = mega_by_base.get(member.species)
+    mega = None
+    if mf and member.item and mf.get("required_item") == member.item:
+        abilities = [a for a in (mf.get("abilities") or []) if a]
+        mega = abilities[0] if len(abilities) == 1 else None
+    return base, mega, unknown
+
+
 def _battle_abilities(member: Any, facts: dict[str, dict[str, Any]],
                       mega_by_base: dict[str, dict[str, Any]]) -> set[str]:
-    """Every ability a member can actually battle with: its own, plus its Mega form's when it holds
-    that form's stone (both fire in one battle — base on entry, Mega after evolving)."""
-    f = facts.get(member.species) or {}
-    base, _unknown = _certain_ability(member.ability, f.get("abilities"))
-    out = {base} if base else set()
-    mf = mega_by_base.get(member.species)
-    if mf and member.item and mf.get("required_item") == member.item:
-        out.update(a for a in (mf.get("abilities") or []) if a)
-    return out
+    base, mega, _unknown = _ability_phases(member, facts, mega_by_base)
+    return {a for a in (base, mega) if a}
 
 
 def team_field_conditions(team: Team, facts: dict[str, dict[str, Any]]) -> set[str]:
@@ -1199,16 +1213,11 @@ def diagnose_roles(team: Team, facts: dict[str, dict[str, Any]], *,
                 "species": m.species or "(blank)",
                 "completeness": completeness.effective_level(m.completeness, has_moves=bool(m.moves)),
             })
-        base_ability, ability_unknown = _certain_ability(m.ability, f.get("abilities"))
+        base_ability, mega_ability, ability_unknown = _ability_phases(m, facts, mega_by_base)
         # A Mega-stone holder plays its BASE ability first (turn 0 — Intimidate fires on
         # entry) and its MEGA ability after evolving: BOTH grant capabilities, so UNION their
         # coverage rather than replacing (Salamence keeps Intimidate mitigation AND gains
         # Aerilate; Froslass keeps nothing pre-Mega but gains Snow Warning / weather rewrite).
-        mega_ability = None
-        mf = mega_by_base.get(m.species)
-        if mf and m.item and mf.get("required_item") == m.item:
-            mabils = [a for a in (mf.get("abilities") or []) if a]
-            mega_ability = mabils[0] if mabils else None    # Megas have exactly one ability
         item_signal = _ITEM_SIGNALS.get(m.item) if m.item else None
         base_ability_signal = _ABILITY_SIGNALS.get(base_ability) if base_ability else None
         mega_ability_signal = _ABILITY_SIGNALS.get(mega_ability) if mega_ability else None

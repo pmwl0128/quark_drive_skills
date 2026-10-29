@@ -5,9 +5,9 @@ import type { MoveRef } from "../../../runtime/projection.ts";
 import { maxHPOf, natureMult, type FieldState, type MonState } from "../duel/state.ts";
 import type { BuildOption } from "../../../lib/buildState.ts";
 import { pressedStat, requestKey, type Rolls } from "../tune/model.ts";
-import { bulkRequest, offenseRequest, liveFrame, survivesAtOne, type HitFrame,
+import { bulkRequest, offenseRequest, liveFrame, survivesAtOne, frameIssueOf, type HitFrame,
   type Observation, type RequestKit, type SpaceInfo } from "./context.ts";
-import { candidateShares, infer, nearestAfters, possibleAfters,
+import { candidateShares, evaluateEvidence,
   predictIntoFoe, predictIntoMine, spreadSurvives, type BulkKey, type BulkRolls,
   type Candidate, type Evidence, type InferKey, type OffKey, type OffRolls } from "./model.ts";
 import type { InferenceView, MoveReading } from "./useInference.ts";
@@ -58,11 +58,10 @@ export function evaluateInference(job: InferenceJob): InferenceView {
       return value;
     };
   };
-  const impossible = new Map<string, number[]>(), skipped = new Set(job.skipped);
-  const evidence: Evidence[] = [];
-  const accepted: string[] = [];
-  let pending = false;
+  const skipped = new Set(job.skipped);
+  const records: Array<{ id: string; evidence: Evidence }> = [];
   for (const { observation: o, frame, key } of recorded) {
+    if (frameIssueOf(frame, o.kind, space.abilities.map(a => a.name), kit)) { skipped.add(o.id); continue; }
     const probe = o.kind === "bulk"
       ? bulkRequest(frame, key as BulkKey, space.abilities[0]?.name ?? "", space.natures[0]?.mult[key] ?? 1, 0, kit, space.items[0]?.name ?? "")
       : offenseRequest(frame, key as OffKey, space.items[0]?.name ?? "", space.abilities[0]?.name ?? "", space.natures[0]?.mult[key] ?? 1, 0, kit);
@@ -76,25 +75,14 @@ export function evaluateInference(job: InferenceJob): InferenceView {
           stopAtOne: (item, ability) => o.before === maxHPOf(frame.mine, kit.dex, kit.items)
             && survivesAtOne({ ...frame.foe, item, ability }, frame.mine, frame.move,
               frame.mine.item, frame.mine.ability, kit) };
-    const single = infer(space, [e], true);
-    if (!single) pending = true;
-    if (single?.count === 0) {
-      const values = possibleAfters(space, e);
-      // A refused engine request is unsupported, not a contradictory measurement.
-      if (values?.length) impossible.set(o.id, nearestAfters(values, o.after));
-      else skipped.add(o.id);
-    } else { evidence.push(e); accepted.push(o.id); }
+    records.push({ id: o.id, evidence: e });
   }
   const templateIndex = realSets.reduce((best, option, index) =>
     (option.coverage ?? 0) > (realSets[best]?.coverage ?? -1) ? index : best, -1);
   const template = candidates[templateIndex];
-  const prior = infer(space, [], false, template);
-  const inference = pending ? null : evidence.length ? infer(space, evidence, false, template) : prior;
-  const remaining = new Map<string, number | null>();
-  if (prior?.count && inference) accepted.forEach((id, index) => {
-    const count = index === accepted.length - 1 ? inference.count : infer(space, evidence.slice(0, index + 1), true)?.count;
-    remaining.set(id, count === undefined ? null : count / prior.count);
-  });
+  const screened = evaluateEvidence(space, records, template);
+  const { prior, inference, evidence, impossible, remaining, pending } = screened;
+  for (const id of screened.skipped) skipped.add(id);
   const ourHP = maxHPOf(mine, kit.dex, kit.items);
   const into: MoveReading[] = liveMoves.into.map(({ move, use }) => {
     if (!("key" in use)) return { move, reason: use.reason, key: null, ours: null, posterior: null, prior: null, isSpread: false };

@@ -437,6 +437,14 @@ def _build_modal_set(species: str, fmt: str, members: list[dict[str, Any]]) -> d
         "note": (f"real-team modal joint set: {cnt}/{sample} teams ({species}, {fmt}); "
                  f"ability/item/nature/moves co-occur (no marginal stitch). {spread_note}"),
     }
+    if any(isinstance(m.get("_registration"), dict) for m in winners):
+        registrations = Counter(((m.get("_registration") or m).get("species"),
+                                 (m.get("_registration") or m).get("ability")) for m in winners)
+        result["configuration_basis"] = "battle_form"
+        result["registration_sample"] = cnt
+        result["registration_modes"] = [{"species": sp, "ability": ability, "count": count}
+                                        for (sp, ability), count in sorted(registrations.items(), key=lambda kv: str(kv[0]))]
+        result["note"] += " Species/ability use the deterministic battle-form projection; registration_modes preserve the observed values."
     if expiries:
         evidence_rules = sorted({m.get("_evidence_rule") for m in members if m.get("_evidence_rule")})
         target_rules = sorted({m.get("_target_rule") for m in members if m.get("_target_rule")})

@@ -17,6 +17,7 @@ import re
 import time
 import traceback
 import zlib
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from starlette.staticfiles import StaticFiles
 
 from . import builder, qa
 from .access_log import AccessLog
+from .diagnosis_context import ContextError, DiagnosisContexts, Lease
 from .jobs import JobStore
 from .limits import BudgetExhausted, OnlineLimits, RateLimited
 from .provider import LlmProvider, LlmUnavailable
@@ -34,6 +36,9 @@ from .tester_keys import (TOKEN_RE, AccessDenied, DeviceMismatch, TesterBudgetEx
                           TesterKeyStore, TesterReservation, device_tag)
 from ..openapi import install_openapi
 from ..team_diagnose import DIAGNOSE_TEXT_MAX, DIAGNOSE_TIMEOUT, DIAGNOSE_TOP_K, run_team_diagnose
+from ..team_evidence import DiagnosisInputError, diagnosis_intent
+from ..team_assist import TeamAssist, AssistToolError, _digest
+from ..team_evidence import data_snapshot
 from ..team_matchup import MatchupInputError, run_actual_matchup
 from ..team_tune import TuneInputError, run_team_tune
 
@@ -109,6 +114,7 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                       unmetered: bool = False,
                       jobs: JobStore | None = None) -> FastAPI:
     app = FastAPI(title="pcui online", docs_url=None, redoc_url=None, openapi_url=None)
+    diagnosis_contexts = DiagnosisContexts(turns=limits.cfg.diagnose_followup_limit)
     question_provider = qa_provider if qa_provider is not None else provider
     # Thread lanes. §7.5 says model work and CPU work must not exhaust each other, and the
     # semaphores below implement that — but every blocking call still went through
@@ -155,6 +161,7 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
     loop_ref: dict[str, asyncio.AbstractEventLoop] = {}
     builder_tasks: set[asyncio.Task] = set()
     stream_tasks: set[asyncio.Task] = set()
+    context_maintenance: dict[str, asyncio.Task] = {}
 
     def _ndjson_stream(run, request: Request) -> StreamingResponse:
         """Answer one slow request as an NDJSON event stream (see STREAM_HEARTBEAT).
@@ -561,7 +568,7 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
             raise HTTPException(429, _err("busy", "too many concurrent questions — retry"))
         try:
             result = await _in(llm_pool, qa.answer, pool, question_provider, question, lang,
-                               _thread_reporter(emit), _team_code_consumer(request))
+                               _thread_reporter(emit), _team_code_consumer(request), projection_dir)
         except LlmUnavailable as e:
             fail_cleanup(getattr(e, "tokens", 0))   # earlier rounds' spend settles truthfully
             raise HTTPException(503, _err("llm_unavailable", str(e)))
@@ -612,10 +619,63 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
     diagnose_slots = asyncio.Semaphore(1)
     matchup_slots = asyncio.Semaphore(1)
 
-    def _run_diagnose(text: str, fmt: str) -> dict:
-        return run_team_diagnose(pool, text, fmt)
+    def _run_diagnose(text: str, fmt: str, intent: dict) -> dict:
+        return run_team_diagnose(pool, text, fmt, intent)
+
+    def _diagnosis_owner(request):
+        return (getattr(request.state, "device_id", ""), _access_kind(request),
+                getattr(request.state, "tester_key_id", None))
+
+    def _diagnosis_binding(body):
+        return _digest({"format": body.get("format"), "text": body.get("text"), "intent": diagnosis_intent(body)})
 
     async def _execute_team_diagnose(request: Request, body: dict, on_report=None):
+        token = body.get("followup")
+        lease = None
+        if token is not None:
+            if not isinstance(token, dict) or set(token)-{"testChange"} != {"id", "revision", "question"} \
+                    or not isinstance(token["id"], str) or not re.fullmatch(r"[a-f0-9]{48}", token["id"]) \
+                    or type(token["revision"]) is not int or token["revision"] < 0 \
+                    or not isinstance(token["question"], str) or not 1 <= len(token["question"].strip()) <= 500 \
+                    or ("testChange" in token and type(token["testChange"]) is not bool) \
+                    or body.get("explain") is not True:
+                raise HTTPException(400, _err("bad_input", "invalid diagnosis follow-up"))
+            try:
+                lease = diagnosis_contexts.claim(_diagnosis_owner(request), _diagnosis_binding(body), token,
+                    {"question": token["question"].strip(), "thinking": bool(body.get("thinking")),
+                     "lang": body.get("lang") or "zh", "testChange": token.get("testChange", False)})
+                # Validate the data generation before a retry replay or any quota/model work.
+                state_report = lease.state["report"] if isinstance(lease, Lease) else lease
+                async with diagnose_slots:
+                    current_snapshot = await _in(det_pool, data_snapshot, pool)
+                if current_snapshot != state_report["analysis"]["snapshot"]:
+                    diagnosis_contexts.discard(token["id"])
+                    raise ContextError("snapshot_changed")
+                if isinstance(lease, dict):
+                    device_id = getattr(request.state, "device_id", "")
+                    client_ip = request.client.host if request.client else "unknown"
+                    lease["quota"] = ({"used": 0, "limit": 0} if _authorized(request) or unmetered else
+                                      _quota_for(device_id, client_ip, "td", "ti", limits.cfg.diagnose_daily_limit))
+                    return lease
+            except ContextError as exc:
+                if isinstance(lease, Lease):
+                    diagnosis_contexts.release(lease)
+                raise HTTPException(409, _err(exc.code, "diagnosis context cannot be continued")) from None
+            except ValueError:
+                if isinstance(lease, Lease):
+                    diagnosis_contexts.release(lease)
+                raise HTTPException(400, _err("bad_input", "invalid diagnosis intent")) from None
+            except BaseException:
+                if isinstance(lease, Lease):
+                    diagnosis_contexts.release(lease)
+                raise
+        try:
+            return await _execute_diagnose_turn(request, body, on_report, lease)
+        finally:
+            if isinstance(lease, Lease):
+                diagnosis_contexts.release(lease)
+
+    async def _execute_diagnose_turn(request: Request, body: dict, on_report=None, lease=None):
         fmt = body.get("format")
         text = str(body.get("text") or "")
         lang = body.get("lang") if body.get("lang") in ("zh", "en", "ja") else "zh"
@@ -626,6 +686,10 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
             raise HTTPException(400, _err("bad_input", "format and team text required"))
         if thinking and not want_explain:
             raise HTTPException(400, _err("bad_input", "thinking requires AI explanation"))
+        try:
+            intent = diagnosis_intent(body)
+        except ValueError:
+            raise HTTPException(400, _err("bad_input", "invalid diagnosis intent")) from None
         selected_provider = thinking_provider if thinking else provider
         device_id = getattr(request.state, "device_id", None) or limits.device_cookie(None)[0]
         client_ip = request.client.host if request.client else "unknown"
@@ -642,9 +706,18 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
             except RateLimited:
                 raise HTTPException(429, _err("rate_limited", "daily diagnose limit reached"))
         try:
-            text = await _resolve_code_text(request, text, fmt)
-            async with diagnose_slots:
-                report = await _in(det_pool, _run_diagnose, text, fmt)
+            if lease is not None:
+                report = deepcopy(lease.state["report"])
+                for key in ("explanation", "explanationError", "assistance", "continuation", "followups"):
+                    report.pop(key, None)
+            else:
+                text = await _resolve_code_text(request, text, fmt)
+                async with diagnose_slots:
+                    report = await _in(det_pool, _run_diagnose, text, fmt, intent)
+        except DiagnosisInputError:
+            if not bypass_limits:
+                limits.refund(ids, quota_day, cost=cost)
+            raise HTTPException(400, _err("bad_input", "invalid diagnosis member coordinates")) from None
         except ValueError:
             if not bypass_limits:
                 limits.refund(ids, quota_day, cost=cost)
@@ -658,7 +731,19 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                 limits.refund(ids, quota_day, cost=cost)
             raise HTTPException(500, _err("bad_input", "diagnose pipeline failed"))
         report["quota"] = {"used": used, "limit": limit}
-        if on_report is not None and want_explain:
+        if report["analysis"]["status"] == "needs_input":
+            if want_explain:
+                report["explanationError"] = "needs_input"
+            if thinking and not bypass_limits:
+                limits.refund(ids, quota_day, cost=1)
+                report["quota"] = _quota_for(device_id, client_ip, "td", "ti", limit)
+            return report
+        if not want_explain:
+            report["continuation"] = diagnosis_contexts.create(_diagnosis_owner(request), _diagnosis_binding(body), report, {})
+            if report["continuation"] is None:
+                report.pop("continuation")
+            return report
+        if on_report is not None and lease is None:
             # The deterministic report is already complete and useful. Stream this immutable
             # snapshot before the optional model call so a thinking-mode visitor can inspect
             # legality, structure and matchups instead of staring at a spinner for another minute.
@@ -668,7 +753,83 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
 
         # Optional reading uses the diagnosis allowance, never the separate Q&A allowance.
         explain_reservation = (limits.cfg.diagnose_thinking_pessimistic_tokens if thinking
-                               else limits.cfg.pessimistic_tokens)
+                               else limits.cfg.diagnose_pessimistic_tokens)
+        deadline = time.monotonic() + 300
+        loop = asyncio.get_running_loop()
+
+        async def _assist_work(work):
+            async with diagnose_slots:
+                if time.monotonic() >= deadline:
+                    raise AssistToolError("deadline")
+                return await _in(det_pool, work)
+
+        def _run_assist_work(work):
+            # The blocking model thread waits; the event loop retains the real CPU slot
+            # until the deterministic worker finishes (cancelling a Future cannot stop it).
+            return asyncio.run_coroutine_threadsafe(_assist_work(work), loop).result()
+
+        previous_report = lease.state["report"] if lease else {}
+        previous_turns = [previous_report, *(previous_report.get("followups") or [])] if lease else []
+        executor = TeamAssist(pool, report, projection_dir=projection_dir,
+            run_heavy=_run_assist_work, deadline=deadline,
+            read_cache=lease.state["reads"] if lease else None,
+            previous_actions=[card for turn in previous_turns for card in (turn.get("assistance") or {}).get("actions") or []],
+            question=body["followup"]["question"].strip() if lease else "",
+            previous_questions=[turn["question"] for turn in previous_turns if turn.get("question")],
+            allow_test=body["followup"].get("testChange", False) if lease else True)
+
+        def _finish_reading():
+            try:
+                executor.check_snapshot()
+            except AssistToolError as exc:
+                executor.actions.clear()
+                executor.tunings.clear()
+                executor.notes.clear()
+                report.pop("explanation", None)
+                report["explanationError"] = exc.code
+                if "assistance" in report:
+                    report["assistance"] = executor.public_result()
+                if lease:
+                    diagnosis_contexts.discard(lease.id)
+                retain = False
+            else:
+                retain = True
+            if lease:
+                result = deepcopy(previous_report)
+                result.pop("continuation", None)
+                result["quota"] = report["quota"]
+                result["followups"] = [*(result.get("followups") or []), {
+                    "question": executor.question, "thinking": thinking,
+                    **{key: report[key] for key in ("explanation", "explanationError", "assistance") if key in report}}]
+                continuation = diagnosis_contexts.complete(lease, result, executor.export_reads()) if retain else None
+            else:
+                result = report
+                continuation = diagnosis_contexts.create(_diagnosis_owner(request), _diagnosis_binding(body),
+                                                         result, executor.export_reads()) if retain else None
+            if continuation is not None:
+                result["continuation"] = continuation
+            return result
+
+        def _unanswered_followup() -> None:
+            """A follow-up exists for its answer. Failing without any new host work (a test or a fresh
+            tuning) it consumes neither the turn nor the visitor's allowance: the lease is released
+            unadvanced and the page keeps the question for a retry."""
+            code = report.get("explanationError")
+            fresh = executor.actions or any(t["tool"] == "tune_member" and t["status"] == "done"
+                                            and not t.get("cacheHit") for t in executor.trace)
+            if lease is None or not code or fresh:
+                return
+            if not bypass_limits:
+                limits.refund(ids, quota_day, cost=cost)
+            status = (503 if code in ("budget_exhausted", "llm_unavailable", "tester_budget_exhausted")
+                      else 401 if code == "access_revoked" else 502)
+            raise HTTPException(status, _err(code, "the follow-up was not answered and was not counted"))
+
+        def _settled_spend(known_tokens: int) -> int:
+            # Missing upstream usage is UNKNOWN. Conservatively book the reservation in
+            # the safety budget, without reporting that estimate as measured token usage.
+            return max(known_tokens, explain_reservation) if executor.metrics.get("usageUnknown") else known_tokens
+
         if want_explain and selected_provider is not None:
             if bypass_limits:
                 tester_reservation: TesterReservation | None = None
@@ -676,17 +837,19 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                     tester_reservation = _reserve_authorized(request, explain_reservation)
                     async with qa_slots:
                         explanation, tokens = await _in(
-                            llm_pool, qa.explain_diagnose, selected_provider, report, lang)
-                    _settle_authorized(tester_reservation, tokens)
+                            llm_pool, qa.explain_diagnose, selected_provider, report, lang, executor)
+                    _settle_authorized(tester_reservation, _settled_spend(tokens))
                     report["explanation"] = explanation
                 except TesterBudgetExhausted:
                     report["explanationError"] = "tester_budget_exhausted"
                 except AccessDenied:
                     report["explanationError"] = "access_revoked"
                 except Exception as e:
-                    _settle_authorized(tester_reservation, getattr(e, "tokens", 0))
+                    _settle_authorized(tester_reservation, _settled_spend(getattr(e, "tokens", 0)))
                     report["explanationError"] = "llm_failed"
-                return report
+                _unanswered_followup()
+                report["assistance"] = executor.public_result()
+                return _finish_reading()
             try:
                 try:
                     budget_day = limits.reserve_budget(explain_reservation)
@@ -695,12 +858,12 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                 async with qa_slots:
                     try:
                         explanation, tokens = await _in(
-                            llm_pool, qa.explain_diagnose, selected_provider, report, lang)
+                            llm_pool, qa.explain_diagnose, selected_provider, report, lang, executor)
                     except Exception as e:
-                        limits.settle_budget(getattr(e, "tokens", 0), budget_day,
+                        limits.settle_budget(_settled_spend(getattr(e, "tokens", 0)), budget_day,
                                              explain_reservation)
                         raise
-                limits.settle_budget(tokens, budget_day, explain_reservation)
+                limits.settle_budget(_settled_spend(tokens), budget_day, explain_reservation)
                 report["explanation"] = explanation
             except BudgetExhausted:
                 report["explanationError"] = "budget_exhausted"
@@ -708,12 +871,15 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                 report["explanationError"] = "llm_failed"
         elif want_explain:
             report["explanationError"] = "llm_unavailable"
+        _unanswered_followup()
+        if executor.trace or executor.metrics:
+            report["assistance"] = executor.public_result()
         if report.get("explanationError") and thinking and not bypass_limits:
             # The ordinary deterministic diagnosis was delivered; return only the extra
             # thinking unit when the enhanced reading itself failed.
             limits.refund(ids, quota_day, cost=1)
             report["quota"] = _quota_for(device_id, client_ip, "td", "ti", limit)
-        return report
+        return _finish_reading()
 
     @app.post("/api/team/diagnose")
     async def team_diagnose(request: Request, body: dict):
@@ -893,22 +1059,26 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
 
     def _resolve_species(names: list[str]) -> dict[str, str]:
         """name -> canonical for the resolved subset (misses simply absent). Runs in a
-        worker thread (resident dex worker)."""
+        worker thread (resident dex worker). An approximate (fuzzy) reading is a miss here:
+        a build constraint must never silently become another species (Gastrodon -> Bastiodon)."""
         if not names:
             return {}
         doc = pool.request_json("dex", ["resolve", *names[:60], "--format", "json",
                                         "--kind", "pokemon"], timeout=30.0)
         out: dict[str, str] = {}
         for entry in doc if isinstance(doc, list) else []:
-            if isinstance(entry, dict) and entry.get("ok") and entry.get("canonical"):
+            if isinstance(entry, dict) and entry.get("ok") and entry.get("canonical")                     and entry.get("match_type") != "fuzzy":
                 out[str(entry.get("query"))] = str(entry["canonical"])
         return out
 
     @app.post("/api/builder")
     async def builder_start(request: Request, body: dict):
         thinking = bool(body.get("thinking"))
-        selected_provider = thinking_provider if thinking else provider
-        if selected_provider is None or jobs is None:
+        # Assembly stays on the ordinary provider; thinking mode writes the final explanation
+        # (ASSIST_PLAN §4.7: multi-candidate builds close the loop in plain mode).
+        explain_provider = thinking_provider if thinking else None
+        selected_provider = provider if provider is not None else explain_provider
+        if selected_provider is None or (thinking and explain_provider is None) or jobs is None:
             raise HTTPException(503, _err("llm_unavailable", "builder backend not configured"))
         fmt = body.get("format")
         posture = body.get("posture")
@@ -928,6 +1098,12 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                 or any(t not in BUILDER_TACTICS for t in wants):
             raise HTTPException(400, _err("bad_input", "bad owned/avoid/wants"))
         wants = list(dict.fromkeys(wants))      # order-preserving dedup
+        goal = body.get("goal") or ""
+        if not isinstance(goal, str) or len(goal) > builder.GOAL_MAX_CHARS:
+            raise HTTPException(400, _err("bad_input", "bad goal"))
+        seen = await _in(det_pool, builder.shown_teams, body.get("seen"))
+        if seen is None:
+            raise HTTPException(400, _err("bad_input", "bad seen"))
 
         # Resolve every species input up front — an unresolvable name is the VISITOR's to fix
         # (400 with the misses), never something to silently drop from their constraints.
@@ -945,6 +1121,8 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
             avoid=[resolved[n] for n in avoid],
             wants=[str(t) for t in wants],
             lang=body.get("lang") if body.get("lang") in ("zh", "en", "ja") else "zh",
+            goal=goal.strip(),
+            seen=seen,
         )
         if anchor and anchor in form.avoid:
             raise HTTPException(400, _err("bad_input", "anchor is in the avoid list"))
@@ -1028,7 +1206,8 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                     return
                 try:
                     result = await _in(
-                        builder_pool, builder.build, pool, selected_provider, form, progress)
+                        builder_pool, builder.build, pool, selected_provider, form, progress,
+                        projection_dir, explain_provider)
                 except LlmUnavailable as e:
                     fail_cleanup(getattr(e, "tokens", 0))
                     jobs.fail(job_id, "llm_unavailable")
@@ -1060,7 +1239,8 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                     payload = {k: result[k] for k in
                                ("team", "legality", "audit", "checkpointDecisions",
                                 "assumptions", "slateTopK", "repaired", "worstMatchup",
-                                "rationale", "threats", "matchupThreats", "megaCount")
+                                "rationale", "threats", "matchupThreats", "megaCount",
+                                "candidates", "comparison", "goal", "droppedCandidates")
                          if k in result}
                     if debug_access:
                         payload["debug"] = {
@@ -1069,6 +1249,8 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
                             "completionTokens": result.get("completionTokens", 0),
                             "cacheHitTokens": result.get("cacheHitTokens", 0),
                             "llmCalls": result.get("llmCalls", 0),
+                            **{k: result[k] for k in ("rationaleGate", "rationaleGateDetail",
+                                                      "rationaleSalvaged", "variation") if k in result},
                         }
                     jobs.finish(job_id, payload)
 
@@ -1133,8 +1315,19 @@ def create_online_app(pool, provider: LlmProvider | None, limits: OnlineLimits, 
         loop.set_default_executor(
             ThreadPoolExecutor(max_workers=2, thread_name_prefix="pcui-maint"))
 
+        async def sweep_contexts():
+            while True:
+                await asyncio.sleep(60)
+                diagnosis_contexts.prune()
+        context_maintenance["task"] = asyncio.create_task(sweep_contexts())
+
     @app.on_event("shutdown")
     async def _stop_lanes() -> None:
+        task = context_maintenance.get("task")
+        if task:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        diagnosis_contexts.clear()
         # Do not wait: a lane may be holding a 420 s builder or a 240 s matchup, and shutdown
         # must not block on it. The owned subprocesses are reaped by `pool.shutdown` below.
         for lane in (llm_pool, det_pool, builder_pool, code_pool):

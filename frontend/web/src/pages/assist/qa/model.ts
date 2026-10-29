@@ -8,7 +8,7 @@ export interface QaInput { question: string }
 
 /** Each lookup's kind of data, as an icon. */
 export function toolIcon(tool: string): ComponentType<{ "aria-hidden"?: boolean | "true" }> {
-  if (tool === "dex.find") return IconFilter;
+  if (tool === "dex.find" || tool === "dex.find_move") return IconFilter;
   if (tool.startsWith("dex.")) return IconBook2;
   if (tool.startsWith("meta.")) return IconChartBar;
   if (tool === "team.repset") return IconCards;

@@ -146,9 +146,11 @@ def calculation_authority() -> dict:
     """
     root = SCRIPTS.parent.parent
     ncp = root / "ncp-damage-calculator/scripts"
+    engine_files = [ncp / "ncp-calc-api.js", ncp / "ncp-speedline-api.js",
+                    *(ncp / "script_res").rglob("*.js")]
     return {"dex": handover.binary_sha256(handover.dex_path(repset.data_dir())),
             "ncp": {p.relative_to(root).as_posix(): handover.file_sha256(p)
-                    for p in sorted(ncp.rglob("*.js"))},
+                    for p in sorted(engine_files)},
             "caller": {CALLER_REL: handover.file_sha256(root / CALLER_REL)}}
 
 
@@ -541,6 +543,18 @@ def _compute_check_matrix(cache: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return out
 
 
+def selector_keys(cache: dict[str, Any], query: str | None, keys: list[str]) -> list[str]:
+    """Exact build ids or actual run-form selectors; a meta base label never widens a form query."""
+    if query is None:
+        return keys
+    sets = cache.get("sets") or {}
+    own = sets.get(query) or {}
+    if query in sets and (query.startswith("variant:") or query not in {own.get("species"), own.get("run_form")}):
+        return [query] if query in keys else []
+    return [key for key in keys if ((sets.get(key) or {}).get("run_form")
+                                    or (sets.get(key) or {}).get("species")) == query]
+
+
 def derive_checks(cache: dict[str, Any], attacker: str | None = None,
                   defender: str | None = None) -> dict[str, Any]:
     """Public observed-build check matrix plus per-attacker species portfolios.
@@ -557,13 +571,7 @@ def derive_checks(cache: dict[str, Any], attacker: str | None = None,
     meta = {(r.get("variant_id") or r.get("species")): r for r in rows}
 
     def selected(query: str | None, keys: list[str]) -> list[str]:
-        if query is None:
-            return keys
-        if query in sets:
-            return [query] if query in keys else []
-        return [key for key in keys
-                if (sets.get(key) or {}).get("species") == query
-                or (sets.get(key) or {}).get("run_form") == query]
+        return selector_keys(cache, query, keys)
 
     attackers = selected(attacker, list(matrix))
     target_order = [r.get("variant_id") or r.get("species") for r in rows]

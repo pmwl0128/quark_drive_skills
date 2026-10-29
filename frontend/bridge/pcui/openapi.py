@@ -145,6 +145,26 @@ _TEAM_SESSION = _object(
     required=["ops"],
 )
 _TEAM_SESSION_RESULT = _array(_object(additional=True))
+_INFERENCE_REQUEST = {
+    "oneOf": [
+        _object(properties={"operation": {"const": operation}, **properties},
+                required=["operation", *required])
+        for operation, properties, required in (
+            ("init", {"case": _object(additional=True)}, ["case"]),
+            ("add", {"case": _object(additional=True),
+                     "observation": _object(additional=True)}, ["case", "observation"]),
+            ("status", {"case": _object(additional=True), "predict": {"type": "boolean"},
+                        "mine": {"type": "integer", "minimum": 0, "maximum": 5}}, ["case"]),
+            ("remove", {"case": _object(additional=True),
+                        "id": {"type": "string", "minLength": 1}}, ["case", "id"]),
+            ("example", {"case": _object(additional=True)}, ["case"]),
+            ("import-web", {"case": _object(additional=True), "prior": _object(additional=True),
+                            "foe_id": {"type": "string", "minLength": 1}}, ["case", "prior"]),
+            ("schema", {}, []),
+        )
+    ],
+    "description": "Path-free transport of canonical skill JSON. The skill schema owns case, observation and result fields.",
+}
 _SESSION_CREATE = _object(
     properties={"meta": _object(additional=True)},
     additional=False,
@@ -210,6 +230,11 @@ LOCAL_ROUTES: dict[RouteKey, dict[str, Any]] = {
         "Read one Top Meta ranking scope", "meta", _ref("TopMetaRankingDtoSchema")),
     ("GET", "/api/meta/top-detail"): _route(
         "Read one Pokemon's Top Meta panels", "meta", _ref("TopMetaDetailDtoSchema")),
+    ("GET", "/api/meta/inference-prior"): _route(
+        "Read the current canonical skill inference prior", "meta", _object(additional=True)),
+    ("POST", "/api/calc/inference"): _route(
+        "Run a portable canonical inference case operation", "calc", _object(additional=True),
+        request=_INFERENCE_REQUEST),
     ("POST", "/api/calc/damage"): _route(
         "Calculate one damage matchup", "calc", _ref("DamageResultDtoSchema"),
         request=_ref("DamageRequestDtoSchema")),

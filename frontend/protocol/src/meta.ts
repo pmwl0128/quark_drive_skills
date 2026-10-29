@@ -307,7 +307,10 @@ export type MetaKoTrendDto = z.infer<typeof MetaKoTrendDtoSchema>;
  *     from it is a lower bound (`deltaIsFloor`).
  *   - the rule scope spans seasons; it compares with the current official snapshot (`comparedWith.window`).
  */
-export const TopMetaScopeIdSchema = z.enum(["season", "rule"]);
+/** `high` is the rule scope filtered on raw performance facts inside each source kind (a top-8 finish
+ * in an event of at least 16, or a ladder top-100 rank / 2000+ rating); `criteria` states the bar and
+ * `composition` the team units each kind contributed. A filter, never a weight. */
+export const TopMetaScopeIdSchema = z.enum(["season", "rule", "high"]);
 export type TopMetaScopeId = z.infer<typeof TopMetaScopeIdSchema>;
 export const TopMetaTierSchema = z.enum(["count", "low", "reliable"]);
 export type TopMetaTier = z.infer<typeof TopMetaTierSchema>;
@@ -341,6 +344,11 @@ const topHeaderFields = {
     updatedAt: z.string().optional(),
   }).nullable(),
   builtAt: z.string().optional(),
+  criteria: z.object({
+    tournamentTop8: z.object({ placingAtMost: z.number().int().positive(), fieldSizeAtLeast: z.number().int().positive() }),
+    ladderTop: z.object({ rankAtMost: z.number().int().positive(), orRatingAtLeast: z.number().positive() }),
+  }).optional(),
+  composition: z.object({ tournamentTop8: z.number().int().nonnegative(), ladderTop: z.number().int().nonnegative() }).optional(),
 } as const;
 
 export const TopRankRowDtoSchema = z.object({
@@ -444,6 +452,7 @@ export const TopMetaDetailDtoSchema = z.object({
   scopes: z.object({
     season: TopMetaScopeDtoSchema.nullable(),
     rule: TopMetaScopeDtoSchema.nullable(),
+    high: TopMetaScopeDtoSchema.nullable().optional(),
   }),
 });
 export type TopMetaDetailDto = z.infer<typeof TopMetaDetailDtoSchema>;

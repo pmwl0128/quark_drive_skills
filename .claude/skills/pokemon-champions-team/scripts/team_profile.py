@@ -51,13 +51,15 @@ def _control_mode(move: str) -> str:
 def profile(team: dict[str, Any], *, dex_fn: Callable, move_fn: Callable,
             item_fn: Callable) -> dict[str, Any]:
     """The structural vector. `team` is a team-json dict; facts come from the injected siblings."""
-    t = team_from_dict(team)
+    t = team_from_dict(team, retain_registration=True)
     species = [m.species for m in t.pokemon if m.species]
     moves = sorted({mv for m in t.pokemon for mv in (m.moves or []) if mv})
     items = sorted({m.item for m in t.pokemon if m.item})
     item_info = item_fn(items) if items else {}
     candidate_forms = sorted({f for it in item_info.values() for f in (it.get("required_by") or [])})
-    facts = dex_fn(species + candidate_forms) or {}
+    registrations = [m._registration.get("species") for m in t.pokemon
+                     if m._registration and m._registration.get("species")]
+    facts = dex_fn(species + candidate_forms + registrations) or {}
     move_facts = move_fn(moves) if moves else {}
 
     defense = diagnose_defense(t, facts)

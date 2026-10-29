@@ -31,6 +31,7 @@ from typing import Any, Callable
 
 import intake
 import slate as slate_mod
+import exploration
 
 # Bounded absolute-strength wordlist (plan P6: 有界词表) — a TRIPWIRE over the draft's prose fields,
 # not language understanding. English terms are matched lowercase; CJK terms match as-is (str.lower
@@ -198,6 +199,12 @@ def _adoption_review_violations(rec: dict[str, Any], overlap: dict[str, Any],
                            "does not require a change, only a reasoned accept-or-fork review."}]
     violations: list[dict[str, Any]] = []
     status = review.get("status")
+    other = review.get("other_structures")
+    if not (isinstance(other, dict) and type(other.get("considered")) is bool
+            and _filled(other.get("reason"))):
+        violations.append({"code": "adoption_exploration_missing", "where": f"{where}.adoption_review.other_structures",
+                           "detail": "Disclose whether other structures were considered, with considered:bool and reason:str. "
+                                     "Keeping the observed team is allowed."})
     if status not in _ADOPTION_STATUSES:
         violations.append({"code": "bad_adoption_review", "where": f"{where}.adoption_review.status",
                            "detail": "status must be one of "
@@ -351,8 +358,10 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
                  context_audit_fn: Callable[[dict], dict],
                  validate_fn: Callable[[dict], dict],
                  canon_team_fn: Callable[[dict], Any] | None = None,
+                 canon_disclosures_fn: Callable | None = None,
                  recompute_fn: Callable[[list[dict]], list] | None = None,
-                 library_copy_fn: Callable[[dict], dict | None] | None = None) -> dict[str, Any]:
+                 library_copy_fn: Callable[[dict], dict | None] | None = None,
+                 text_check_fn: Callable | None = None) -> dict[str, Any]:
     """The gate. Pure given the injected stages; the CLI wires the real siblings.
 
     `context_audit_fn(ctx)` -> a context-audit dict (fingerprint + blocking gaps + safe defaults);
@@ -379,6 +388,11 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
         return _refuse("bad_slate_output",
                        "the SAVED slate-evaluate output (with its slate_receipt) is required — the "
                        "audit re-reads the battery facts and re-binds their fingerprint")
+    if slate_output.get("view") == "summary":
+        return _refuse("summary_slate_output",
+                       "answer-audit requires the FULL saved slate-evaluate output; summary is "
+                       "display-only and omits receipt-bound facts. Re-run team.py slate-evaluate "
+                       "slate.json --slate-view full --format json and save that output unchanged.")
     provided = (draft.get("slate_receipt") or {}).get("fingerprint") \
         if isinstance(draft.get("slate_receipt"), dict) else None
     if not provided:
@@ -401,24 +415,17 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
         c = candidates[i] if 0 <= i < len(candidates) else None
         return c if isinstance(c, dict) else {}
 
-    candidate_facts = None
-    if out_receipt.get("candidate_facts_bound"):
-        candidate_facts = {
-            i: {"mega_plan": _cand(i).get("mega_plan"),
-                "mega_registration_assessment": _cand(i).get("mega_registration_assessment"),
-                "selection": _cand(i).get("selection")}
-            for i in survivors}
-        candidate_facts["_slate"] = slate_output.get("mega_registration_slate")
-    recomputed = slate_mod.slate_fingerprint(
-        out_receipt.get("audit_fingerprint"), slate_input["teams"], survivors, battery_fmt,
-        {i: _cand(i).get("matchup_risk") for i in survivors},
-        out_receipt.get("frame_fingerprint"), candidate_facts)  # frame + selection/registration facts
+    recomputed = slate_mod.saved_slate_fingerprint(slate_input, slate_output)
     if recomputed != out_receipt["fingerprint"]:
         return _refuse("slate_output_inconsistent",
                        "the slate output does not reproduce its own receipt fingerprint from this "
                        "slate input — the output was edited after the run, or it is paired with a "
                        "different slate.json",
                        expected_fingerprint=recomputed, provided_fingerprint=out_receipt["fingerprint"])
+    if not out_receipt.get("constraint_facts_bound"):
+        return _refuse("receipt_upgrade_required", "saved slate does not bind battle-form constraints and frame binding facts; re-run slate-evaluate and answer-audit")
+    if not out_receipt.get("comparison_facts_bound"):
+        return _refuse("receipt_upgrade_required", "saved slate does not bind comparison and goal facts; re-run slate-evaluate")
     # A frame-bound (build-flow) slate that reproduces its fingerprint WITHOUT candidate_facts_bound
     # predates the Mega-registration / 6-pick-N selection gates (399fcf2): its receipt binds neither,
     # so the mega_registration_slate / deviation checks below would silently no-op on the pre-gate
@@ -443,6 +450,7 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
 
     violations: list[dict[str, Any]] = []
     notes: list[str] = []
+    violations.extend(exploration.violations(draft, slate_output))
     name_resolution: dict[str, list] = {}
     if ctx.get("frame_required") is True and not out_receipt.get("frame_fingerprint"):
         violations.append({"code": "missing_frame_receipt",
@@ -565,6 +573,7 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
     # re-slated so the receipt states that posture instead of laundering the choice at prose time.
     modal_indices = {i for i in (mega_slate.get("modal_lane_indices") or []) if isinstance(i, int)}
     recommended_indices = {i for i, _ in canon_rec if isinstance(i, int) and i in survivors}
+    violations.extend(exploration.team_claim_violations(draft, slate_output, recommended_indices))
     if mega_slate.get("status") == "covered" and modal_indices \
             and not (recommended_indices & modal_indices):
         violations.append({
@@ -669,13 +678,22 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
     # user must still be told the off-meta choice was made. `frame_deviations` (draft field) joins the
     # assumptions/confidence_notes disclosure pool; naming the species anywhere in them clears it. ------
     fd_pool = list(disclosures)
-    for entry in list(draft.get("frame_deviations") or []):
+    disclosure_view = draft
+    if canon_disclosures_fn:
+        disclosure_view, flags, errors = canon_disclosures_fn(draft)
+        if flags:
+            name_resolution["frame_deviations"] = flags
+        for error in errors:
+            violations.append({"code": "unresolved_disclosure_name", "where": error["path"],
+                               "detail": "frame deviation species must resolve unambiguously", "resolution": error})
+    for entry in list(disclosure_view.get("frame_deviations") or []):
         if isinstance(entry, str):
             fd_pool.append(entry)
         elif isinstance(entry, dict):
             if entry.get("species"):
                 gap_tags.add(str(entry["species"]).lower())
-            fd_pool.extend(v for v in entry.values() if isinstance(v, str))
+            else:
+                fd_pool.extend(v for v in entry.values() if isinstance(v, str))
     fd_lowered = " ".join(fd_pool).lower()
     rec_idxs = sorted({r.get("slate_index") for r in draft["recommended"]
                        if isinstance(r, dict) and isinstance(r.get("slate_index"), int)})
@@ -756,7 +774,8 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
                         # and `direction`; the calc itself is still re-run independently below.
                         eid_index.setdefault(row["evidence_id"], []).append(
                             {"candidate": i, "member": row.get("member"), "direction": direction,
-                             "opponent_variant": row.get("opponent_variant")})
+                             "opponent_variant": row.get("opponent_variant"),
+                             "opponent_is_modal": row.get("opponent_is_modal")})
 
     bindings: list[dict[str, Any]] = []
     meta: list[tuple[str, str, dict]] = []
@@ -814,6 +833,15 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
                               "which presented team's set is being recomputed"}
 
         if parsed["kind"] == "damage":
+            qualifiers = {k: c[k] for k in ("direction", "opponent_variant", "opponent_is_modal") if k in c}
+            if ("direction" in qualifiers and qualifiers["direction"] not in ("we", "them")
+                    or "opponent_variant" in qualifiers and not
+                    (isinstance(qualifiers["opponent_variant"], str) and qualifiers["opponent_variant"].strip())
+                    or "opponent_is_modal" in qualifiers and type(qualifiers["opponent_is_modal"]) is not bool):
+                violations.append({"code": "claim_binding_invalid", "where": where,
+                                   "detail": "damage claims accept direction:we|them, a nonempty opponent_variant, "
+                                             "and boolean opponent_is_modal"})
+                continue
             indexed = [r for r in (eid_index.get(eid) or [])
                        if any(idx == r.get("candidate") for idx, _ in cpool)]
             if eid in eid_index and not indexed:
@@ -823,6 +851,20 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
                 continue
             if indexed and team_filter is None and len({r.get("candidate") for r in indexed}) > 1:
                 violations.append(ambiguous_claim(str(indexed[0].get("member") or "")))
+                continue
+            # Match explicit qualifiers against saved facts, never substitute the first variant.
+            # Guaranteed/possible buckets may repeat the same cell; those are one binding.
+            indexed = [r for r in indexed if all(r.get(k) == v for k, v in qualifiers.items())]
+            if qualifiers and not indexed:
+                violations.append({"code": "claim_evidence_mismatch", "where": where,
+                                   "detail": "the stated opponent build/direction does not match a saved battery cell "
+                                             "for this evidence_id and team"})
+                continue
+            identities = {(r["candidate"], r["member"], r["direction"], r["opponent_variant"]) for r in indexed}
+            if len(identities) > 1:
+                violations.append({"code": "claim_evidence_ambiguous", "where": where,
+                                   "detail": "multiple saved cells share these coordinates; specify opponent_variant "
+                                             "and direction:we|them to bind one cell"})
                 continue
             known = indexed[0] if indexed else None
             if known:
@@ -905,6 +947,17 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
                      "recompute skipped honestly; those numbers rest on the draft's word and "
                      "should be presented with that caveat.")
 
+    text_result = None
+    if "text_check" in draft:
+        if text_check_fn is None:
+            violations.append({"code": "text_check_unavailable", "where": "text_check",
+                               "detail": "requested text checking requires the official dex vocabulary"})
+        else:
+            text_draft = {**draft, "recommended": [{**rec, "team": team_c}
+                          for rec, (_, team_c) in zip(draft["recommended"], canon_rec)]}
+            text_result = text_check_fn(text_draft, slate_input, slate_output)
+            violations.extend(text_result.get("violations") or [])
+
     out = {
         "kind": "answer-audit",
         "pass": not violations,
@@ -924,4 +977,6 @@ def audit_answer(draft: Any, slate_input: Any, slate_output: Any, *,
     }
     if name_resolution:
         out["name_resolution"] = name_resolution
+    if text_result is not None:
+        out["text_check"] = text_result
     return out

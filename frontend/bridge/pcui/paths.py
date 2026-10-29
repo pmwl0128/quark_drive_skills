@@ -15,6 +15,7 @@ CLIS: dict[str, Path] = {
     "calc": SKILLS_ROOT / "ncp-damage-calculator/scripts/ncp-calc-api.py",
     "speedline": SKILLS_ROOT / "ncp-damage-calculator/scripts/ncp-speedline-api.py",
     "team": SKILLS_ROOT / "pokemon-champions-team/scripts/team.py",
+    "inference": SKILLS_ROOT / "ncp-damage-calculator/scripts/ncp-infer-case.py",
 }
 # Query CLIs get resident workers; team deliberately does NOT (frontend/design.md §4.1 🚩:
 # out-of-session team calls cold-start sibling skills anyway — batch through `session`).

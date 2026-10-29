@@ -38,6 +38,7 @@ except Exception:                       # noqa: BLE001 — any import failure me
 SCRIPTS = Path(__file__).resolve().parent
 CALC_API = SCRIPTS / "ncp-calc-api.js"
 SPEED_API = SCRIPTS / "ncp-speedline-api.js"
+INFERENCE_CORE = SCRIPTS / "inference_core.bundle.js"
 
 
 class EngineUnavailable(RuntimeError):
@@ -155,7 +156,7 @@ class Engine:
     """A resident quickjs-ng context hosting the vendored calculator. Build once, reuse per call
     (the per-calc state the wrapper mutates — _auraState, lazy key indices — is deterministic)."""
 
-    def __init__(self, *, with_speed: bool = False):
+    def __init__(self, *, with_speed: bool = False, with_inference: bool = False):
         if not QUICKJS_AVAILABLE:
             raise EngineUnavailable("quickjs-ng is not installed")
         self.ctx = quickjs.Context()
@@ -165,11 +166,17 @@ class Engine:
         self.ctx.eval(_CALC_ENTRY)                        # runs loadCalculator() (16 vendored files) here
         self._run_main = self.ctx.get("__run_main")
         self._run_speed_main = None
+        self._run_inference = None
         if with_speed:
             self.ctx.eval("globalThis.__calc_exports = module.exports;")
             self.ctx.eval(_wrap_speed_module(SPEED_API.read_text(encoding="utf-8")))
             self.ctx.eval(_SPEED_ENTRY)
             self._run_speed_main = self.ctx.get("__run_speed_main")
+        if with_inference:
+            self.ctx.eval(_read_js(INFERENCE_CORE))
+            self.ctx.eval("globalThis.__run_inference = function(raw) { "
+                          "return JSON.stringify(QuarkInferenceCore.runModel(JSON.parse(raw))); };")
+            self._run_inference = self.ctx.get("__run_inference")
 
     @staticmethod
     def _read_file(path: str) -> str:
@@ -184,6 +191,11 @@ class Engine:
 
     def run_speed(self, command: str, payload_json: str) -> dict:
         return json.loads(self._run_speed_main(command, payload_json))
+
+    def run_inference(self, payload_json: str) -> object:
+        if self._run_inference is None:
+            raise RuntimeError("inference core was not loaded")
+        return json.loads(self._run_inference(payload_json))
 
     def calc_schema(self) -> object:
         return json.loads(self.ctx.eval("__schema_json()"))

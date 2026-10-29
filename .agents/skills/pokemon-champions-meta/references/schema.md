@@ -7,18 +7,30 @@ boundary.
 
 Runtime data root: `data/`. This is prebuilt, read-only data.
 
+`topmeta` additionally reads the sibling team skill's `data/top_meta/<rule>_<format>.json` through its
+pure comparison code. The table schema stays owned by team `references/schema.md` §9; meta does not
+copy, rebuild or reinterpret its counting units. Public query behavior and missing-dependency/form
+granularity handling are documented in `api.md` and executable `schema`.
+
 ## Files
 
 - `ranking_<season>_<format>.json`
 - `details_<season>_<format>.json`
 - `ko_<season>_<format>.json` (KO axis; its own snapshot clock)
 - `report_<season>_<format>.json`
-- `trend_<season>_<format>.json` (current season only; rolling refresh history for chart export)
+- `trend_<season>_<format>.json` (rolling refresh history for retained seasons; older seasons may have no file)
 - `usage_trend_<season>_<format>.json` (rolling per-panel history: percentages, plus teammate RANKS)
 - `ko_trend_<season>_<format>.json` (the KO axis's own rolling history, on the KO snapshot clock)
 - `current.json`
 
 `format` is `single` or `double`.
+
+`trend` stores `periods[{date,updated_at}]`, `names{slug:{zh,ja,en}}`, and
+`ranks{slug:[rank|null]}`. `usage_trend` stores the same period dates and
+`pokemon{slug:{moves|items|abilities|natures:{source_name:[percentage|null]}}}`.
+Each series is aligned to the stored periods; a missing or mismatched file cannot be
+substituted with another season. `report` describes the latest snapshot change only,
+not the whole rolling trend. The CLI `trend`/`movers` views expose the distinction.
 
 ## Ranking Row
 

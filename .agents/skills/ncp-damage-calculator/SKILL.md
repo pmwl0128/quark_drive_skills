@@ -1,6 +1,6 @@
 ---
 name: ncp-damage-calculator
-description: Run Pokémon Champions damage and speed-line calculations using the bundled NCP VGC Damage Calculator formulas. Use when the request asks for a concrete damage, KO, survival, or speed-order calculation between specified Pokémon, moves, spreads, field states, items, abilities, or stat stages. For broad team-building or tuning, use the team skill first and let it delegate exact calc checks. Chinese examples include "X用Y打Z多少", "X能确一/二确Z吗", "Z吃得下X的Y吗", "X快过Z吗", "多少SP能快过/抗住". English examples include "calc X's move into Y", "does this OHKO/2HKO", "can Y survive this hit", "does X outspeed Y", "what spread reaches this benchmark". Japanese examples include "XのYでZにどれくらい入る？", "確定一発/二発？", "ZはYを耐える？", "XはZを抜ける？", "このラインに必要なSPは？".
+description: Run Pokémon Champions damage and speed-line calculations, or infer an opponent's possible set from observed damage and remaining HP. Use when the request asks for a concrete damage, KO, survival, or speed-order calculation between specified Pokémon, moves, spreads, field states, items, abilities, or stat stages. For broad team-building or tuning, use the team skill first and let it delegate exact calc checks. Chinese examples include "X用Y打Z多少", "X能确一/二确Z吗", "Z吃得下X的Y吗", "X快过Z吗", "多少SP能快过/抗住", "根据这次伤害反推对方配置". English examples include "calc X's move into Y", "does this OHKO/2HKO", "can Y survive this hit", "does X outspeed Y", "infer their spread from this hit". Japanese examples include "XのYでZにどれくらい入る？", "確定一発/二発？", "ZはYを耐える？", "XはZを抜ける？", "ダメージから相手の配分を推定".
 ---
 
 # NCP Damage Calculator
@@ -93,6 +93,27 @@ Treat the executable schemas as authoritative for commands, input fields, output
 python scripts\ncp-calc-api.py schema
 python scripts\ncp-speedline-api.py schema
 ```
+
+For opponent set inference, read `python scripts/ncp-infer-case.py schema` and the
+[case workflow](references/api.md#inference-case). Obtain a matching `inference-prior` from meta,
+then use `init → add → status`; `remove` corrects a recorded hit and `example` gives a surviving
+configuration without changing the team. Preserve the case file between turns. Record the exact
+battle frame: opponent HP is integer percent, our HP is exact, and stat stages already include
+entry effects. Explain `impossible` readings and joint `conflict` before drawing conclusions.
+`status --predict` reports damage bounds, model-conditional remaining-HP distributions and expected
+information in bits for the selected member's available moves, in their original order. Compare
+`informationGainBits`, not damage variation alone: random rolls can vary without distinguishing
+builds. These predictions assume a landed hit against a full-HP opponent in `projection_frame`;
+`possibleAfters` remains the initial range. The host chooses observations and when to stop.
+No distinguishing supported move means this member/frame has no further information, not that
+the opponent's build is confirmed. Relative nature shares and example spreads never
+confirm the opponent's true set. The case runtime requires quickjs-ng and the sibling dex;
+meta is only used to export the initial prior.
+
+For saved Quark Drive Web observations, use `import-web` with the browser roster/record export and
+an explicit matching prior; see the [browser transfer](references/api.md#browser-transfer) procedure.
+It preserves each hit's frozen configuration, format and enabled state. Browser storage does not
+save the prior: do not claim an old webpage result was reproduced using a different snapshot.
 
 Read `references/api.md` when field options, batch shapes, speed modifiers, or a complete example are
 needed. It is explanatory documentation, not a second contract.

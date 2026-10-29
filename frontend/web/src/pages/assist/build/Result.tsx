@@ -1,5 +1,5 @@
 /** Read-only presentation of a completed, audited build. Job execution stays in BuilderPage. */
-import { type BuilderJobDto, type MatchupThreatAssessmentDto, type OppSetDto } from "@pokemon-champions/protocol";
+import { type BuilderJobDto, type BuilderResultDto, type MatchupThreatAssessmentDto, type OppSetDto } from "@pokemon-champions/protocol";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { FormatId } from "@pokemon-champions/protocol";
@@ -15,6 +15,7 @@ import { useRuntime } from "../../../runtime/context.tsx";
 import { MemberHover, slugify, useMemberProse, useMemberSets } from "../../../components/team/MonChip.tsx";
 import { TeamCard } from "../../../components/team/TeamCard.tsx";
 import { HintButton } from "../../../components/HintButton.tsx";
+import { SegmentedControl } from "../../../components/SegmentedControl.tsx";
 import { toTeamDoc } from "../../../lib/teamDoc.ts";
 import { type AssistRecord } from "../../../lib/runRecords.ts";
 import { FreshnessNote } from "../Workspace.tsx";
@@ -213,10 +214,110 @@ function ThreatAssessmentPanel({ assessment, team, format, dexByName }: {
   );
 }
 
+type Floor = "C0" | "C1" | "C2" | null;
+
+/** A team-floor grade as the diagnosis report draws it; `null` = not a hole there. */
+function FloorBadge({ grade }: { grade: Floor | undefined }) {
+  const t = useAssistT();
+  if (!grade) return <span className="muted" title={t("builder.compare.noHole")}>—</span>;
+  return <span className={`diag-grade diag-grade-${grade}`}>{grade}</span>;
+}
+
+/** Where the candidates differ: every top-K opponent that is a hole for at least one of them, each
+ * candidate's floor side by side. Facts only — the page names no better candidate. */
+function ComparisonCard({ result, local }: { result: BuilderResultDto; local: (name: string) => string }) {
+  const t = useAssistT();
+  const comparison = result.comparison!;
+  const labels = comparison.labels;
+  return (
+    <article className="ar-card">
+      <header className="ar-card-head">
+        <span className="ar-card-icon threat" aria-hidden="true" />
+        <h2>{t("builder.compare.title")}</h2>
+      </header>
+      <p className="muted builder-threat-method">
+        {t("builder.compare.note").replace("{k}", String(comparison.topK))}
+      </p>
+      <p className="ar-facts num">
+        {labels.map((label) => t("builder.compare.holes").replace("{label}", label)
+          .replace("{n}", String(comparison.holeCounts[label] ?? 0))).join(" · ")}
+      </p>
+      {comparison.teamFloorDifferences.length === 0 ? (
+        <p className="muted">{t("builder.compare.same")}</p>
+      ) : (
+        <table className="builder-compare">
+          <thead><tr><th>{t("builder.compare.opponent")}</th>
+            {labels.map((label) => <th key={label}>{t("builder.candidate").replace("{label}", label)}</th>)}</tr></thead>
+          <tbody>
+            {comparison.teamFloorDifferences.map((row) => (
+              <tr key={row.opponent}>
+                <td>
+                  <EntityHover kind="pokemon" name={row.opponent}><span className="gate-chip">{local(row.opponent)}</span></EntityHover>
+                  {row.usageRank != null && <span className="muted num"> #{row.usageRank}</span>}
+                </td>
+                {labels.map((label) => <td key={label}><FloorBadge grade={row.floors[label] as Floor} /></td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </article>
+  );
+}
+
+/** The free-text goal and, per Pokémon it names, each candidate's team floor against it. */
+function GoalCard({ result, local, labels, topK }: {
+  result: BuilderResultDto; local: (name: string) => string; labels: string[]; topK: number;
+}) {
+  const t = useAssistT();
+  const prose = useProseRenderer();
+  const goal = result.goal!;
+  return (
+    <article className="ar-card">
+      <header className="ar-card-head">
+        <span className="ar-card-icon notes" aria-hidden="true" />
+        <h2>{t("builder.goal.title")}</h2>
+      </header>
+      <p className="qa-answer-text">{goal.text}</p>
+      {goal.floors.length === 0 ? <p className="muted">{t("builder.goal.noMention")}</p> : (
+        <table className="builder-compare">
+          <thead><tr><th>{t("builder.goal.named")}</th>
+            {labels.map((label) => <th key={label}>{labels.length > 1 ? t("builder.candidate").replace("{label}", label) : t("builder.goal.floor")}</th>)}</tr></thead>
+          <tbody>
+            {goal.floors.map((row) => (
+              <tr key={row.pokemon}>
+                <td>
+                  <EntityHover kind="pokemon" name={row.pokemon}><span className="gate-chip">{local(row.pokemon)}</span></EntityHover>
+                  {row.intent && <span className="muted"> · {t(`builder.intent.${row.intent}`)}</span>}
+                </td>
+                {row.inBattery && row.floors
+                  ? labels.map((label) => <td key={label}><FloorBadge grade={row.floors![label] as Floor} /></td>)
+                  : <td colSpan={labels.length} className="muted">{prose(t("builder.goal.outside").replace("{k}", String(topK)))}</td>}
+              </tr>
+            ))}
+            {goal.floors.filter((row) => row.intent === "beat" && row.answerable === false).map((row) => (
+              <tr key={`${row.pokemon}:note`}>
+                <td colSpan={labels.length + 1} className="muted">
+                  {t("builder.goal.unanswerable").replace("{k}", String(topK)).replace("{pokemon}", local(row.pokemon))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="muted builder-threat-method">{t("builder.goal.note")}</p>
+    </article>
+  );
+}
+
 /** A finished build: the team with its checks, the reasoning, the threats it faces, the run's scope
- * and assumptions — each its own card. The run itself follows, folded (`BuildRun`). */
-export function BuildResult({ record, job, onRerun }: {
+ * and assumptions — each its own card. With compared candidates a switcher picks the one shown and the
+ * comparison follows it. The run itself follows, folded (`BuildRun`). */
+export function BuildResult({ record, job, onRerun, candidate = "A", onCandidate }: {
   record: AssistRecord<BuildInput>; job: BuilderJobDto; onRerun: () => void;
+  /** The compared candidate on screen (its label); the page keeps it so the library saves that one. */
+  candidate?: string;
+  onCandidate?: (label: string) => void;
 }) {
   const t = useAssistT();
   const { lang } = useLang();
@@ -224,7 +325,11 @@ export function BuildResult({ record, job, onRerun }: {
   const navigate = useNavigate();
   const prose = useProseRenderer();
   const dexByName = useDexByName();
-  const result = job.result!;
+  const full = job.result!;
+  const candidates = full.candidates ?? [];
+  const chosen = candidates.find((c) => c.label === candidate) ?? candidates[0];
+  // The shown candidate in the single-team shape the cards below already read.
+  const result = chosen ? { ...full, ...chosen } : full;
   const resultFormat = toTeamDoc(result.team, record.input.format)?.format ?? record.input.format;
   const memberProse = useMemberProse(result.team);
   // Diagnose is its own entry on the assist page (roadmap §1.2: a deterministic report must not
@@ -281,6 +386,16 @@ export function BuildResult({ record, job, onRerun }: {
         </header>
         <FreshnessNote record={record} formats={[record.input.format]} action={
           <button type="button" className="aw-fresh-act" onClick={onRerun}>{t("builder.rerun")}</button>} />
+        {candidates.length > 1 && (
+          <div className="builder-candidates">
+            <SegmentedControl<string> kind="radio" value={chosen?.label ?? "A"} ariaLabel={t("builder.candidates")}
+              className="seg" onChange={(label) => onCandidate?.(label)}
+              items={candidates.map((c) => ({ id: c.label, label: c.goalFor
+                ? t("builder.candidateGoal").replace("{label}", c.label).replace("{pokemon}", local(c.goalFor))
+                : t("builder.candidate").replace("{label}", c.label) }))} />
+            <span className="muted">{t("builder.candidatesNote")}</span>
+          </div>
+        )}
         <TeamCard team={team} keepOrigin="builder" saveSource="builder-keep" actions={
           <>
             {canDiagnose && (
@@ -309,6 +424,10 @@ export function BuildResult({ record, job, onRerun }: {
           </div>
         )}
       </article>
+
+      {full.comparison && <ComparisonCard result={full} local={local} />}
+      {full.goal && <GoalCard result={full} local={local} topK={full.slateTopK}
+        labels={candidates.length > 1 ? candidates.map((c) => c.label) : ["A"]} />}
 
       {(result.matchupThreats || result.worstMatchup || (result.threats?.length ?? 0) > 1) && (
         <article className="ar-card">
@@ -366,6 +485,7 @@ export function BuildResult({ record, job, onRerun }: {
         <p className="ar-facts num">
           {t("builder.scope").replace("{k}", String(result.slateTopK))}
           {result.megaCount != null ? ` · ${t("builder.megaCount").replace("{n}", String(result.megaCount))}` : ""}
+          {full.droppedCandidates ? ` · ${t("builder.dropped").replace("{n}", String(full.droppedCandidates))}` : ""}
         </p>
         <ul className="ar-list">
           {result.assumptions.map((k) => {

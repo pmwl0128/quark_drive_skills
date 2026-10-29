@@ -2646,11 +2646,18 @@ button.swap-seam:active:not(:disabled) { transform: none; }
   border: 1px solid var(--line); border-radius: var(--radius);
   background: transparent;
 }
-.duel-teams[class*="terrain-"] { box-shadow: inset 0 -3px 0 var(--terrain-edge); }
+/* Every terrain shares one band along the foot of the strip; only its colour differs, and it breathes slowly. */
+.duel-teams[class*="terrain-"]::after {
+  content: ""; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 9px; pointer-events: none;
+  border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+  background: linear-gradient(0deg, var(--terrain-edge) 0 2px, color-mix(in srgb, var(--terrain-edge) 67%, transparent) 2px, transparent 9px);
+  animation: duel-ground-pulse 2.6s ease-in-out infinite alternate;
+}
+@keyframes duel-ground-pulse { from { opacity: .45; } to { opacity: 1; } }
 /* The weather art is the field state made visible, so it may read as an image rather than a
    smudge — strongest under the console that names it, gone by the time it reaches the rosters. */
 .duel-teams::before {
-  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  content: ""; position: absolute; inset: 0 6%; z-index: -1; pointer-events: none;
   border-radius: inherit;
   background: var(--weather-art, none) center / cover no-repeat;
   opacity: .42;
@@ -2658,6 +2665,10 @@ button.swap-seam:active:not(:disabled) { transform: none; }
   mask-image: radial-gradient(ellipse 36% 135% at 50% 38%, #000 30%, transparent 100%);
 }
 :root[data-theme="dark"] .duel-teams::before { opacity: .52; }
+/* The art sways a little inside the strip (a 6% inset, so it never reaches past the strip), on the compositor only;
+   reduced motion stops it with every other animation. */
+.duel-teams[class*="weather-"]::before { animation: duel-weather-drift 70s ease-in-out infinite alternate; will-change: transform; }
+@keyframes duel-weather-drift { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
 .duel-teams.weather-sun { --weather-art: url("./assets/weather/sun.webp"); }
 .duel-teams.weather-rain { --weather-art: url("./assets/weather/rain.webp"); }
 .duel-teams.weather-sand { --weather-art: url("./assets/weather/sand.webp"); }

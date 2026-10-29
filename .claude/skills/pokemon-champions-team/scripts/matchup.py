@@ -35,6 +35,7 @@ from battle_effects import ko_hits_from_pct
 from mega import effective_member_from_maps
 import checks
 import team_i18n as i18n
+import battle_scope
 
 SP_TOTAL_CAP = get_ruleset().sp_total_cap          # 66 SP across all stats (the real spend ceiling)
 
@@ -158,24 +159,29 @@ def set_actor(name: str, s: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def pair_speed(member: dict[str, Any], member_base: int | None,
-               opp_set: dict[str, Any] | None, opp_base: int | None) -> dict[str, Any]:
+               opp_set: dict[str, Any] | None, opp_base: int | None, *, conditions: dict | None = None) -> dict[str, Any]:
     """The speed half of ONE matchup cell — member's effective Speed (registered set, always-on item)
     vs the opponent build's effective Speed. Faster spreads and Choice Scarf sets are separate build
     columns in a variant-expanded grid, not hidden synthetic lanes inside this pair. Extracted as the
     re-runnable pair the spd:{fmt}:{member}|{opponent} evidence coordinates recompute."""
     my_spe_sp = int((member.get("spread") or {}).get("spe") or 0)
+    field = battle_scope.conditions(conditions)
     my_speed = effective_speed(member_base, my_spe_sp, member.get("nature"),
-                               item=member.get("item"), ability=member.get("ability"))
+                               item=member.get("item"), ability=member.get("ability"),
+                               weather=field.get("weather"), terrain=field.get("terrain"))
     s = opp_set
     o_nat = (s or {}).get("nature")
     o_spe_sp = int(((s or {}).get("sps") or {}).get("sp") or 0)
     o_item = (s or {}).get("item")
-    o_speed = effective_speed(opp_base, o_spe_sp, o_nat, item=o_item) if opp_base is not None else None
+    o_speed = effective_speed(opp_base, o_spe_sp, o_nat, item=o_item, ability=(s or {}).get("ability"),
+                             weather=field.get("weather"), terrain=field.get("terrain")) if opp_base is not None else None
     faster = None
     if my_speed is not None and o_speed is not None:
         faster = "member" if my_speed > o_speed else "opponent" if my_speed < o_speed else "tie"
     my_scarf = member_base is not None and member.get("item") in SPEED_ITEM_MULT
+    order = {"member": "opponent", "opponent": "member"}.get(faster, faster) if field.get("trick_room") else faster
     return {"member": my_speed, "opponent": o_speed, "faster": faster,
+            **({"acts_first": order, "conditions": field} if field else {}),
             "member_item_applied": member.get("item") if my_scarf else None,
             "opponent_item_applied": o_item if (o_item in SPEED_ITEM_MULT) else None,
             "opponent_speed_basis": "modal" if s else "neutral 0-SP"}
@@ -316,7 +322,7 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
             dex_fn: Callable, sets_fn: Callable,
             damage_fn: Callable | None = None, move_fn: Callable | None = None,
             variants_fn: Callable | None = None,
-            item_fn: Callable | None = None) -> dict[str, Any]:
+            item_fn: Callable | None = None, conditions: dict | None = None) -> dict[str, Any]:
     """Build the member x top-K matchup fact grid.
 
     `top_k` is a list of meta ranking rows ({rank, pokemon_en, ...}); the opponent list is that
@@ -328,6 +334,8 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
     request is created. Each returned cell therefore has one unambiguous build-pair meaning.
     """
     fmt = (fmt or team.get("format") or "single").lower()
+    field = battle_scope.conditions(conditions)
+    damage_field = {k: v for k, v in field.items() if k != "trick_room"}
     members = [m for m in team.get("pokemon", []) if m.get("species")]
 
     # Opponents: keep the ranking order; resolve each to a canonical species via its English name.
@@ -341,8 +349,8 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
         name = row.get("pokemon_en") or row.get("pokemon") or row.get("slug")
         if not name:
             continue
-        builds = []
-        if variants_fn is not None:
+        builds = [row["stated_set"]] if row.get("stated_set") else []
+        if not builds and variants_fn is not None:
             try:
                 builds = variants_fn(name, fmt) or []
             except Exception:
@@ -446,10 +454,12 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
                 actor = set_actor(o["name"], s)
                 for mv in (m.get("moves") or []):                  # we -> them
                     dmg_index[(mi, oi, mv)] = len(requests)
-                    requests.append({"attacker": mine, "defender": actor, "move": mv})
+                    requests.append({"attacker": mine, "defender": actor, "move": mv,
+                                     **({"field": damage_field} if damage_field else {})})
                 for mvrow in _threat_moves(s):                     # them -> us
                     def_index[(mi, oi, mvrow["name"])] = len(requests)
-                    requests.append({"attacker": actor, "defender": mine, "move": mvrow["name"]})
+                    requests.append({"attacker": actor, "defender": mine, "move": mvrow["name"],
+                                     **({"field": damage_field} if damage_field else {})})
     results = damage_fn(requests) if (damage_fn is not None and requests) else []
 
     def best_member_offense(member: dict[str, Any], member_index: int,
@@ -541,7 +551,8 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
         # first. Weather/Tailwind aren't part of a matchup cell, so they stay off here; Choice Scarf
         # is always-on and MUST be counted (audit retro 2026-06-22).
         my_speed = effective_speed(my_base, my_spe_sp, calc_member.get("nature"),
-                                   item=calc_member.get("item"), ability=calc_member.get("ability"))
+                                   item=calc_member.get("item"), ability=calc_member.get("ability"),
+                                   weather=field.get("weather"), terrain=field.get("terrain"))
         cells: list[dict[str, Any]] = []
         for oi, o in enumerate(opponents):
             on = o["name"]
@@ -568,11 +579,13 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
                    if o.get("species") and o["species"] != on else {}),
                 "opponent_coverage": (s or {}).get("coverage"),
                 "opponent_cluster": (s or {}).get("cluster"),
+                **({"opponent_source": s.get("source"), "opponent_coverage_basis": s.get("coverage_basis")}
+                   if s and s.get("source") == "stated" else {}),
                 "opponent_run_form": (runform(on)
                                       if runform(on) not in (on, o.get("species")) else None),
                 "set_confidence": (s or {}).get("confidence") if s else None,
                 "set_note": (s or {}).get("note") if s else "no meta set — speed uses neutral 0-SP, no damage",
-                "speed": pair_speed(calc_member, my_base, s, o_base),
+                "speed": pair_speed(calc_member, my_base, s, o_base, conditions=field),
                 "defense_type": {"opponent_stab_types": opp_types,
                                  "max_effectiveness_vs_member": worst,
                                  "by_type": [{"type": t, "x": e} for t, e in def_pairs]},
@@ -588,6 +601,7 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
             # One atomic grade for this exact member set × observed opponent variant.
             cell["check"] = (checks.build_check(cell, calc_sp, s, fmt, member_set=calc_member)
                              if damage_fn is not None else None)
+            battle_scope.annotate(cell["check"], field)
             # The REVERSE reading: can the OPPONENT answer us. Same grader over the same cell with
             # the two sides exchanged — our KO becomes its incoming, its threat becomes our offense,
             # and the speed pair inverts. Both facts are already computed here, so this costs no
@@ -598,6 +612,9 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
                                                              cell["speed"].get("member"))
                 rev_speed["faster"] = {"member": "opponent", "opponent": "member"}.get(
                     cell["speed"].get("faster"), cell["speed"].get("faster"))
+                if "acts_first" in rev_speed:
+                    rev_speed["acts_first"] = {"member": "opponent", "opponent": "member"}.get(
+                        cell["speed"]["acts_first"], cell["speed"]["acts_first"])
                 member_stab_pairs = [
                     (t, effectiveness_for_member(opp_types, (s or {}).get("ability"), t))
                     for t in my_types
@@ -619,7 +636,7 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
                         move_prio.get(mv, 0) > 0 for mv in (calc_member.get("moves") or [])),
                 }
                 rev = checks.build_check(rev_cell, on, calc_member, fmt, member_set=s)
-                cell["reverse_check"] = rev
+                cell["reverse_check"] = battle_scope.annotate(rev, field)
             cells.append(cell)
         # Coverage counts ONLY opponents whose speed comes from a real meta set; a no-set opponent's
         # speed is unknown and its neutral-0-SP stand-in must not count as 'outspept' (audit 2026-06-24).
@@ -631,6 +648,8 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
         coverage = _speed_coverage(my_speed, my_base, my_spe_sp, calc_member.get("nature"),
                                    calc_member.get("item"),
                                    opp_lines, total_sp=total_sp)
+        if field:
+            coverage = None  # Neutral-field SP jump solver does not solve stated-field turn order.
         grid.append({"source_id": source_id, "source_index": mi,
                      "member": sp,
                      "member_run_form": calc_sp if calc_sp != sp else None,
@@ -674,6 +693,17 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
     if damage_fn is None:
         notes.append("damage skipped (ncp unavailable): offense and defense_damage omitted, "
                      "defense is type-level only.")
+    if field:
+        notes = [n for n in notes if not n.startswith(("Speed is", "damage =", "`speed_coverage`"))]
+        notes = [n.replace("STILL DEFERRED: lead/back, doubles spread/partner, and speed-control (tailwind/trick-room) are not modelled.",
+                           "Lead/back, doubles partners and changes to field duration are not simulated.") for n in notes]
+        notes.append("Stated weather/terrain applies to damage and field-triggered Speed abilities. "
+                     "Trick Room changes acts_first within equal priority, not the faster speed label. "
+                     "Neutral-field SP jump suggestions are omitted. Weather/terrain setters are not automatically activated.")
+    if any(row.get("stated_set") for row in top_k) or all(row.get("rank") is None for row in top_k):
+        notes = [n for n in notes if "meta usage ranking" not in n]
+        notes.append("Explicit opponent roster; stated sets replace retained builds for that slot. Bare species use "
+                     "retained observed configurations. Stated-set coverage=1 describes this hypothesis only, not observed usage.")
 
     if damage_fn is not None:
         notes.append(
@@ -700,7 +730,9 @@ def matchup(team: dict[str, Any], top_k: list[dict[str, Any]], *, fmt: str | Non
     # the response contradict the request.
     return {"kind": "matchup", "format": fmt, "top_k": ranked_species,
             "source_count": len(members), "target_count": len(opponents), "view": "full",
+            **({"conditions": field} if field else {}),
             "members": grid,
+            "opponent_sets": opp_sets,
             "check_coverage": checks.coverage_summary(grid) if damage_fn is not None else None,
             "calculation": {"requested": len(requests), "returned": returned_calcs,
                             "failed": failed_calcs},
@@ -731,6 +763,8 @@ def _compact_check(check: dict[str, Any] | None) -> dict[str, Any] | None:
         "contested": resolvability.get("verdict") == "contested",
         "caveat_codes": [row.get("code") for row in (check.get("caveat_details") or [])
                           if isinstance(row, dict) and row.get("code")],
+        **{key: check[key] for key in ("field_conditions", "c2_basis", "condition_profile", "vs_set", "evaluated_surface",
+                                      "caveats", "caveat_details", "intimidate_lane", "priority_lane") if key in check},
     }
 
 
@@ -742,7 +776,8 @@ def _compact_damage(fact: dict[str, Any] | None) -> dict[str, Any] | None:
     # left with only the static rolls would label that cell "guaranteed 2HKO" while the check grid
     # called the same kill uncertain — two tables contradicting each other over one number.
     keys = ("move", "min_percent", "max_percent", "ko_possible", "ko_guaranteed", "ko",
-            "ko_exact", "ko_chance", "category", "priority", "hits", "hits_range")
+            "ko_exact", "ko_chance", "category", "priority", "hits", "hits_range", "central_percent",
+            "ko_caveat", "ko_caveats", "disguise_adjusted")
     return {key: fact.get(key) for key in keys if key in fact}
 
 
@@ -770,6 +805,7 @@ def project_matchup(result: dict[str, Any], view: str = "full") -> dict[str, Any
                 "opponent_run_form": cell.get("opponent_run_form"),
                 "opponent_coverage": cell.get("opponent_coverage"),
                 "opponent_cluster": cell.get("opponent_cluster"),
+                **{k: cell[k] for k in ("opponent_source", "opponent_coverage_basis") if k in cell},
                 "set_confidence": cell.get("set_confidence"),
                 "speed": cell.get("speed"),
                 "defense_type": {
@@ -794,8 +830,8 @@ def project_matchup(result: dict[str, Any], view: str = "full") -> dict[str, Any
             "speed_coverage": row.get("speed_coverage"), "cells": cells,
         })
 
-    return {**result, "view": "summary", "members": members,
-            "notes": ["summary projection: request view=full for broad incoming move surfaces and "
+    return {**{k: v for k, v in result.items() if k != "opponent_sets"}, "view": "summary", "members": members,
+            "notes": [*(result.get("notes") or []), "summary projection: request view=full for broad incoming move surfaces and "
                       "complete CHECK predicates."]}
 
 

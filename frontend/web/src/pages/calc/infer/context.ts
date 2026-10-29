@@ -8,8 +8,9 @@ import { withMega } from "../../../lib/buildState.ts";
 import {
   damageRequest, maxHPOf, natureMult, type FieldState, type MonState,
 } from "../duel/state.ts";
-import { pressedStat } from "../tune/model.ts";
 import { SP_MAX } from "../../../lib/battle.ts";
+import { survivesHitAtOne } from "./survival.ts";
+import { frameIssue } from "./move_readability.ts";
 import {
   type BulkKey, type FoeSpace, type InferKey, type Mult, type OffKey, type SpaceNature,
   type SpaceOption,
@@ -76,36 +77,14 @@ export function liveFrame(mine: MonState, foe: MonState, move: string, field: Fi
            foeBefore: null, mineBefore: null };
 }
 
+export function frameIssueOf(frame: HitFrame, kind: ObservationKind, abilities: string[], kit: RequestKit): string | null {
+  const foe = withMega(frame.foe, kit.dex, kit.items);
+  return frameIssue({ kind, foeAbilities: abilities,
+    foeBaseHP: foe.entry?.stats.hp ?? 0, foeCurrentHP: frame.foe.curHP });
+}
+
 // -- which moves can be read ---------------------------------------------------------------
-
-/** Moves whose damage does not follow from the stat this tool varies: the target's current HP, the
- * damage the user took, or the other side's attacking stat. */
-const NOT_READABLE = new Set([
-  "Super Fang", "Ruination", "Nature's Madness", "Final Gambit", "Endeavor", "Counter",
-  "Mirror Coat", "Metal Burst", "Comeuppance", "Bide",
-  // These depend on an unknown HP/speed axis or an unrecorded turn sequence.
-  "Brine", "Wring Out", "Crush Grip", "Hard Press", "Eruption", "Water Spout", "Dragon Energy",
-  "Flail", "Reversal", "Gyro Ball", "Electro Ball", "Rollout", "Ice Ball", "Fury Cutter", "Echoed Voice",
-]);
-/** Readable in one direction only: Foul Play hitting them reads THEIR Attack; Body Press from them
- * reads THEIR Defense. */
-const NOT_INTO_FOE = new Set(["Foul Play"]);
-const NOT_FROM_FOE = new Set(["Body Press"]);
-
-type MoveUse = { key: InferKey } | { reason: "status" | "unreadable" };
-
-export function bulkUse(move: string, category: string | undefined): MoveUse {
-  if (!move || !category || category === "Status") return { reason: "status" };
-  if (NOT_READABLE.has(move) || NOT_INTO_FOE.has(move)) return { reason: "unreadable" };
-  const key = pressedStat(move, category);
-  return key ? { key } : { reason: "status" };
-}
-
-export function offenseUse(move: string, category: string | undefined): MoveUse {
-  if (!move || !category || category === "Status") return { reason: "status" };
-  if (NOT_READABLE.has(move) || NOT_FROM_FOE.has(move)) return { reason: "unreadable" };
-  return { key: category === "Physical" ? "atk" : "spa" };
-}
+export { bulkUse, offenseUse } from "./move_readability.ts";
 
 // -- requests ---------------------------------------------------------------------------------
 
@@ -201,11 +180,8 @@ export function hitRequests(frame: HitFrame, use: { kind: ObservationKind; key: 
  * not an exact one-HP roll. Ability bypass does not bypass a held Focus Sash. */
 export function survivesAtOne(attacker: MonState, defender: MonState, move: string,
   item: string, ability: string, kit: RequestKit): boolean {
-  if (item === "Focus Sash") return true;
   const attackAbility = withMega(attacker, kit.dex, kit.items).state.ability;
-  const bypass = (attacker.abilityOn !== false && ["Mold Breaker", "Teravolt", "Turboblaze"].includes(attackAbility))
-    || ["Sunsteel Strike", "Moongeist Beam", "Photon Geyser"].includes(move);
-  return ability === "Sturdy" && defender.abilityOn !== false && !bypass;
+  return survivesHitAtOne(attackAbility, attacker.abilityOn, item, ability, defender.abilityOn, move);
 }
 
 // -- the hidden state ----------------------------------------------------------------------------

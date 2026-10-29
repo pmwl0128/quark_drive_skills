@@ -33,12 +33,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 import worker
+from stat_keys import ENGINE_STATS
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 SKILLS_ROOT = SKILL_DIR.parent
 META_CLI = SKILLS_ROOT / "pokemon-champions-meta" / "scripts" / "meta_query.py"
 
-SPREAD_TO_SPS = {"hp": "hp", "atk": "at", "def": "df", "spa": "sa", "spd": "sd", "spe": "sp"}
+SPREAD_TO_SPS = ENGINE_STATS
 ABILITY_DOMINANT = 80.0   # modal ability usage >= this -> the modelled ability is near-certain
 MARGINAL_REPRESENTATIVE = 50.0   # a marginal field whose mode is >= this is broadly representative
 # them->us threat surface: the opponent's damaging moves a defender should plan around are the ones a

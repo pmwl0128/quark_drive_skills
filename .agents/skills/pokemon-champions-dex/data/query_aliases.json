@@ -1,0 +1,19 @@
+{
+  "pokemon": {
+    "Garchomp": ["地龙", "地龍"],
+    "Charizard": ["喷", "噴"],
+    "Arcanine-Hisui": ["洗翠风速狗", "Hisuian Arcanine"],
+    "Avalugg-Hisui": ["洗翠冰岩怪", "Hisuian Avalugg"],
+    "Decidueye-Hisui": ["洗翠狙射树枭", "Hisuian Decidueye"],
+    "Goodra-Hisui": ["洗翠黏美龙", "Hisuian Goodra"],
+    "Ninetales-Alola": ["Alolan Ninetales"],
+    "Persian-Alola": ["阿罗拉猫老大", "Alolan Persian"],
+    "Raichu-Alola": ["Alolan Raichu"],
+    "Samurott-Hisui": ["洗翠大剑鬼", "Hisuian Samurott"],
+    "Slowbro-Galar": ["伽勒尔呆壳兽", "Galarian Slowbro"],
+    "Slowking-Galar": ["伽勒尔呆呆王", "Galarian Slowking"],
+    "Stunfisk-Galar": ["伽勒尔泥巴鱼", "Galarian Stunfisk"],
+    "Typhlosion-Hisui": ["洗翠火暴兽", "Hisuian Typhlosion"],
+    "Zoroark-Hisui": ["洗翠索罗亚克", "Hisuian Zoroark"]
+  }
+}

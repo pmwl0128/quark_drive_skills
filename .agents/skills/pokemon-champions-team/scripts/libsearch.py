@@ -14,8 +14,9 @@ with Drizzle)", the three matched to three different members.
 
 Facts-only (design §8 / repset boundaries): results are observed configs + counts + a content id. No
 synthetic strength score. Condition values are normalized through the dex `resolve` bridge (Mega-compose
-+ nicknames + fuzzy), so users type any language / colloquial name; species match is BASE-normalized so
-"耿鬼" matches a member stored as either `Gengar` or `Mega Gengar`.
++ nicknames + fuzzy), so users type any language / colloquial name. Queries use exact battle forms:
+a base holding its dex-declared Mega stone matches that Mega, while X/Y/Z and ordinary forms remain
+distinct. Frozen composition/copy grouping below has its own explicit family semantics.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ from typing import Any
 import dexlink
 import repset
 import teamid
+import query_identity
 
 _MEGA_PREFIX = re.compile(r"^mega\s+", re.IGNORECASE)
 _MEGA_XY_SUFFIX = re.compile(r"\s+[xy]$", re.IGNORECASE)
@@ -81,9 +83,8 @@ def _resolve_all(members_q: list[dict[str, Any]]) -> tuple[dict[tuple[str, str],
 
 def _build_slots(members_q: list[dict[str, Any]],
                  resolved: dict[tuple[str, str], dict[str, Any]]) -> list[dict[str, Any]]:
-    """Turn each raw slot into a resolved matcher: species->base_key, moves->canonical set, scalar
-    fields->canonical. Unresolved values collapse to a sentinel that matches nothing (so the slot fails
-    loudly rather than matching on raw text)."""
+    """Turn each raw slot into a resolved matcher: species/moves/scalars use canonical names.
+    Unresolved values carry unknown truth, including beneath NOT, rather than proving absence."""
     slots: list[dict[str, Any]] = []
     for slot in members_q:
         m: dict[str, Any] = {}
@@ -96,8 +97,10 @@ def _build_slots(members_q: list[dict[str, Any]],
             for v in vals:
                 rec = resolved.get((kind, str(v)))
                 canon.append(rec["canonical"] if rec and rec.get("ok") else f"\0UNRESOLVED:{v}")
+                if not rec or not rec.get("ok"):
+                    m["_unresolved"] = True
             if field == "species":
-                m["species_base"] = base_key(canon[0])
+                m["species"] = canon[0]
             elif field in ("move", "moves"):
                 m.setdefault("moves", []).extend(canon)
             else:
@@ -106,9 +109,16 @@ def _build_slots(members_q: list[dict[str, Any]],
     return slots
 
 
-def _slot_matches(slot: dict[str, Any], member: dict[str, Any]) -> bool:
-    if "species_base" in slot and base_key(member.get("species", "")) != slot["species_base"]:
-        return False
+def _slot_matches(slot: dict[str, Any], member: dict[str, Any], identity=None) -> bool | None:
+    if slot.get("_unresolved"):
+        return None
+    if "species" in slot:
+        form = identity or (lambda m: m.get("species"))
+        requested, actual = form(slot), form(member)
+        if requested is None or actual is None:
+            return None
+        if requested != actual:
+            return False
     if "item" in slot and member.get("item") != slot["item"]:
         return False
     if "ability" in slot and member.get("ability") != slot["ability"]:
@@ -122,7 +132,7 @@ def _slot_matches(slot: dict[str, Any], member: dict[str, Any]) -> bool:
     return True
 
 
-def _team_satisfies(slots: list[dict[str, Any]], members: list[dict[str, Any]]) -> bool:
+def _team_satisfies(slots: list[dict[str, Any]], members: list[dict[str, Any]], identity=None) -> bool:
     """True iff every slot maps to a DISTINCT member (bipartite matching, backtracking; slot count <=6)."""
     used = [False] * len(members)
 
@@ -130,7 +140,7 @@ def _team_satisfies(slots: list[dict[str, Any]], members: list[dict[str, Any]]) 
         if i == len(slots):
             return True
         for j, mem in enumerate(members):
-            if not used[j] and _slot_matches(slots[i], mem):
+            if not used[j] and _slot_matches(slots[i], mem, identity):
                 used[j] = True
                 if bt(i + 1):
                     return True
@@ -205,6 +215,21 @@ def find_library_copies(team: dict[str, Any], index: dict[str, dict]) -> dict[st
     return {"verbatim_ids": list(ids), "same_composition": comp}
 
 
+def library_composition_overlap(team: dict[str, Any], index: dict[str, dict]) -> dict[str, Any]:
+    """Distribution of shared registration species; composition overlap is not set identity."""
+    from collections import Counter
+    members = Counter(composition_key(team))
+    counts: dict[int, int] = {}
+    for composition, number in index["compositions"].items():
+        shared = sum((members & Counter(composition)).values())
+        counts[shared] = counts.get(shared, 0) + number
+    return {"basis": "registration_species_base_folded", "candidate_size": sum(members.values()),
+            "library_team_count": sum(counts.values()),
+            "shared_member_counts": [{"shared": shared, "teams": counts[shared]} for shared in sorted(counts)],
+            "max_shared": max(counts) if counts else None,
+            "note": "Registration overlap folds forms; it is separate from verbatim joint-set identity."}
+
+
 _BOOL_KEYS = {"and", "or", "not"}
 
 
@@ -261,13 +286,16 @@ def search(query: dict[str, Any], *, game_format: str | None = None, season: str
     resolved, unresolved = _resolve_all(members_q)
     slots = _build_slots(members_q, resolved)
     teams = repset.load_teams_for_rule(fmt, rule) if rule else repset.load_teams(fmt, season)
-    matches = [t for t in teams if _team_satisfies(slots, t.get("pokemon", []))]
+    identity = query_identity.Forms(query_identity.members(teams, slots))
+    matches = [t for t in teams if _team_satisfies(slots, t.get("pokemon", []), identity)]
 
     out: dict[str, Any] = {
         "game_format": fmt, "season": season, "rule": rule,
         "data_seasons": repset.seasons_in(teams) if rule else None,
-        "slots": [{k: v for k, v in s.items()} for s in slots],
+        "slots": [{k: v for k, v in s.items() if not k.startswith("_")} for s in slots],
         "unresolved_conditions": unresolved,
+        "name_resolution": query_identity.corrections(resolved),
+        "identity_basis": "dex_battle_form", "identity_gaps": identity.gaps,
         "scanned": len(teams), "match_count": len(matches),
     }
     if collapse:
@@ -317,7 +345,7 @@ def _walk_where(node: Any, leaves: list[dict[str, Any]]) -> None:
         leaves.append(node)
 
 
-def _compile_where(node: Any, matcher_of: dict[int, dict[str, Any]]):
+def _compile_where(node: Any, matcher_of: dict[int, dict[str, Any]], identity=None):
     """Compile a validated AST into a team->bool predicate. A leaf is EXISTENCE: the team has >=1 member
     matching that slot (matcher looked up by the leaf's identity)."""
     combos = [k for k in node if str(k).lower() in _BOOL_KEYS]
@@ -325,15 +353,23 @@ def _compile_where(node: Any, matcher_of: dict[int, dict[str, Any]]):
         k = str(combos[0]).lower()
         val = node[combos[0]]
         if k == "and":
-            preds = [_compile_where(ch, matcher_of) for ch in val]
-            return lambda team: all(p(team) for p in preds)
+            preds = [_compile_where(ch, matcher_of, identity) for ch in val]
+            return lambda team: _known_all([p(team) for p in preds])
         if k == "or":
-            preds = [_compile_where(ch, matcher_of) for ch in val]
-            return lambda team: any(p(team) for p in preds)
-        sub = _compile_where(val, matcher_of)
-        return lambda team: not sub(team)
+            preds = [_compile_where(ch, matcher_of, identity) for ch in val]
+            return lambda team: _known_any([p(team) for p in preds])
+        sub = _compile_where(val, matcher_of, identity)
+        return lambda team: None if (value := sub(team)) is None else not value
     matcher = matcher_of[id(node)]
-    return lambda team: any(_slot_matches(matcher, m) for m in team.get("pokemon", []))
+    return lambda team: _known_any([_slot_matches(matcher, m, identity) for m in team.get("pokemon", [])])
+
+
+def _known_any(values):
+    return True if True in values else None if None in values else False
+
+
+def _known_all(values):
+    return False if False in values else None if None in values else True
 
 
 def search_where(ast: Any, *, game_format: str | None = None, season: str | None = None,
@@ -352,13 +388,16 @@ def search_where(ast: Any, *, game_format: str | None = None, season: str | None
     resolved, unresolved = _resolve_all(leaves)
     matchers = _build_slots(leaves, resolved)
     matcher_of = {id(leaf): matchers[i] for i, leaf in enumerate(leaves)}
-    pred = _compile_where(ast, matcher_of)
     teams = repset.load_teams_for_rule(game_format, rule) if rule else repset.load_teams(game_format, season)
+    identity = query_identity.Forms(query_identity.members(teams, matchers))
+    pred = _compile_where(ast, matcher_of, identity)
     matches = [t for t in teams if pred(t)]
     out: dict[str, Any] = {
         "game_format": game_format, "season": season, "rule": rule,
         "data_seasons": repset.seasons_in(teams) if rule else None, "where": ast,
         "unresolved_conditions": unresolved, "scanned": len(teams), "match_count": len(matches),
+        "name_resolution": query_identity.corrections(resolved),
+        "identity_basis": "dex_battle_form", "identity_gaps": identity.gaps,
     }
     if collapse:
         groups: dict[tuple, dict[str, Any]] = {}

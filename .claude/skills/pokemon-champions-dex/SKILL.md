@@ -13,8 +13,11 @@ metagame popularity belongs to `$pokemon-champions-meta`, and damage arithmetic 
 ## Workflow
 
 1. Use `resolve` to normalize free-form Chinese, English, or Japanese names. It is batch,
-   typo-tolerant by default, understands multilingual Mega forms, and preserves 1:1 input order.
-2. Use the entity commands or `batch` when full records are needed.
+   typo-tolerant by default, understands multilingual Mega affixes, X/Y/Z qualifiers (full-width
+   letters included) and spoken nicknames such as 地龙/x喷/y喷, and preserves 1:1 input order.
+2. Use the entity commands or `batch` when full records are needed; they use the same
+   exact → Mega composition → fuzzy order as `resolve`. `--strict` disables fuzzy guessing while
+   retaining deterministic Mega composition and ambiguity refusal.
 3. Use `find` / `find-move` for reverse search; use `--where` for OR, NOT, or nested conditions.
 4. Prefer `--format json` for downstream processing. Use `--lang zh|ja|en` only for human-readable
    Markdown output.
@@ -26,6 +29,7 @@ Normalize names first when the input is free-form:
 ```bash
 python scripts/champdex.py resolve Mega耿鬼 超级雪妖女 牛蛙君 咆哮虎
 python scripts/champdex.py resolve 灭亡之歌 地震 保护 --kind move
+python scripts/champdex.py resolve 地面 フェアリー Fire --kind type --format json
 ```
 
 Query one or many full records:
@@ -59,11 +63,15 @@ Treat the executable schema as the authority for commands, fields, canonical sta
 
 ```bash
 python scripts/champdex.py schema
+python scripts/champdex.py names --format json
 ```
 
 Canonical JSON is language-independent: English `name` is the cross-skill join key; stat keys and type
 values remain canonical English. Human-readable output language precedence is `--lang`, then
 `POKEMON_CHAMPIONS_LANG`, then `en`.
+
+`names` exports the official `{kind,name,name_zh,name_ja}` vocabulary for presentation and bounded
+text checks. It includes Pokémon, moves, abilities, items and natures, without aliases or combat data.
 
 Read `references/schema.md` only when database fields, name-resolution behavior, or reverse-query
 semantics are relevant. It supplements the executable schema rather than replacing it.

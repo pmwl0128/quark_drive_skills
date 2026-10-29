@@ -208,6 +208,12 @@ export interface Inference {
   bulkProj: Record<BulkKey, Uint8Array[]>;
   /** Surviving stat SP per nature x item x ability: index [(n * I + i) * A + a][sp]. */
   offProj: Record<OffKey, Uint8Array[]>;
+  /** Optional unnormalised joint-state marginals for observation planning. Kept inside the local
+   * model call, not requested by the browser's ordinary inference worker. */
+  observationWeights?: {
+    bulk: Record<BulkKey, Float64Array[]>;
+    offense: Record<OffKey, Float64Array[]>;
+  };
 }
 
 const RULER_BINS = 48;
@@ -307,7 +313,7 @@ const ONES1 = new Float64Array(W).fill(1);
 /** Run the inference, or null while any roll it needs is still being computed. `countOnly` skips
  * every view and returns just the surviving-state count (for the narrowing history). */
 export function infer(space: FoeSpace, evidence: Evidence[], countOnly = false,
-                      preferred?: Candidate): Inference | null {
+                      preferred?: Candidate, withObservationWeights = false): Inference | null {
   let prep: Prepared;
   try {
     prep = prepare(space, evidence);
@@ -332,6 +338,8 @@ export function infer(space: FoeSpace, evidence: Evidence[], countOnly = false,
   const band = { def: [Infinity, -Infinity], spd: [Infinity, -Infinity] };
   const bulkProj = { def: [] as Uint8Array[], spd: [] as Uint8Array[] };
   const offProj = { atk: [] as Uint8Array[], spa: [] as Uint8Array[] };
+  const observationWeights: Inference["observationWeights"] = withObservationWeights && !countOnly
+    ? { bulk: { def: [], spd: [] }, offense: { atk: [], spa: [] } } : undefined;
   const speedCaps = new Array<number>(N * I * A).fill(-1);
   // The ruler bins, hoisted out of the per-state loop below (it runs W³ times per nature and
   // ability): the same arithmetic as reading the axis each time, so the same bins.
@@ -375,6 +383,16 @@ export function infer(space: FoeSpace, evidence: Evidence[], countOnly = false,
         const projAtk = new Uint8Array(W), projSpa = new Uint8Array(W);
         bulkProj.def[index] = projDef; bulkProj.spd[index] = projSpd;
         offProj.atk[index] = projAtk; offProj.spa[index] = projSpa;
+        const weightedDef = observationWeights ? new Float64Array(W * W) : null;
+        const weightedSpd = observationWeights ? new Float64Array(W * W) : null;
+        const weightedAtk = observationWeights ? new Float64Array(W) : null;
+        const weightedSpa = observationWeights ? new Float64Array(W) : null;
+        if (observationWeights) {
+          observationWeights.bulk.def[index] = weightedDef!;
+          observationWeights.bulk.spd[index] = weightedSpd!;
+          observationWeights.offense.atk[index] = weightedAtk!;
+          observationWeights.offense.spa[index] = weightedSpa!;
+        }
         const offCount = new Float64Array(SP_BUDGET + 1), offMass = new Float64Array(SP_BUDGET + 1);
         type OffChoice = { weight: number; distance: number; atk: number; spa: number };
         const offBest = new Array<OffChoice | null>(SP_BUDGET + 1).fill(null);
@@ -410,6 +428,10 @@ export function infer(space: FoeSpace, evidence: Evidence[], countOnly = false,
             // Marginalize ALL compatible attack allocations, including their likelihood and
             // item prior. Counting a surviving projection once gives a different distribution.
             const weight = prior * wd * ws * offWeights[room]!;
+            if (weightedDef && weightedSpd) {
+              weightedDef[h * W + d]! += weight;
+              weightedSpd[h * W + b]! += weight;
+            }
             natureMass[n]! += weight;
             const choice = offBest[room]!;
             const stateWeight = prior * wd * ws * choice.weight;
@@ -447,6 +469,7 @@ export function infer(space: FoeSpace, evidence: Evidence[], countOnly = false,
           const room = SP_BUDGET - x - y;
           if (!la[x] || !ly[y] || !bulkCounts[room]) continue;
           const weight = prior * la[x]! * ly[y]! * bulkWeights[room]!;
+          if (weightedAtk && weightedSpa) { weightedAtk[x]! += weight; weightedSpa[y]! += weight; }
           projAtk[x] = 1; projSpa[y] = 1;
           mass.atk[x]! += weight; mass.spa[y]! += weight;
         }
@@ -516,6 +539,7 @@ export function infer(space: FoeSpace, evidence: Evidence[], countOnly = false,
     lanes: { atk: lanes("atk"), spa: lanes("spa") },
     bulkProj,
     offProj,
+    ...(observationWeights ? { observationWeights } : {}),
   };
 }
 
@@ -565,6 +589,36 @@ export function nearestAfters(values: number[], value: number): number[] {
   const below = values.filter((candidate) => candidate < value).pop();
   const above = values.find((candidate) => candidate > value);
   return [below, above].filter((candidate): candidate is number => candidate !== undefined);
+}
+
+export interface EvidenceRecord { id: string; evidence: Evidence }
+
+/** Apply the same per-hit validity rule before intersecting observations. An individually impossible
+ * reading is excluded; two individually possible readings may still form a real conflict. */
+export function evaluateEvidence(space: FoeSpace, records: EvidenceRecord[], preferred?: Candidate,
+                                 withObservationWeights = false) {
+  const impossible = new Map<string, number[]>(), skipped = new Set<string>();
+  const evidence: Evidence[] = [], accepted: string[] = [];
+  let pending = false;
+  for (const { id, evidence: hit } of records) {
+    const single = infer(space, [hit], true);
+    if (!single) pending = true;
+    if (single?.count === 0) {
+      const values = possibleAfters(space, hit);
+      if (values?.length) impossible.set(id, nearestAfters(values, hit.after));
+      else skipped.add(id);
+    } else { evidence.push(hit); accepted.push(id); }
+  }
+  const prior = infer(space, [], false, preferred, withObservationWeights && !evidence.length);
+  const inference = pending ? null : evidence.length
+    ? infer(space, evidence, false, preferred, withObservationWeights) : prior;
+  const remaining = new Map<string, number | null>();
+  if (prior?.count && inference) accepted.forEach((id, index) => {
+    const count = index === accepted.length - 1 ? inference.count
+      : infer(space, evidence.slice(0, index + 1), true)?.count;
+    remaining.set(id, count === undefined ? null : count / prior.count);
+  });
+  return { prior, inference, evidence, accepted, impossible, skipped, remaining, pending };
 }
 
 // -- predictions ----------------------------------------------------------------------------

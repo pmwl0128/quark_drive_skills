@@ -17,6 +17,8 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
 
+from stat_keys import canonical_spread
+
 STATS = ["hp", "atk", "def", "spa", "spd", "spe"]
 _EV_TOKEN = {"hp": "hp", "atk": "atk", "at": "atk", "def": "def", "df": "def",
              "spa": "spa", "spatk": "spa", "spd": "spd", "spdef": "spd",
@@ -33,6 +35,8 @@ class TeamMember:
     spread: dict[str, int] | None = None
     tera: str | None = None
     completeness: str | None = None    # observed_full_set | observed_species_only | extracted_set | inferred_set
+    # Internal battle-view provenance; never trusted by the public parser or serialized as team input.
+    _registration: dict[str, Any] | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -50,7 +54,7 @@ class Team:
             "format": self.format,
             "season": self.season,
             "rule": self.rule,
-            "pokemon": [asdict(m) for m in self.pokemon],
+            "pokemon": [{k: v for k, v in asdict(m).items() if k != "_registration"} for m in self.pokemon],
             "provenance": self.provenance,
         }
 
@@ -66,14 +70,19 @@ def _member_from_dict(d: dict[str, Any]) -> TeamMember:
         ability=d.get("ability"),
         moves=list(d.get("moves") or d.get("attacks") or []),
         nature=d.get("nature"),
-        spread=d.get("spread"),
+        spread=canonical_spread(d["spread"]) if isinstance(d.get("spread"), dict) else d.get("spread"),
         tera=d.get("tera"),
         completeness=d.get("completeness"),
     )
 
 
-def team_from_dict(d: dict[str, Any]) -> Team:
-    members = [_member_from_dict(m) for m in (d.get("pokemon") or d.get("decklist") or [])]
+def team_from_dict(d: dict[str, Any], *, retain_registration: bool = False) -> Team:
+    rows = d.get("pokemon") or d.get("decklist") or []
+    members = [_member_from_dict(m) for m in rows]
+    if retain_registration:
+        for member, row in zip(members, rows):
+            if isinstance(row.get("_registration"), dict):
+                member._registration = dict(row["_registration"])
     return Team(
         pokemon=members,
         format=d.get("format"),
@@ -193,13 +202,15 @@ class BuildContext:
     avoid_species: list[str] = field(default_factory=list)
     avoid_items: list[str] = field(default_factory=list)
     benchmarks: list[dict[str, Any]] = field(default_factory=list)   # SP-tuning targets (schema §7)
+    goals: list[dict[str, Any]] = field(default_factory=list)        # slate reporting targets
     need: dict[str, Any] = field(default_factory=dict)               # L3 fill gap spec:
     #   {resist: type|[types], offense_type: type|[types], coverage_move_type: type|[types],
-    #    role: name|[names], min_speed: int}
+    #    role: name|[names], min_speed: int, answer: species|[species]}
     replace: dict[str, Any] = field(default_factory=dict)            # L3 replace-impact:
     #   {member: "<species to remove>", with: <full team-json member: species + set>}
     direct_final: bool = False                  # checkpoint: user explicitly delegated final convergence
     skip_checkpoint: bool = False               # checkpoint: explicit orchestration override
+    checkpoint_required: bool = False           # user requested an intermediate choice before continuing
     frame_required: bool = False                # build-flow slate must carry a frame receipt/binding
 
 
@@ -221,10 +232,12 @@ def context_from_dict(d: dict[str, Any]) -> BuildContext:
         variance_tolerance=d.get("variance_tolerance"),
         avoid_soft=[s for s in (d.get("avoid_soft") or []) if isinstance(s, str)],
         benchmarks=list(d.get("benchmarks") or []),
+        goals=[dict(g) for g in (d.get("goals") or [])],
         need=dict(d.get("need") or {}),
         replace=dict(d.get("replace") or {}),
         direct_final=d.get("direct_final") is True,
         skip_checkpoint=d.get("skip_checkpoint") is True,
+        checkpoint_required=d.get("checkpoint_required") is True,
         frame_required=d.get("frame_required") is True,
     )
 

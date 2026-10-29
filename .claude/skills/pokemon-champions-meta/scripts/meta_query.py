@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import io
+import math
 import re
 import sys
 import zipfile
@@ -15,6 +16,7 @@ from typing import Any
 from meta_common import (
     CACHE_DIR,
     EnvironmentResolutionError,
+    current_state,
     details_path,
     ko_path,
     load_json,
@@ -29,6 +31,8 @@ from meta_common import (
 # unique module name so it can't collide with the sibling skills' own *_i18n modules on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import meta_i18n as i18n  # noqa: E402
+import meta_topmeta  # noqa: E402
+import meta_views  # noqa: E402
 
 # The sibling dex skill is the naming authority. Rather than re-read its sqlite and reimplement name
 # resolution, meta reuses champdex IN-PROCESS so resolution (incl. the conservative fuzzy fallback, now
@@ -73,8 +77,16 @@ if hasattr(sys.stderr, "reconfigure"):
 # instead of once per request. Callers treat the result as read-only. A one-shot process loads
 # it once anyway, so the cache is harmless there.
 @lru_cache(maxsize=None)
+def _ranking_document(path: Path) -> dict[str, Any]:
+    return load_json(path, {"rows": []})
+
+
+def load_ranking_document(season: str, fmt: str) -> dict[str, Any]:
+    return _ranking_document(ranking_path(season, fmt))
+
+
 def load_ranking(season: str, fmt: str) -> list[dict[str, Any]]:
-    return load_json(ranking_path(season, fmt), {"rows": []}).get("rows", [])
+    return load_ranking_document(season, fmt).get("rows", [])
 
 
 @lru_cache(maxsize=None)
@@ -103,7 +115,7 @@ def dex_resolve(name: str) -> tuple[set[str], dict[str, Any] | None]:
     if c is None:
         return aliases, resolution
     try:
-        rr = _dex.resolve_rich(c, "pokemon", name)        # dex default: fuzzy-tolerant
+        rr = _dex.resolve_name(c, "pokemon", name)        # public exact -> Mega compose -> fuzzy order
         canon = rr.get("canonical")
         if not canon:
             return aliases, resolution
@@ -113,7 +125,7 @@ def dex_resolve(name: str) -> tuple[set[str], dict[str, Any] | None]:
                 aliases.add(str(row["alias"]))
         if rr.get("match_type") == "fuzzy":
             resolution = {"match_type": "fuzzy", "score": rr.get("score"),
-                          "distance": rr.get("distance"), "from": rr.get("query_norm")}
+                          "distance": rr.get("distance"), "from": normalize(name)}
     except Exception:
         pass
     return aliases, resolution
@@ -136,7 +148,7 @@ def dex_alias_norms_rich(text: str, kinds: tuple[str, ...]) -> tuple[set[str], d
         return out, resolution
     for kind in kinds:
         try:
-            rr = _dex.resolve_rich(c, kind, text)        # fuzzy-tolerant, like every other dex path
+            rr = _dex.resolve_name(c, kind, text)
             canon = rr.get("canonical")
             if not canon:
                 continue
@@ -147,7 +159,7 @@ def dex_alias_norms_rich(text: str, kinds: tuple[str, ...]) -> tuple[set[str], d
             if resolution is None and rr.get("match_type") == "fuzzy":
                 resolution = {"kind": kind, "resolved": canon, "match_type": "fuzzy",
                               "score": rr.get("score"), "distance": rr.get("distance"),
-                              "from": rr.get("query_norm")}
+                              "from": normalize(text)}
         except Exception:
             continue
     return out, resolution
@@ -185,7 +197,7 @@ def _dex_display(kind: str, text: str, lang: str = "zh") -> str | None:
     if c is None or not text:
         return None
     try:
-        rr = _dex.resolve_rich(c, kind, text)             # dex default: fuzzy-tolerant
+        rr = _dex.resolve_name(c, kind, text)
         canon = rr.get("canonical")
         if not canon:
             return None
@@ -422,7 +434,134 @@ def command_ranking(args: argparse.Namespace) -> None:
     args.season, args.rule = resolve_season_rule(args.season, args.rule)
     _require_data(args.season, args.format)
     rows = load_ranking(args.season, args.format)[: args.limit]
-    emit({"season": args.season, "rule": args.rule, "format": args.format, "rows": rows} if args.output == "json" else ranking_md(rows), args.output)
+    emit({"season": args.season, "rule": args.rule, "format": args.format,
+          "updated_at": load_ranking_document(args.season, args.format).get("updated_at"),
+          "rows": rows} if args.output == "json" else ranking_md(rows), args.output)
+
+
+def command_who_uses(args: argparse.Namespace) -> None:
+    if not args.entry.strip() or args.limit < 0:
+        _emit_meta_error(args.entry, "bad_input", "who-uses needs a nonempty entry and a nonnegative limit")
+        raise SystemExit(1)
+    season, rule = resolve_season_rule(args.season, args.rule)
+    _require_data(season, args.format)
+    panel = {"move": "moves", "item": "items", "ability": "abilities", "nature": "natures"}[args.kind]
+    aliases, resolution = dex_alias_norms_rich(args.entry, (args.kind,))
+    canonical = args.entry
+    dex_found = None
+    c = _dex_conn()
+    if c is not None:
+        rr = _dex.resolve_name(c, args.kind, args.entry)
+        dex_found = bool(rr.get("canonical"))
+        canonical = rr.get("canonical") or args.entry
+    rows = iter_panel_rows(season, args.format, panel)
+    english = {r.get("slug"): r.get("pokemon_en") for r in load_ranking(season, args.format)}
+    for row in rows:
+        row["pokemon_en"] = english.get(row.get("slug"))
+    out = meta_views.who_uses(rows, aliases, limit=args.limit)
+    if dex_found is False and not out["matched"]:
+        emit({"ok": False, "query": args.entry, "error": {"code": "not_found",
+              "message": f"no {args.kind} matches this name in the battle dex or meta panel"}}, "json")
+        return
+    out.update({"entry": canonical, "kind": args.kind, "format": args.format,
+                "season": season, "rule": rule,
+                "updated_at": load_json(details_path(season, args.format), {}).get("updated_at")})
+    if resolution:
+        out["query"] = args.entry
+        out["name_resolution"] = resolution
+    emit(out, "json")
+
+
+def _view_file(kind: str, season: str, rule: str, fmt: str) -> dict[str, Any] | None:
+    path = CACHE_DIR / f"{kind}_{season}_{fmt}.json"
+    if not path.is_file():
+        return None
+    doc = load_json(path, {})
+    try:
+        meta_views.require_identity(doc, season, rule, fmt)
+    except ValueError as exc:
+        _emit_meta_error(str(path.name), "authority_mismatch", str(exc))
+        raise SystemExit(1) from exc
+    return doc
+
+
+def _rank_trend(args: argparse.Namespace) -> tuple[str, str, dict[str, Any]]:
+    season, rule = resolve_season_rule(args.season, args.rule)
+    doc = _view_file("trend", season, rule, args.format)
+    if doc is None:
+        _emit_meta_error(f"{season}/{args.format}", "not_found", "no stored rank trend for this season/format")
+        raise SystemExit(0)
+    return season, rule, doc
+
+
+def command_trend(args: argparse.Namespace) -> None:
+    season, rule, doc = _rank_trend(args)
+    requested = args.pokemon
+    name = requested
+    resolution = None
+    form_note = None
+    c = _dex_conn()
+    if c is not None:
+        rr = _dex.resolve_name(c, "pokemon", requested)
+        if rr.get("canonical"):
+            name = rr["canonical"]
+            if rr.get("is_mega") and rr.get("base_species"):
+                form_note = f"{name} is tracked under base species {rr['base_species']}"
+                name = rr["base_species"]
+            if rr.get("match_type") == "fuzzy":
+                resolution = {"match_type": "fuzzy", "score": rr.get("score"),
+                              "distance": rr.get("distance"), "from": normalize(requested)}
+    names = doc.get("names") or {}
+    slug = next((s for s, labels in names.items() if normalize(labels.get("en") or "") == normalize(name)), None)
+    if slug is None:
+        slug = next((s for s, labels in names.items() if any(normalize(v) == normalize(name)
+                     for v in labels.values())), None)
+    if slug is None and name in (doc.get("ranks") or {}):
+        slug = name
+    if slug is None:
+        emit({"ok": False, "query": requested, "error": {"code": "not_found",
+              "message": "Pokemon is not tracked by this season's rank trend"}}, "json")
+        return
+    usage = _view_file("usage_trend", season, rule, args.format)
+    try:
+        out = meta_views.trend(doc, usage, slug, (names.get(slug) or {}).get("en") or name)
+    except ValueError as exc:
+        _emit_meta_error(requested, "authority_mismatch", str(exc))
+        raise SystemExit(1) from exc
+    for panel, rows in out.get("usage_shifts", {}).items():
+        for row in rows:
+            source_name = row["name"]
+            row["name"] = _dex_display(_KIND_BY_PANEL[panel], source_name, "en") or source_name
+            if row["name"] == source_name:
+                row["source_name"] = source_name
+    if form_note:
+        out["form_note"] = form_note
+    if resolution:
+        out.update({"query": requested, "resolved_name": rr["canonical"], "name_resolution": resolution})
+    state = current_state()
+    seasons = list(state.get("seasons") or {})
+    if season in seasons and seasons.index(season) > 0:
+        previous = seasons[seasons.index(season) - 1]
+        if ranking_path(previous, args.format).is_file():
+            prior = next((r for r in load_ranking(previous, args.format) if r.get("slug") == slug), None)
+            out["previous_season"] = {"season": previous,
+                                      "rule": state["seasons"][previous].get("rule"),
+                                      "final_rank": prior.get("rank") if prior else None}
+    emit(out, "json")
+
+
+def command_movers(args: argparse.Namespace) -> None:
+    if args.limit < 0:
+        _emit_meta_error(str(args.limit), "bad_input", "movers limit must be nonnegative")
+        raise SystemExit(1)
+    season, rule, doc = _rank_trend(args)
+    report = _view_file("report", season, rule, args.format)
+    try:
+        out = meta_views.movers(doc, report, limit=args.limit)
+    except ValueError as exc:
+        _emit_meta_error(f"{season}/{args.format}", "authority_mismatch", str(exc))
+        raise SystemExit(1) from exc
+    emit(out, "json")
 
 
 def _panel_filtered(detail: dict[str, Any], panel: str | None) -> dict[str, Any]:
@@ -472,6 +611,81 @@ def command_detail(args: argparse.Namespace) -> None:
         print("\n\n---\n\n".join(blocks))
 
 
+INFERENCE_PRIOR_PANELS = {"natures": "nature", "items": "item", "abilities": "ability"}
+
+
+def _inference_prior_panel(rows: list[dict[str, Any]], kind: str, connection: Any) -> list[dict[str, Any]]:
+    """Keep the web inference candidate cut, retaining unnormalized source percentages."""
+    if not isinstance(rows, list):
+        raise ValueError(f"invalid {kind} panel: expected a list")
+    out = []
+    for row in rows[:10]:
+        if not isinstance(row, dict):
+            raise ValueError(f"invalid {kind} panel entry: expected an object")
+        percentage = row.get("percentage")
+        if percentage is None:
+            continue
+        if (isinstance(percentage, bool) or not isinstance(percentage, (int, float))
+                or not math.isfinite(percentage) or not 0 <= percentage <= 100):
+            raise ValueError(f"invalid {kind} panel percentage: {percentage!r}")
+        if percentage < 1:
+            continue
+        name = row.get("name") or row.get("name_ja")
+        resolved = _dex.resolve_name(connection, kind, name, fuzzy=False) if isinstance(name, str) else {}
+        canonical = resolved.get("canonical")
+        if not canonical:
+            raise ValueError(f"cannot canonicalize {kind} panel entry: {name!r}")
+        out.append({"name": canonical, "percentage": percentage,
+                    "rank": row.get("rank")})
+    return out
+
+
+def command_inference_prior(args: argparse.Namespace) -> None:
+    season, rule = resolve_season_rule(args.season, args.rule)
+    source = details_path(season, args.format)
+    if not source.exists():
+        _emit_meta_error(f"{season}/{args.format}", "unknown_format", "detail snapshot is unavailable")
+        raise SystemExit(1)
+    connection = _dex_conn()
+    if connection is None:
+        _emit_meta_error(args.pokemon, "engine_unavailable", "sibling dex is required for canonical priors")
+        raise SystemExit(1)
+    requested = _dex.resolve_name(connection, "pokemon", args.pokemon)
+    if not requested.get("canonical"):
+        _emit_meta_error(args.pokemon, (requested.get("error") or {}).get("code", "not_found"),
+                         (requested.get("error") or {}).get("message", "Pokemon not found in battle dex"))
+        return
+    base = requested.get("base_species") if requested.get("is_mega") else requested["canonical"]
+    detail = resolve_pokemon(base, season, args.format)
+    if not detail:
+        _emit_meta_error(args.pokemon, "not_found", f"no in-game detail for {base} in {season} {args.format}")
+        return
+    document = load_json(source, {})
+    if (not isinstance(document, dict) or any(document.get(key) != value for key, value in
+                                                  (("season", season), ("rule", rule), ("format", args.format)))
+            or any(detail.get(key) != value for key, value in
+                   (("season", season), ("rule", rule), ("format", args.format)))
+            or not isinstance(detail.get("panels"), dict)):
+        _emit_meta_error(args.pokemon, "authority_mismatch", "detail snapshot identity or panels are invalid")
+        raise SystemExit(1)
+    try:
+        panels = {panel: _inference_prior_panel(detail["panels"].get(panel, []), kind, connection)
+                  for panel, kind in INFERENCE_PRIOR_PANELS.items()}
+    except ValueError as exc:
+        _emit_meta_error(args.pokemon, "authority_mismatch", str(exc))
+        raise SystemExit(1) from exc
+    result = {"schema": "inference_prior.v1", "pokemon": requested["canonical"],
+              "base_species": base, "season": season, "rule": rule, "format": args.format,
+              "updated_at": document.get("updated_at"),
+              "source": "in_game_species_detail", "panel_limit": 10, "min_percentage": 1,
+              "panels": panels}
+    if requested.get("match_type") == "fuzzy":
+        result["name_resolution"] = {"query": args.pokemon, "canonical": requested["canonical"],
+                                     "match_type": "fuzzy", "score": requested.get("score"),
+                                     "distance": requested.get("distance")}
+    emit(result, "json")
+
+
 # --- KO axis --------------------------------------------------------------------------------
 # A second data family (ko_<season>_<format>.json) with its own upstream and snapshot clock. Its
 # object panels are SPECIES-level (keyed by national dex no) and carry no percentage — the source
@@ -513,14 +727,14 @@ def _ko_entry_name(entry: dict[str, Any], panel: str) -> str:
 
 def _ko_row_for(name: str, season: str, fmt: str) -> dict[str, Any] | None:
     """Resolve a query to one KO row, reusing the dex alias set the other commands use."""
-    aliases, _resolution = dex_resolve(name)
+    aliases, resolution = dex_resolve(name)
     needles = {normalize(x) for x in aliases}
     needles.discard("")
     for row in load_ko(season, fmt).get("rows") or []:
         values = [row.get("slug", ""), row.get("pokemon", ""), row.get("pokemon_en", ""),
                   row.get("pokemon_ja", "")]
         if any(normalize(v) in needles for v in values):
-            return row
+            return _flag_resolution(row, name, resolution)
     return None
 
 
@@ -533,6 +747,8 @@ def ko_md(row: dict[str, Any], meta: dict[str, Any], panel: str | None) -> str:
              f"- {i18n.t('ko_snapshot')}: {meta.get('updated_at', '')}",
              f"- {i18n.t('ko_no_pct')}",
              f"- {i18n.t('ko_species_level')}"]
+    if row.get("name_resolution"):
+        lines.append(f"- {i18n.t('resolved')}: `{row.get('query')}` → {row.get('resolved_name')}")
     if coverage.get("reused_from"):
         lines.append(f"- {i18n.t('ko_reused_from', season=coverage['reused_from']['season'])}")
     if coverage.get("move_share") == "absent":
@@ -1784,6 +2000,12 @@ def command_compare(args: argparse.Namespace) -> None:
                 "top_items": [x.get("name") for x in panels.get("items", [])[:5]],
                 "top_abilities": [x.get("name") for x in panels.get("abilities", [])[:3]],
                 "top_partners": [x.get("name") for x in panels.get("partners", [])[:5]],
+                "updated_at": load_json(details_path(args.season, fmt), {}).get("updated_at"),
+                "panel_shares": {p: [{"name": repair_display_name(x.get("name") or x.get("name_ja"),
+                                                                  _KIND_BY_PANEL[p], "en"),
+                                       "percentage": x.get("percentage"), "rank": x.get("rank")}
+                                      for x in panels.get(p, [])[:5]]
+                                 for p in ("moves", "items", "abilities", "natures", "partners")},
             }
         )
     if args.output == "json":
@@ -1809,13 +2031,61 @@ def command_compare(args: argparse.Namespace) -> None:
         lines.append(f"## {i18n.value('format', row['format'])}")
         lines.append(f"- {i18n.t('rank')}: {row.get('rank')}")
         lines.append(f"- {i18n.t('pokemon')}: {_md_pokemon(row)}{i18n.parens(row.get('slug'))}")
-        for panel, field in (("moves", "top_moves"), ("items", "top_items"),
-                             ("abilities", "top_abilities"), ("partners", "top_partners")):
-            values = [repair_display_name(x, _KIND_BY_PANEL.get(panel), i18n.lang())
-                      for x in row.get(field, [])]
+        for panel in ("moves", "items", "abilities", "natures", "partners"):
+            values = [f"{repair_display_name(x['name'], _KIND_BY_PANEL.get(panel), i18n.lang())}"
+                      f" ({percent_text(x['percentage'])})" if x.get("percentage") is not None
+                      else repair_display_name(x["name"], _KIND_BY_PANEL.get(panel), i18n.lang())
+                      for x in row.get("panel_shares", {}).get(panel, [])]
             lines.append(f"- {i18n.panel_label(panel)}: {i18n.list_sep().join(values)}")
         lines.append("")
     print("\n".join(lines))
+
+
+def _topmeta_ingame(facts, fmt: str) -> dict:
+    """Current native snapshot, using the same strict dex join as the team comparison."""
+    season, _ = resolve_season_rule(None, None)
+    ranking = load_ranking_document(season, fmt)
+    if not ranking.get("rows"):
+        raise ValueError("current in-game ranking is unavailable for the Top Meta comparison")
+    c = _dex_conn()
+    if c is None:
+        raise meta_topmeta.Unavailable("Top Meta comparison requires the sibling dex skill")
+
+    def resolve_batch(kind, names):
+        return {name: _dex.resolve_name(c, kind, name, fuzzy=False).get("canonical") for name in names}
+
+    return facts.ingame_from_meta(ranking, load_details(season, fmt), resolve_batch)
+
+
+def _topmeta_limit(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("topmeta --limit must be a positive integer")
+    return value
+
+
+def command_topmeta(args: argparse.Namespace) -> None:
+    season, rule = resolve_season_rule(args.season, args.rule)
+    if args.view == "full" and args.limit is not None:
+        args.parser.error("topmeta --limit only limits a summary; omit it with --view full")
+    names = list(args.pokemon or []) + list(args.pokemon_pos or [])
+    try:
+        c = _dex_conn()
+        if c is None:
+            raise meta_topmeta.Unavailable("Top Meta requires the sibling dex skill for canonical names")
+        records = [_dex.resolve_name(c, "pokemon", name) for name in names] if names else None
+        result = meta_topmeta.query(args.format, season, rule, args.scope, records,
+                                   lambda facts: _topmeta_ingame(facts, args.format),
+                                   view=args.view, limit=args.limit or 6)
+    except (meta_topmeta.Unavailable, ImportError) as exc:
+        _emit_meta_error("topmeta", "engine_unavailable", str(exc))
+        raise SystemExit(1) from exc
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        _emit_meta_error("topmeta", "authority_mismatch", f"published Top Meta data cannot answer this query: {exc}")
+        raise SystemExit(1) from exc
+    emit(result, "json")
+    if any((q.get("error") or {}).get("code") == "unsupported_mechanic" for q in result.get("queries") or []):
+        raise SystemExit(1)
 
 
 # Machine-readable I/O contract (dev/conventions.md), emitted by `schema`. Pinned by the
@@ -1826,18 +2096,29 @@ META_SCHEMA = {
     "identity": {"name": "English join key", "name_zh": "中文", "name_ja": "日本語", "slug": "lowercase"},
     "stat_keys": ["hp", "atk", "def", "spa", "spd", "spe"],
     "casing": "move type/category are Title-case",
+    "dependencies": {"dex": "canonical naming authority", "team": "optional: topmeta alone reads its published data/top_meta tables and pure comparison/projection modules; other commands do not require team"},
     "error_shape": {"ok": False, "query": "<input>", "error": {"code": "not_found", "message": "<str>"}},
     "flags": "--format single|double = BATTLE format (compat alias: --game-format, matching team.py); "
              "--output md|json = OUTPUT format. (team.py uses --game-format/--format for the same two "
              "meanings — the alias exists so the asymmetry can't bite cross-skill orchestration.)",
     "commands": {
+        "inference-prior": "--pokemon <name> --format single|double [--season --rule] -> inference_prior.v1 with canonical nature/item/ability entries from the species' first ten in-game detail rows at >=1%; Mega uses base-species panel. JSON only",
         "ranking": "--format single|double [--season --rule --limit] -> {season,rule,format,rows:[pokemon row]}",
         "detail": "--format <single|double> [--pokemon] <name ...> [--panel] -> detail(1) | list(>1; misses -> error_shape)",
         "search": "[--format single|double|both (default both)] [--panel --name --type --category "
                   "--min-usage --limit] -> [flattened panel rows]. --type/--category apply to the move "
                   "panel only; unknown --panel -> bad_input. OR `--where '<json>'` for a boolean "
                   "AND/OR/NOT query (see where_query).",
-        "compare": "--pokemon <name> -> {single:{found,...},double:{found,...}}  (found:false = not ranked there)",
+        "compare": "--pokemon <name> -> {single:{found,rank,updated_at,panel_shares,...},double:{...}}; panel_shares keeps each format's own per-Pokemon percentages (found:false = not ranked there)",
+        "who-uses": "--kind move|item|ability|nature --entry <name> --format single|double [--limit N] -> {pokemon,low_usage_pokemon,matched,omitted_below_1pct,percentage_basis:'share_within_each_pokemon'}; usage top 60 and lower ranks stay separate, JSON only",
+        "trend": "--pokemon <name> --format single|double [--season --rule] -> stored rank_history and per-panel first/latest usage_shifts; null means unranked/not listed, missing store -> not_found, JSON only",
+        "movers": "--format single|double [--season --rule --limit N] -> risers/fallers/new_in_top from first to latest stored rank trend; last_update counts only the newest report, JSON only",
+        "topmeta": "--format single|double [--scope season|rule|high] [--pokemon <name ...>] "
+                   "[--season --rule] [--view summary|full (default summary)] [--limit N (summary only, default 6)] "
+                   "-> team top_meta.v1 counts + current in-game comparison. Read-only dependency on sibling team tables/code; "
+                   "missing team -> engine_unavailable. Summary discloses omitted counts. queries[] preserves requested "
+                   "forms and fuzzy metadata. Mega-only distributions unavailable in species aggregates report "
+                   "unsupported_mechanic (exit 1); no base-form substitution. JSON only.",
         "ko": "--format single|double [--pokemon <name ...>] [--panel ko_targets|koed_by|ko_moves|"
               "koed_by_moves] -> {season,rule,format,updated_at,coverage,...row}. The KO axis: who "
               "knocks whom out. Separate file family and separate upstream snapshot from "
@@ -1863,6 +2144,8 @@ META_SCHEMA = {
                    "{\"usage\":\">=20\"}]}]}",
     },
     "shapes": {
+        "inference_prior": "inference_prior.v1 {pokemon,base_species,season,rule,format,updated_at,source:'in_game_species_detail',panel_limit:10,min_percentage:1,panels:{natures,items,abilities:[{name,percentage,rank}]},name_resolution?}; source percentages are not renormalized; entries are not filtered for the requested battle form's legal abilities or Mega stone; empty panels mean the consumer must apply its documented fallback",
+        "topmeta": "top_meta.v1 {population,format,rule,season,scope,partitions,sample:{teams,sets},built_at,compared_with,thresholds,criteria?/composition?,ranking,species,data_granularity:'species_aggregate',queries?:[{query,canonical,match_type,score,ok,name?,error?,available_reference?}],view?/projection?}. Each panel retains n/tier; summary truncation carries counts; queries remain aligned to supplied names.",
         "ranking_row": "{rank, name, name_zh, name_ja, slug, pokemon, pokemon_en, pokemon_ja}",
         "detail": "{rank, name, name_zh, name_ja, slug, panels:{moves,items,abilities,natures,partners,spreads}}",
         "move_entry": "{rank, name, name_ja, key, percentage:float, type:Title, category:Title, power:int|null}",
@@ -1881,7 +2164,7 @@ META_SCHEMA = {
                        "or independent_bulk (legacy: same_snapshot_detail_pages). A mixed capture "
                        "has rows_with_retained_ko and per-row panel_reused_from instead of a "
                        "file-wide move_share_snapshot_id; each retained panel keeps its donor clock.",
-        "name_resolution": "on a TYPO'd query only, detail/compare add {query, resolved_name, name_resolution:{match_type:'fuzzy', score, distance, from}}; an exact query omits all three",
+        "name_resolution": "on a TYPO'd query only, detail/compare/ko add {query, resolved_name, name_resolution:{match_type:'fuzzy', score, distance, from}}; an exact query omits all three. Pokemon queries use the public dex exact/Mega-compose/fuzzy resolver; explicit forms never fall back to the base",
     },
 }
 
@@ -1913,6 +2196,44 @@ def main() -> int:
     ranking.add_argument("--output", choices=["md", "json"], default="md")
     ranking.set_defaults(func=command_ranking)
 
+    who = sub.add_parser("who-uses", parents=[common])
+    who.add_argument("--kind", choices=["move", "item", "ability", "nature"], required=True)
+    who.add_argument("--entry", required=True)
+    who.add_argument("--format", "--game-format", choices=["single", "double"], required=True)
+    who.add_argument("--season")
+    who.add_argument("--rule")
+    who.add_argument("--limit", type=int, default=15)
+    who.add_argument("--output", choices=["json"], default="json")
+    who.set_defaults(func=command_who_uses)
+
+    trend = sub.add_parser("trend", parents=[common])
+    trend.add_argument("--pokemon", required=True)
+    trend.add_argument("--format", "--game-format", choices=["single", "double"], required=True)
+    trend.add_argument("--season")
+    trend.add_argument("--rule")
+    trend.add_argument("--output", choices=["json"], default="json")
+    trend.set_defaults(func=command_trend)
+
+    movers = sub.add_parser("movers", parents=[common])
+    movers.add_argument("--format", "--game-format", choices=["single", "double"], required=True)
+    movers.add_argument("--season")
+    movers.add_argument("--rule")
+    movers.add_argument("--limit", type=int, default=6)
+    movers.add_argument("--output", choices=["json"], default="json")
+    movers.set_defaults(func=command_movers)
+
+    top = sub.add_parser("topmeta", parents=[common])
+    top.add_argument("pokemon_pos", nargs="*")
+    top.add_argument("--format", "--game-format", choices=["single", "double"], required=True)
+    top.add_argument("--scope", choices=["season", "rule", "high"], default="season")
+    top.add_argument("--pokemon", "--species", nargs="+")
+    top.add_argument("--season")
+    top.add_argument("--rule")
+    top.add_argument("--view", choices=["summary", "full"], default="summary")
+    top.add_argument("--limit", type=_topmeta_limit)
+    top.add_argument("--output", choices=["json"], default="json")
+    top.set_defaults(func=command_topmeta, parser=top)
+
     detail = sub.add_parser("detail", parents=[common])
     detail.add_argument("pokemon_pos", nargs="*",
                         help="Pokémon names; convenience alias for --pokemon")
@@ -1925,6 +2246,14 @@ def main() -> int:
     detail.add_argument("--panel")
     detail.add_argument("--output", choices=["md", "json"], default="md")
     detail.set_defaults(func=command_detail, parser=detail)
+
+    inference_prior = sub.add_parser("inference-prior", parents=[common])
+    inference_prior.add_argument("--pokemon", required=True)
+    inference_prior.add_argument("--format", "--game-format", choices=["single", "double"], required=True)
+    inference_prior.add_argument("--season")
+    inference_prior.add_argument("--rule")
+    inference_prior.add_argument("--output", choices=["json"], default="json")
+    inference_prior.set_defaults(func=command_inference_prior)
 
     search = sub.add_parser("search", parents=[common])
     search.add_argument("--format", "--game-format", choices=["single", "double", "both"], default="both")

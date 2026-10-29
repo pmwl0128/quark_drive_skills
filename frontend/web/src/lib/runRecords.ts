@@ -268,6 +268,14 @@ export function updateRecord(id: string, patch: Partial<AssistRecord>): void {
   write({ ...record, ...patch, updatedAt: Date.now() });
 }
 
+/** Continue work on an existing record while preserving its input, result and identity. */
+export function resumeRecord(id: string): void {
+  if (!cache.has(id)) return;
+  beating.add(id);
+  beatTimer ??= window.setInterval(beat, BEAT_MS);
+  updateRecord(id, { status: "running", beatAt: Date.now() });
+}
+
 export function finishRecord(id: string, result: unknown): void {
   beating.delete(id);
   const record = cache.get(id);

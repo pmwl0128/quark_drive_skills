@@ -9,6 +9,7 @@ from pathlib import Path
 from . import mappers
 from .online.builder import canonicalize_members
 from .online.teamtext import extract_species, normalize_team_text, resolve_species
+from .team_evidence import DiagnosisInputError, bind_report, data_snapshot, input_requirements
 
 DIAGNOSE_TEXT_MAX = 8_000
 DIAGNOSE_TIMEOUT = 150.0
@@ -29,9 +30,11 @@ def validate_team(pool, team: dict) -> dict:
     return row["result"]
 
 
-def run_team_diagnose(pool, text: str, fmt: str) -> dict:
+def run_team_diagnose(pool, text: str, fmt: str, intent: dict | None = None) -> dict:
     """Parse structured/share text, then fill genuine gaps with observed species only."""
     from .team_code import resolve_text
+    snapshot = data_snapshot(pool)
+    intent = intent or {"goal": "", "lockedSlots": []}
     text = resolve_text(text, fmt)
     norm = normalize_team_text(text)
     with tempfile.TemporaryDirectory(prefix="pcui-diag-") as tmp:
@@ -49,6 +52,8 @@ def run_team_diagnose(pool, text: str, fmt: str) -> dict:
         if members:
             canonicalize_members(pool, members, time.monotonic() + 60)
             resolved = set(resolve_species(pool, [m["species"] for m in members]))
+            if intent["lockedSlots"] and any(m["species"] not in resolved for m in members):
+                raise DiagnosisInputError("locked coordinates cannot survive unresolved members")
             members = [m for m in members if m["species"] in resolved]
         if len(members) < 6:
             have = {m.get("species") for m in members}
@@ -64,16 +69,26 @@ def run_team_diagnose(pool, text: str, fmt: str) -> dict:
             raise ValueError("unparseable")
         team = {"schema_version": 1, "format": fmt, "season": None, "rule": None,
                 "pokemon": members[:6], "provenance": None}
+        if any(slot >= len(team["pokemon"]) for slot in intent["lockedSlots"]):
+            raise DiagnosisInputError("locked slot is absent")
+        requirements = input_requirements(team)
+        ready = all(not m["missingFields"] for m in requirements)
         team_json = tmp_dir / "team.json"
         team_json.write_text(json.dumps(team, ensure_ascii=False), encoding="utf-8")
         spec2 = tmp_dir / "spec2.json"
         spec2.write_text(json.dumps([
             {"op": "validate", "file": str(team_json)},
             {"op": "diagnose", "file": str(team_json), "aspect": "all",
-             "top_k": DIAGNOSE_TOP_K, "with_check": True},
+             "top_k": DIAGNOSE_TOP_K, "with_check": ready},
         ]), encoding="utf-8")
         reports = pool.request_json("team", ["session", str(spec2)], None, DIAGNOSE_TIMEOUT)
     if not isinstance(reports, list) or len(reports) != 2 or any(
-            not isinstance(row, dict) or not isinstance(row.get("result"), dict) for row in reports):
+            not isinstance(row, dict) or not isinstance(row.get("result"), dict)
+            or "error" in row["result"] for row in reports) or reports[1].get("rc") != 0:
         raise RuntimeError("diagnose session failed")
-    return mappers.map_diagnose_report(team, reports[0]["result"], reports[1]["result"])
+    if data_snapshot(pool) != snapshot:
+        raise RuntimeError("diagnosis data changed during calculation")
+    report = mappers.map_diagnose_report(team, reports[0]["result"], reports[1]["result"])
+    variants = ((reports[1]["result"].get("check_coverage") or {})
+                .get("check_coverage") or {}).get("by_opponent") or []
+    return bind_report(report, snapshot, intent, requirements, variants)

@@ -39,6 +39,19 @@ semantics: `session_list`, `session_show`, `session_create`, `artifact_get`, `ar
 `session` and `output_path`, exactly like `run --session --out`), `session_wait` (returns `status:
 timeout` to call again) and `open_link`. Everything below applies to both.
 
+Typed deterministic tools also expose `team_review`, `team_try`, `review_claims`, `slate_init`,
+`team_fill`, `team_tune_cell`, `team_localize`, `team_counters`, `team_ko_scan`, `team_speed_ladder`,
+`team_scenario` and `team_threshold`. Use their schemas instead of guessing generic arguments.
+File inputs are inline JSON, never local paths. `output_path` on review/try saves the full report
+from that run; Console receives a display summary. Copy the saved full report into subsequent
+claim/tuning inputs. Typed tools use the same daemon session and UEP gates as `run_operator`.
+
+`inference_prior` and `inference_init/add/status/remove/example/import_web/schema` expose portable
+calculator cases. Every call supplies the current case and returns new JSON; there is no hidden
+case state, automatic team write or confirmed opponent set. Prior/observations are inline objects;
+keep frozen source evidence and the calculator's uncertainty. These query tools do not append a
+session gate. A surviving example is a hypothesis, not a recommendation or factual identification.
+
 Canceling `session_wait` stops that wait. Canceling a `run_operator` reply does not retract work
 already sent to the daemon: it may still complete and commit. Read `session_show` before retrying.
 
@@ -64,6 +77,10 @@ Run every UEP gate operator through `run <op> --session <S>`. The daemon then su
 | `intake` with `"next": true` | `intake` (the batch the panel shows as a form) |
 | `tune` | `tune-result` |
 | `diagnose` (with `--file team.json`) | `team` (the team it read), `diagnose` — the panel shows the report |
+| `review` / `diagnose --focus` | `review` display summary; preserve full result for evidence |
+| `try` | `trial` display summary; original team stays unchanged |
+| `review-claims` | `review-claims` recomputation result |
+| `slate-init` | `slate-input` candidate transport; does not certify delivery |
 
 A consecutive rerun of the same gate adds nothing. An intervening draft, answer or other gate makes
 it a new ledger application even when the result bytes match. Use `artifact put` only for content no operator

@@ -69,6 +69,21 @@ def effective_form_ability(ability: str | None,
     return abilities[0]
 
 
+def legal_member_abilities(species: str, item: str | None, own_fact: dict[str, Any],
+                           item_info: dict[str, dict[str, Any]],
+                           form_facts: dict[str, dict[str, Any]]) -> list[str]:
+    """Registration allows base or own-stone Mega abilities, never a regional sibling's.
+
+    An explicitly named Mega has only that form's abilities, even with a wrong stone.
+    Species Clause grouping is deliberately not a Mega host test.
+    """
+    abilities = set(own_fact.get("abilities") or [])
+    if not own_fact.get("is_mega"):
+        form = mega_form_from_maps(species, item, own_fact, item_info, form_facts)
+        abilities.update((form_facts.get(form) or {}).get("abilities") or [])
+    return sorted(abilities)
+
+
 def effective_member_from_maps(member: dict[str, Any],
                                facts: dict[str, dict[str, Any]],
                                item_info: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:

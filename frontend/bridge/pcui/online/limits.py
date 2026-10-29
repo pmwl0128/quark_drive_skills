@@ -33,6 +33,8 @@ class BudgetExhausted(Exception):
 
 @dataclass
 class QaLimitConfig:
+    # First-version safeguards, not final product quotas. Recalibrate all entry points
+    # and the shared breaker together after the complete workflows are measured.
     daily_limit: int = 15              # questions per identity per UTC day
     daily_token_budget: int = 1_500_000  # prompt+completion tokens across ALL users/day (§7.4 breaker, 2026-07-16)
     pessimistic_tokens: int = 12_000   # reserved per request until settled with real usage
@@ -42,13 +44,14 @@ class QaLimitConfig:
     # SAME daily token budget as QA: one breaker protects the one wallet.
     builder_daily_limit: int = 2
     builder_pessimistic_tokens: int = 60_000
-    # A thinking-mode diagnose reading: the ~28 KB report as input plus a long answer whose reasoning
-    # counts against the same cap (qa.DIAGNOSE_EXPLAIN_THINKING_MAX_TOKENS) — twice the plain QA
-    # reservation, so the breaker admits it only when the day can actually afford it.
-    diagnose_thinking_pessimistic_tokens: int = 24_000
+    # Bounded diagnosis tool rounds reserve their whole request allowance. Thinking
+    # shares completion with reasoning; settlement uses measured usage when available.
+    diagnose_pessimistic_tokens: int = 80_000
+    diagnose_thinking_pessimistic_tokens: int = 160_000
     # Team diagnose has a separate allowance from QA. A thinking explanation consumes two
     # units; the ordinary deterministic/quick path consumes one.
     diagnose_daily_limit: int = 4
+    diagnose_followup_limit: int = 3
     team_code_daily_limit: int = 10  # Explicit reads, including cache hits and tool calls.
     team_code_minute_limit: int = 3  # Server-side burst bound; never projected into public DTOs.
     # CPU-heavy actual-set batteries use workload units, not a flat request count. One unit is

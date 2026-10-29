@@ -30,15 +30,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from team_io import load_team, load_context, team_from_dict, context_from_dict  # noqa: E402
 import context_audit  # noqa: E402  (UEP P2: front gate + field_status single source)
 import landscape  # noqa: E402  (UEP P4: structural distributions over the real library)
+import landscape_cache  # noqa: E402
+import team_views  # noqa: E402
+import query_identity  # noqa: E402
+import nested_names  # noqa: E402
+import speed_ladder  # noqa: E402
+import counters  # noqa: E402
+import ko_scan  # noqa: E402
+import scenario  # noqa: E402
+import threshold  # noqa: E402
+import team_facts  # noqa: E402
+import assembly  # noqa: E402
+import diversity  # noqa: E402
+import corrections  # noqa: E402
 from landscape import landscape_from_teams as run_landscape  # noqa: E402
 import frame  # noqa: E402  (UEP P4.5: assembly front-door — grounded skeletons before assembly)
 from slate import evaluate_slate as run_slate, slate_shape_error, project_slate  # noqa: E402  (UEP P5 gate)
 from rules import get_ruleset  # noqa: E402  (registration hard caps surfaced in `schema`)
+import rules  # noqa: E402
 import answer_audit  # noqa: E402  (UEP P6: the back gate — draft checklist + claim recompute)
 import checkpoint as checkpoint_mod  # noqa: E402  (post-slate, pre-tune pause contract)
 import team_profile  # noqa: E402  (UEP S: the shared structural vector, slate's cheap stage)
 from validate_team import validate, format_report  # noqa: E402
-from dexlink import lookup_pokemon, lookup_moves, canonicalize_species, resolve_names, DexUnavailable  # noqa: E402
+from dexlink import lookup_pokemon, lookup_moves, canonicalize_species, canonicalize_fields, resolve_names, DexUnavailable  # noqa: E402
 from matchup import (  # noqa: E402  (P6)
     effective_member, member_actor, set_actor, pair_speed, dmg_fact, run_form_name,
 )
@@ -48,6 +62,7 @@ from diagnose import (  # noqa: E402
 )
 from tune import tune as run_tune, format_tune_md  # noqa: E402
 from ncplink import damage_vs, damage_batch, NcpUnavailable, NcpInputError  # noqa: E402
+from speedlink import speed_batch  # noqa: E402
 from metalink import (  # noqa: E402
     nature_distribution, usage_top_k, MetaUnavailable,   # opponent SETS now resolve via sources (M4)
 )
@@ -71,6 +86,44 @@ import contracts  # noqa: E402
 import environment  # noqa: E402
 import worker  # noqa: E402
 import team_i18n as i18n  # noqa: E402
+from stat_keys import canonical_spreads  # noqa: E402
+from team_output import emit_json, output_options, output_path, protect_inputs, OutputError  # noqa: E402
+from session_inputs import resolve_refs, materialize_inputs, result_failed, FILE_FIELDS  # noqa: E402
+
+
+def _gate_status(out: dict) -> dict:
+    """Put the actionable verdict first without changing receipt-bound facts."""
+    kind = out.get("kind")
+    if out.get("refused"):
+        verdict, next_step = "refused", out["refused"].get("reason", "fix the input and rerun")
+    elif kind == "context-audit":
+        blocked = (out.get("missing_required") or out.get("conflicts") or out.get("unresolved_names")
+                   or any(e.get("severity") == "error" for e in out.get("contract_errors", [])))
+        verdict = "needs_input" if blocked else "ready"
+        next_step = "resolve blocking gaps and rerun context-audit" if blocked else "ground candidates; use this audit_receipt in frame"
+    elif kind == "frame":
+        verdict = "ready" if out.get("skeletons") else "no_frames"
+        next_step = ("assemble candidates from the grounded sets; preserve frame_receipt" if out.get("skeletons")
+                     else "inspect the data scope and grounding gaps before assembling")
+    elif kind == "slate-evaluate":
+        verdict = "survivors" if out.get("survivors") else "no_survivors"
+        next_step = "run checkpoint, then draft-init and answer-audit with the full output" if out.get("survivors") else "revise candidates using elimination reasons and rerun slate-evaluate"
+    elif kind == "checkpoint":
+        verdict = "pause" if out.get("pause") else "continue"
+        next_step = "ask questions_to_ask before continuing" if out.get("pause") else "present the comparison; disclose caveats and any tuning not run"
+    else:
+        verdict = "pass" if out.get("pass") is True else "fail"
+        next_step = "present the audited draft" if out.get("pass") is True else "fix violations and rerun answer-audit"
+    return {"verdict": verdict, "next_step": next_step, **out}
+
+
+def _emit_gate(out: dict, fail_on_verdict: bool = False, view: str = "full") -> int:
+    out = _gate_status(out)
+    emit_json(out, view=view, projector=project_slate if out.get("kind") == "slate-evaluate" else None)
+    if out.get("refused"):
+        return 2
+    failed = out["verdict"] in {"needs_input", "no_frames", "no_survivors", "fail", "pause"}
+    return 1 if fail_on_verdict and failed else 0
 
 
 def _load_team(path: str):
@@ -81,10 +134,12 @@ def _load_team(path: str):
     (name_flags) are surfaced in output, never silent. Ambiguous/unresolved names are left as-is for
     validate to flag (with suggestions). Dex down -> no correction (honest degradation)."""
     loaded = load_team(path)
+    flags = []
     try:
-        flags = canonicalize_species(loaded)
+        flags += canonicalize_species(loaded)
+        flags += canonicalize_fields(loaded)
     except DexUnavailable:
-        flags = []
+        pass
     return loaded, flags
 
 
@@ -111,26 +166,22 @@ def _canon_team_json(team: dict) -> tuple:
     feeds species extraction, validate, profile AND the battery/claim recompute — shared by the P5
     and P6 gates so a fuzzy-correction policy change can never split them.
 
-    ITEMS canonicalize too (one strict batch): the avoid_items gate and the library verbatim
-    signature compare against dex-canonical names, so a zh/alias item spelling must not dodge a
-    HARD constraint the same context enforces in observed (self-audit 2026-07-03). Exact-alias
-    translation only (no fuzzy), silent like exact species aliases."""
+    Item/ability/nature/move fields normalize through the same public resolver. Approximate readings
+    return flags; unresolved fields stay verbatim for strict validation. Original receipt inputs
+    are never mutated."""
     t = team_from_dict(team)
+    flags = []
     try:
-        flags = canonicalize_species(t)
+        flags += canonicalize_species(t)
+        flags += canonicalize_fields(t)
     except DexUnavailable:
-        flags = []
-    items = sorted({m.item for m in t.pokemon if getattr(m, "item", None)})
-    if items:
-        try:
-            facts = lookup_items(items)
-            for m in t.pokemon:
-                f = facts.get(m.item) or {}
-                if m.item and f.get("found") and f.get("name"):
-                    m.item = f["name"]
-        except DexUnavailable:
-            pass                                       # honest degrade: items stay verbatim
+        pass
     return t.to_dict(), flags
+
+
+def _battle_team_view(team: dict) -> dict:
+    projected, _ = query_identity.battle_view([team])
+    return projected[0]
 
 
 def _dex_fact_fns(teams: list[dict], extra_species: set[str] | None = None) -> tuple:
@@ -194,10 +245,12 @@ def _library_scope(fmt: str, season: str | None = None, context=None) -> dict[st
     return {"kind": "rule", "rule": ctx_rule or environment.CURRENT_RULE}
 
 
-def _scope_teams(fmt: str, scope: dict[str, Any]) -> list[dict[str, Any]]:
+def _scope_teams(fmt: str, scope: dict[str, Any], fresh: bool = False) -> list[dict[str, Any]]:
     if scope.get("kind") == "rule":
-        return repset.cached_teams_for_rule(fmt, scope["rule"])
-    return repset.cached_teams(fmt, scope.get("season"))
+        loader = repset.load_teams_for_rule if fresh else repset.cached_teams_for_rule
+        return loader(fmt, scope["rule"])
+    loader = repset.load_teams if fresh else repset.cached_teams
+    return loader(fmt, scope.get("season"))
 
 
 def _scope_seasons(teams: list[dict[str, Any]], scope: dict[str, Any]) -> list[str]:
@@ -225,7 +278,7 @@ def _scope_query(scope: dict[str, Any], teams: list[dict[str, Any]] | None = Non
     return {"season": scope.get("season"), "rule": scope.get("rule")}
 
 
-def _library_copy_fn(fmt_battle: str, season: str | None = None, rule: str | None = None):
+def _library_copy_fn(fmt_battle: str, season: str | None = None, rule: str | None = None, *, comparison: bool = False):
     """The library-guardrail detector both gates share: verbatim joint-set / same-composition
     matches against the CURRENT partition. Returns None when the library is empty (nothing to
     match). Recomputed per run — overlap facts sit outside the receipt digest, so consumers must
@@ -234,7 +287,13 @@ def _library_copy_fn(fmt_battle: str, season: str | None = None, rule: str | Non
     if not lib:
         return None
     index = libsearch.library_copy_index(lib)
-    return lambda team_c: libsearch.find_library_copies(team_c, index)
+    def lookup(team_c):
+        result = libsearch.find_library_copies(team_c, index)
+        if comparison:
+            result = {**(result or {"verbatim_ids": [], "same_composition": 0}),
+                      "composition_overlap": libsearch.library_composition_overlap(team_c, index)}
+        return result
+    return lookup
 
 
 def _validate_json(team_c: dict, context) -> dict:
@@ -268,7 +327,7 @@ def _canon_map(names: list[str]) -> dict[str, str]:
     """query -> canonical species for every resolvable name, via the dex `resolve` bridge — batch +
     fuzzy + MEGA-COMPOSE + nicknames, ONE subprocess round-trip for any number of names — so a
     Chinese / alias / lightly-typo'd / `Mega喷火龙Y`-style entry resolves to the SAME canonical the
-    team members are normalized to (plain `batch` can't compose Mega affixes, which keep_mega needs).
+    team members are normalized to, including keep_mega's compositional Mega names.
     Unresolved/ambiguous names are simply absent (callers keep them verbatim: validate still flags
     them, a literal filter never over-matches, and resolve refuses to guess an ambiguous Mega); dex
     down -> empty map (honest degradation)."""
@@ -279,7 +338,28 @@ def _canon_map(names: list[str]) -> dict[str, str]:
         recs = resolve_names(names, "pokemon", fuzzy=True)
     except DexUnavailable:
         return {}
+    _emit_name_flags(query_identity.corrections({("pokemon", name): rec for name, rec in recs.items()}))
     return {n: r["canonical"] for n, r in recs.items() if r.get("ok") and r.get("canonical")}
+
+
+def _normalize_nested(value: dict, surface: str):
+    normalized, flags, errors = nested_names.normalize(value, surface, resolve_names)
+    _emit_name_flags(flags)
+    return normalized, flags, errors
+
+
+def _nested_input(value: dict, surface: str) -> tuple[dict | None, list[dict]]:
+    try:
+        normalized, flags, errors = _normalize_nested(value, surface)
+    except DexUnavailable as exc:
+        emit_json({"ok": False, "query": surface, "error": {"code": "engine_unavailable", "message": str(exc)}})
+        return None, []
+    if errors:
+        emit_json({"ok": False, "query": surface, "error": {
+            "code": "bad_input", "message": "nested names must resolve before this operation",
+            "details": {"schema": "nested_name_errors_v1", "entries": errors}}})
+        return None, flags
+    return normalized, flags
 
 
 def _load_context(path: str):
@@ -367,6 +447,43 @@ def _make_sets_fn(season: str | None = None, rule: str | None = None):
         return {n: sets_cache.get((n, fmt_)) for n in names}
 
     return sets_fn
+
+
+def _make_form_sets_fn(rule: str):
+    """Tune queries one actual form; derive its joint sets before applying the cluster budget."""
+    pools, cached = {}, {}
+
+    def variants(species: str, fmt: str):
+        key = (species, fmt)
+        if key not in cached:
+            if fmt not in pools:
+                pools[fmt], _ = query_identity.battle_view(repset.cached_teams_for_rule(fmt, rule))
+            arches = {}
+            def rep_fn(name, game_format, **kwargs):
+                rows = repset.representative_sets_from_teams(name, game_format, pools[fmt]) or []
+                arches.update({sources.variant_id(name, a.get("item"), a.get("ability")): a for a in rows})
+                return rows
+            rows = sources.resolve_opponent_variants(species, fmt, rule=rule, repset_fn=rep_fn)
+            for row in rows:
+                arch = arches.get(row.get("variant_id")) or {}
+                for field in ("configuration_basis", "registration_modes", "registration_sample"):
+                    if field in arch:
+                        row[field] = arch[field]
+                modes = arch.get("registration_modes") or []
+                abilities = {m.get("ability") for m in modes if m.get("species") != species}
+                if len(abilities) == 1 and None not in abilities and all(m.get("species") != species for m in modes):
+                    row["base_ability"] = next(iter(abilities))
+                if modes:
+                    row["note"] = (row.get("note") or "") + " | " + query_identity.registration_note(arch)
+            if not rows:
+                fallback = metalink.canonical_attacker_set(species, fmt)
+                if fallback:
+                    identity = query_identity.Forms([{"species": species, "item": fallback.get("item")}])
+                    if identity({"species": species, "item": fallback.get("item")}) == species:
+                        rows = [fallback]
+            cached[key] = rows
+        return cached[key]
+    return variants
 
 
 def _make_variants_fn(season: str | None = None, rule: str | None = None):
@@ -501,7 +618,10 @@ def _raw_json(path: str | None, *, json_only: bool = False) -> tuple[Any, list]:
             f"input is not valid JSON ({e.msg} at line {e.lineno} column {e.colno})")]
 
 
-def cmd_parse(path: str, fmt: str) -> int:
+def cmd_parse(path: str, fmt: str, game_format: str | None = None) -> int:
+    if game_format not in (None, "single", "double"):
+        print("parse needs --game-format single|double", file=sys.stderr)
+        return 2
     raw, errs = _raw_json(path)
     if raw is not None:
         errs = errs + contracts.check_team(raw)
@@ -511,8 +631,12 @@ def cmd_parse(path: str, fmt: str) -> int:
         return 1
     team, name_flags = _load_team(path)
     _emit_name_flags(name_flags)
+    if game_format and team.format and game_format != team.format:
+        print("parse format conflicts with the input team; use the same --game-format", file=sys.stderr)
+        return 2
+    team.format = game_format or team.format
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(team.to_dict()), ensure_ascii=False, indent=2))
+        emit_json(team.to_dict())
     else:
         d = team.to_dict()
         print(i18n.t('team_parse_header', fmt=d.get('format') or 'format?', n=len(d['pokemon'])))
@@ -522,6 +646,30 @@ def cmd_parse(path: str, fmt: str) -> int:
     return 0
 
 
+def cmd_suggest_fixes(path: str, context_path: str | None) -> int:
+    raw, errors = _raw_json(path, json_only=True)
+    errors += _check_contracts(path, context_path)
+    if raw is None or contracts.fatal(errors):
+        emit_json({"ok": False, "query": "suggest-fixes", "error": {
+            "code": "bad_input", "message": "suggest-fixes requires valid team-json and context shapes"},
+            "contract": [e.to_dict() for e in errors]})
+        return 1
+    try:
+        candidate = team_from_dict(raw)
+        canonicalize_species(candidate, fuzzy=False)
+        canonicalize_fields(candidate, fuzzy=False)
+        context = _load_context(context_path) if context_path else None
+        out = corrections.suggest(raw, candidate, context)
+        stamp, warnings = _stamp(context, candidate)
+        out.update(environment=stamp, warnings=warnings)
+        emit_json(out)
+        return 0  # the suggestions query succeeded; original legality is a separate field
+    except (DexUnavailable, ValueError) as exc:
+        emit_json({"ok": False, "query": "suggest-fixes", "error": {
+            "code": "engine_unavailable" if isinstance(exc, DexUnavailable) else "bad_input", "message": str(exc)}})
+        return 1
+
+
 def cmd_validate(path: str, fmt: str, context_path: str | None) -> int:
     # Contract check first: a malformed shape is more fundamental than legality. On a FATAL
     # contract error we must NOT call load_team — malformed input can make the loader throw
@@ -529,11 +677,11 @@ def cmd_validate(path: str, fmt: str, context_path: str | None) -> int:
     contract_errs = _check_contracts(path, context_path)
     if contracts.fatal(contract_errs):
         if fmt == "json":
-            print(json.dumps(i18n.jsonify({"status": "invalid", "valid": False, "confidence": "high",
+            emit_json({"status": "invalid", "next_step": "fix contract errors and rerun validate", "valid": False, "confidence": "high",
                               "errors": [], "warnings": [], "skipped": [],
-                              "contract": [e.to_dict() for e in contract_errs]}),
-                             ensure_ascii=False, indent=2))
+                              "contract": [e.to_dict() for e in contract_errs]})
         else:
+            print(i18n.t('team_gate_status', verdict="invalid", next_step="fix contract errors and rerun validate"))
             print(contracts.format_errors(contract_errs))
             print("\n" + i18n.t('team_refuse_validate'))
         return 1
@@ -542,16 +690,19 @@ def cmd_validate(path: str, fmt: str, context_path: str | None) -> int:
     context = _load_context(context_path) if context_path else None
     result = validate(team, context)
     stamp, env_warn = _stamp(context, team)
+    next_step = ("continue with evaluated facts" if result.valid
+                 else "resolve legality errors or skipped checks and rerun validate")
     if fmt == "json":
-        out = result.to_dict()
+        out = {"status": result.status, "next_step": next_step, **result.to_dict()}
         out["contract"] = [e.to_dict() for e in contract_errs]
         out["environment"] = stamp
         if env_warn:
             out["warnings"] = out.get("warnings", []) + env_warn
         if name_flags:
             out["name_resolution"] = name_flags     # fuzzy species auto-corrections
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(out)
     else:
+        print(i18n.t('team_gate_status', verdict=result.status, next_step=next_step))
         print(_env_header(stamp, env_warn))
         if contract_errs:
             print(contracts.format_errors(contract_errs))
@@ -560,7 +711,62 @@ def cmd_validate(path: str, fmt: str, context_path: str | None) -> int:
     return 0 if result.valid else 1
 
 
-def _run_check_battery(team: Team, context, top_k: int) -> tuple[dict[str, Any], str]:
+def _opponent_rows(opponents: dict, fmt: str) -> list[dict]:
+    import team_review
+    from canonhash import content_hash
+    errors = contracts.check_team(opponents)
+    if contracts.fatal(errors) or not 1 <= len(opponents.get("pokemon") or []) <= 6:
+        raise ValueError("opponents must be team-json with 1..6 members")
+    if opponents.get("format") and opponents["format"] != fmt:
+        raise ValueError("opponent format differs from the requested battle format")
+    result = validate(team_from_dict(opponents))
+    errors = [i18n.Msg(k, **kw).en() for k, kw in result._errors if k != "val_team_size"]
+    if errors or result._skipped:
+        raise ValueError("opponents are not verified legal: " + "; ".join(errors + result.skipped))
+    facts = lookup_pokemon([m["species"] for m in opponents["pokemon"]])
+    items = lookup_items(sorted({m["item"] for m in opponents["pokemon"] if m.get("item")}))
+    forms = sorted({form for item in items.values() for form in item.get("required_by") or []})
+    if forms:
+        facts.update(lookup_pokemon(forms))
+    rows = []
+    for member in opponents["pokemon"]:
+        row = {"pokemon_en": member["species"], "rank": None}
+        if any(k in member for k in ("item", "ability", "nature", "moves", "spread")):
+            missing = team_review.requirements({"pokemon": [member]})[0]["missing_fields"]
+            if missing:
+                raise ValueError(f"partial opponent set for {member['species']}: provide {', '.join(missing)} or species only")
+            effective = effective_member(member, facts, items)
+            actor = member_actor(effective)
+            row["stated_set"] = {"variant_id": "stated:" + content_hash(effective, 24),
+                "species": member["species"], "run_form": effective["species"],
+                **{k: actor[k] for k in ("ability", "item", "nature", "sps")}, "moves": member["moves"],
+                "coverage": 1.0, "coverage_basis": "stated_configuration", "source": "stated",
+                "confidence": "stated", "note": "Explicit hypothetical set; coverage is this stated scenario, not observed sample mass."}
+        rows.append(row)
+    return rows
+
+
+def _load_battle_scope(opponents_path, conditions_path):
+    import battle_scope
+    opponents = None
+    if opponents_path:
+        raw, errors = _raw_json(opponents_path, json_only=True)
+        if raw is None or contracts.fatal(contracts.check_team(raw)):
+            raise ValueError("opponents requires a valid team-json object")
+        opponents, _ = _canon_team_json(raw)
+        # Canonicalization supplies defaults. Keep omitted fields omitted so a bare species and
+        # an explicit (possibly empty) partial set cannot collapse into the same scenario.
+        for supplied, member in zip(raw["pokemon"], opponents["pokemon"]):
+            for key in ("item", "ability", "nature", "moves", "spread"):
+                if key not in supplied:
+                    member.pop(key, None)
+    field, _ = _raw_json(conditions_path, json_only=True) if conditions_path else ({}, [])
+    if conditions_path and field is None:
+        raise ValueError("conditions requires a JSON object")
+    return {"opponents": opponents, "conditions": battle_scope.conditions(field)}
+
+
+def _run_check_battery(team: Team, context, top_k: int, scope: dict | None = None) -> tuple[dict[str, Any], str]:
     """The ONE matchup battery both --with-check consumers (diagnose, select) need: a single ~top-K
     opponent ncp run + its check_coverage / members grid. Extracted so the two share ONE setup path (they
     were byte-for-byte twins). Raises the sibling-unavailable errors for each caller to disclose as a note.
@@ -569,10 +775,13 @@ def _run_check_battery(team: Team, context, top_k: int) -> tuple[dict[str, Any],
     fmt_battle = (context.format if context and context.format else None) or team.format
     stamp, _ = _stamp(context, team)
     rule = stamp.get("rule")
-    rows = usage_top_k(fmt_battle, top_k)
+    scope = scope or {}
+    rows = _opponent_rows(scope["opponents"], fmt_battle) if scope.get("opponents") else usage_top_k(fmt_battle, top_k)
     mres = run_matchup(team.to_dict(), rows, fmt=fmt_battle, dex_fn=lookup_pokemon,
                        sets_fn=_make_sets_fn(rule=rule), damage_fn=damage_batch, move_fn=lookup_moves,
-                       variants_fn=_make_variants_fn(rule=rule), item_fn=lookup_items)
+                       variants_fn=_make_variants_fn(rule=rule), item_fn=lookup_items,
+                       conditions=scope.get("conditions"))
+    mres["opponent_scope"] = "stated_roster" if scope.get("opponents") else "usage_top_k"
     return mres, fmt_battle
 
 
@@ -597,7 +806,7 @@ def _diagnose_check_coverage(team: Team, context, top_k: int = 8) -> dict[str, o
         return {"unavailable": i18n.Msg('chk_cov_skipped', kind=type(e).__name__, e=e)}
 
 
-def _select_check_grid(team: Team, context, top_k: int = 8):
+def _select_check_grid(team: Team, context, top_k: int = 8, scope: dict | None = None):
     """Opt-in (--with-check) member x meta top-K CHECK grid for `select` to roll up PER LINEUP.
 
     Runs the matchup battery ONCE and returns its `members` grid (rows carrying each member's per-
@@ -605,19 +814,47 @@ def _select_check_grid(team: Team, context, top_k: int = 8):
     extra ncp per combo. Returns (grid, note) on success, (None, note) when a sibling is down — a
     disclosed note, never a crash: the enumeration facts stand on their own."""
     try:
-        mres, fmt_battle = _run_check_battery(team, context, top_k)
+        mres, fmt_battle = _run_check_battery(team, context, top_k, scope)
         grid = mres.get("members")
         if not grid or mres.get("check_coverage") is None:
             return None, {"unavailable": i18n.Msg('chk_cov_lineup_none')}
         return grid, {"format": fmt_battle, "top_k": mres.get("top_k"),
+                      "conditions": (scope or {}).get("conditions"), "opponent_scope": mres.get("opponent_scope"),
                       "confidence": mres.get("confidence"),
                       "confidence_reason": mres.get("confidence_reason")}
     except (NcpUnavailable, MetaUnavailable, DexUnavailable) as e:
         return None, {"unavailable": i18n.Msg('chk_cov_lineup_skipped', kind=type(e).__name__, e=e)}
 
 
+def _diagnostic_facts(team, context, aspect: str = "all") -> dict:
+    facts = lookup_pokemon([m.species for m in team.pokemon if m.species])
+    held = sorted({m.item for m in team.pokemon if m.item})
+    if held:
+        items = lookup_items(held)
+        forms = sorted({form for item in items.values() for form in item.get("required_by") or []})
+        if forms:
+            facts.update(lookup_pokemon(forms))
+    moves = lookup_moves(sorted({move for member in team.pokemon for move in member.moves})) if aspect in ("all", "offense", "speed") else {}
+    result = {}
+    if aspect in ("all", "defense"):
+        result["defense"] = diagnose_defense(team, facts)
+    if aspect in ("all", "offense"):
+        result["offense"] = diagnose_offense(team, facts, moves, variance_averse=bool(context and context.variance_tolerance == "averse"))
+    if aspect in ("all", "speed"):
+        result["speed"] = diagnose_speed(team, facts, moves)
+    if aspect in ("all", "roles"):
+        result["roles"] = diagnose_roles(team, facts, rule=context.rule if context else None)
+    return result
+
+
 def cmd_diagnose(path: str, fmt: str, aspect: str, context_path: str | None = None,
-                 with_check: bool = False, top_k: int = 8) -> int:
+                 with_check: bool = False, top_k: int = 8, focus_path: str | None = None) -> int:
+    if focus_path:
+        if fmt != "json" or aspect != "all":
+            emit_json({"ok": False, "error": {"code": "bad_input",
+                      "message": "diagnose --focus returns a coordinated review; use --format json and --aspect all"}})
+            return 2
+        return cmd_review(path, context_path, top_k=top_k, focus_path=focus_path)
     contract_errs = _check_contracts(path, context_path)
     _emit_contract_errs(contract_errs, fmt)
     if contracts.fatal(contract_errs):
@@ -628,41 +865,13 @@ def cmd_diagnose(path: str, fmt: str, aspect: str, context_path: str | None = No
     # variance_tolerance=averse flags the team's luck lines (offense). The optional context carries it;
     # no context = no flag (the luck-line FACT is surfaced regardless).
     context = _load_context(context_path) if context_path else None
-    variance_averse = bool(context and context.variance_tolerance == "averse")
-    want_def = aspect in ("defense", "all")
-    want_off = aspect in ("offense", "all")
-    want_spd = aspect in ("speed", "all")
-    want_roles = aspect in ("roles", "all")
     try:
-        facts = lookup_pokemon([m.species for m in team.pokemon if m.species])
-        # A member holding a Mega stone battles as its Mega form; resolve those forms so the
-        # role/defense signals can read the BATTLE ability (Froslass+Froslassite -> Mega
-        # Froslass / Snow Warning — a snow setter the declared ability hides). Best-effort:
-        # base facts stand even if the item/form lookup misses.
-        held = sorted({m.item for m in team.pokemon if m.item})
-        if held:
-            ifacts = lookup_items(held)
-            forms = sorted({fm for it in held
-                            for fm in (ifacts.get(it, {}).get("required_by") or [])})
-            if forms:
-                facts.update(lookup_pokemon(forms))
-        move_facts = (lookup_moves(sorted({mv for m in team.pokemon for mv in m.moves}))
-                      if (want_off or want_spd) else {})
+        out = _diagnostic_facts(team, context, aspect)
     except DexUnavailable as e:
         print(i18n.t('team_dex_unavailable', e=e), file=sys.stderr)
         return 2
-    out: dict[str, object] = {}
-    if want_def:
-        out["defense"] = diagnose_defense(team, facts)
-        if with_check:                       # opt-in ncp-grounded complement; diagnose_defense itself
-            out["check_coverage"] = _diagnose_check_coverage(team, context, top_k)   # stays ncp-free
-    if want_off:
-        out["offense"] = diagnose_offense(team, facts, move_facts, variance_averse=variance_averse)
-    if want_spd:
-        out["speed"] = diagnose_speed(team, facts, move_facts)
-    if want_roles:
-        out["roles"] = diagnose_roles(
-            team, facts, rule=(context.rule if context and context.rule else None))
+    if with_check and aspect in ("defense", "all"):
+        out["check_coverage"] = _diagnose_check_coverage(team, context, top_k)
     stamp, env_warn = _stamp(None, team)
     out["environment"] = stamp
     if env_warn:
@@ -670,7 +879,7 @@ def cmd_diagnose(path: str, fmt: str, aspect: str, context_path: str | None = No
     if name_flags:
         out["name_resolution"] = name_flags         # fuzzy species auto-corrections
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(canonical_spreads(out))
     else:
         print(_env_header(stamp, env_warn) + "\n")
         blocks = []
@@ -691,6 +900,55 @@ def cmd_diagnose(path: str, fmt: str, aspect: str, context_path: str | None = No
     return 0
 
 
+def cmd_speed_ladder(species, game_format, config, conditions, limit, opponent_ranges, fmt):
+    """One rule pool and one numerical batch for a complete speed comparison."""
+    def obj(value, path):
+        if value is None or isinstance(value, dict):
+            return value
+        if not isinstance(value, str):
+            raise speed_ladder.InputError(path, "expected a JSON object or its file path")
+        try:
+            raw = sys.stdin.read() if value == "-" else (
+                value if value.lstrip().startswith("{") else Path(value).read_text(encoding="utf-8"))
+            result = json.loads(raw)
+        except (OSError, ValueError) as exc:
+            raise speed_ladder.InputError(path, str(exc)) from exc
+        if not isinstance(result, dict):
+            raise speed_ladder.InputError(path, "expected a JSON object")
+        return result
+    try:
+        if game_format not in ("single", "double"):
+            raise speed_ladder.InputError("game_format", "--game-format single|double is required", code="unknown_format")
+        limit = 20 if limit is None else limit
+        if type(limit) is not int or limit < 1:
+            raise speed_ladder.InputError("limit", "limit must be a positive integer")
+        if config == "-" and conditions == "-":
+            raise speed_ladder.InputError("conditions", "stdin can supply only one JSON object")
+        config, conditions = obj(config, "set"), obj(conditions, "conditions")
+        prepared = speed_ladder.prepare(species, config, conditions, resolve_names)
+        stamp, warnings = _stamp(None, None)
+        out = speed_ladder.ladder(species, game_format,
+            repset.cached_teams_for_rule(game_format, stamp["rule"]), usage_top_k(game_format, limit),
+            config=config, conditions=conditions, resolve_fn=resolve_names,
+            dex_fn=lookup_pokemon, item_fn=lookup_items, meta_fn=metalink.canonical_attacker_sets,
+            speed_fn=speed_batch, opponent_ranges=opponent_ranges, prepared=prepared)
+    except speed_ladder.InputError as exc:
+        emit_json(exc.result())
+        return 0 if exc.code == "not_found" else 1
+    except (DexUnavailable, MetaUnavailable, NcpUnavailable, OSError, RuntimeError) as exc:
+        emit_json({"ok": False, "query": "speed-ladder", "error": {"code": "engine_unavailable", "message": str(exc)}})
+        return 1
+    out["environment"], out["query"]["limit"] = stamp, limit
+    if warnings:
+        out["warnings"] = warnings
+    _emit_name_flags(out["name_resolution"])
+    if fmt == "json":
+        emit_json(out)
+    else:
+        print(speed_ladder.format_md(out))
+    return 0
+
+
 def cmd_tune(path: str, fmt: str, context_path: str | None) -> int:
     if not context_path:
         print(i18n.t('team_tune_needs_context'), file=sys.stderr)
@@ -707,21 +965,21 @@ def cmd_tune(path: str, fmt: str, context_path: str | None) -> int:
     if not context.benchmarks:
         print(i18n.t('team_no_benchmarks'), file=sys.stderr)
         return 2
+    normalized, nested_flags = _nested_input({"benchmarks": context.benchmarks}, "context")
+    if normalized is None:
+        return 2
+    context.benchmarks = normalized["benchmarks"]
     stamp, env_warn = _stamp(context, team)
     rule_scope = stamp.get("rule")
     # tune's defender/attacker set resolves through the M4 resolver too (real-team joint ⊕ meta spread),
     # so survive/kill cliffs tune against a real co-occurring set when the library has it (handoff §5.1).
     fmt_battle = context.format or team.format
-    threat_names = sorted({b.get("vs") for b in (context.benchmarks or [])
-                           if isinstance(b, dict) and isinstance(b.get("vs"), str) and b.get("vs")})
     try:
-        meta_cache = sources.resolve_opponent_sets(
-            threat_names, fmt_battle, rule=rule_scope) if threat_names else {}
+        form_sets = _make_form_sets_fn(rule_scope)
 
         def meta_fn(species: str, fmt_: str | None) -> dict | None:
-            if species in meta_cache:
-                return meta_cache.get(species)
-            return sources.resolve_opponent_set(species, fmt_ or fmt_battle, rule=rule_scope)
+            rows = form_sets(species, fmt_ or fmt_battle)
+            return rows[0] if rows else None
 
         out = run_tune(team.to_dict(), context.benchmarks, fmt=fmt_battle,
                        damage_fn=damage_vs, move_fn=lookup_moves, dex_fn=lookup_pokemon,
@@ -729,7 +987,7 @@ def cmd_tune(path: str, fmt: str, context_path: str | None) -> int:
                        locked=context.locked, damage_batch_fn=damage_batch, item_fn=lookup_items,
                        # The same retained observed builds as matchup/slate: one speed line per build,
                        # so Scarf and Mega configurations remain independently actionable.
-                       archetypes_fn=_make_variants_fn(rule=rule_scope))
+                       archetypes_fn=form_sets)
     except NcpInputError as e:
         # The calculator ran but rejected a benchmark input (e.g. an off-roster Pokemon or unknown
         # move) — a parameter problem, NOT the skill being down. Say so, don't mislabel it.
@@ -739,18 +997,190 @@ def cmd_tune(path: str, fmt: str, context_path: str | None) -> int:
         print(i18n.t('team_sibling_unavailable', e=e), file=sys.stderr)
         return 2
     out["environment"] = stamp
+    if name_flags or nested_flags:
+        out["name_resolution"] = name_flags + nested_flags
     if env_warn:
         out["warnings"] = (out.get("warnings") or []) + env_warn
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(canonical_spreads(out))
     else:
         print(_env_header(stamp, env_warn) + "\n")
-        print(format_tune_md(out))
+        print(format_tune_md(canonical_spreads(out)))
     return 0
 
 
+def _review_evaluator(context_raw: dict, context, stamp: dict, fmt: str, top_k: int, focus: dict,
+                      scope: dict | None = None):
+    import team_review
+    from slate_comparison import target_rows
+    rows = None
+    sets_fn, variants_fn = _make_sets_fn(rule=stamp.get("rule")), _make_variants_fn(rule=stamp.get("rule"))
+    damage_fn = _make_damage_fn()
+    scope = scope or {}
+
+    def battery(value):
+        nonlocal rows
+        try:
+            if rows is None:
+                goals = [{"kind": "answer", "species": name} for name in focus.get("opponents") or []]
+                base = _opponent_rows(scope["opponents"], fmt) if scope.get("opponents") else usage_top_k(fmt, top_k)
+                rows = target_rows(base, goals)
+            result = run_matchup(value, rows, fmt=fmt, dex_fn=lookup_pokemon, move_fn=lookup_moves,
+                                 sets_fn=sets_fn, variants_fn=variants_fn, item_fn=lookup_items,
+                                 damage_fn=damage_fn, conditions=scope.get("conditions"))
+            result["opponent_scope"] = "stated_roster" if scope.get("opponents") else "usage_top_k"
+            return result
+        except (NcpUnavailable, MetaUnavailable, DexUnavailable) as exc:
+            return {"unavailable": str(exc)}
+
+    def selection(value, match, legality):
+        return run_select(value, fmt=fmt, dex_fn=lookup_pokemon, item_fn=lookup_items,
+                          legality_status=legality, keep_mega=context.keep_mega if context else None,
+                          check_grid=match.get("members"), check_context={key: match.get(key) for key in
+                          ("confidence", "confidence_reason", "top_k", "conditions", "opponent_scope")})
+
+    def evaluate(value):
+        result = team_review.review(value, context=context_raw or {}, environment=stamp,
+            validate_fn=lambda t: _validate_json(t, context),
+            diagnose_fn=lambda t: _diagnostic_facts(team_from_dict(t), context),
+            matchup_fn=battery, select_fn=selection)
+        result.update(top_k_requested=top_k, focus=focus, battle_scope=scope)
+        result["targets"] = team_review.targets(result, focus)
+        result["evidence_index"] = team_review.evidence(result)
+        return result
+    return evaluate
+
+
+def _recompute_review(report):
+    import team_review
+    context_raw = report["context"]
+    errors = contracts.check_team(report["team"]) + contracts.check_context(context_raw)
+    if contracts.fatal(errors):
+        raise ValueError("invalid report inputs")
+    team_review.check_focus(report.get("focus", {}))
+    context = _canonicalize_context(context_from_dict(context_raw))
+    stamp, _ = _stamp(context, team_from_dict(report["team"]))
+    evaluate = _review_evaluator(context_raw, context, stamp, context.format or report["team"].get("format"),
+                                normalize_top_k(report["top_k_requested"]), report.get("focus", {}), report.get("battle_scope"))
+    return i18n.jsonify(canonical_spreads(evaluate(report["team"])))
+
+
+def cmd_review_claims(path: str, fail_on_verdict: bool = False) -> int:
+    import team_review
+    raw, errors = _raw_json(path, json_only=True)
+
+    try:
+        result = team_review.audit_claims(raw, recompute_fn=_recompute_review)
+    except (ValueError, TypeError, KeyError, DexUnavailable, MetaUnavailable, NcpUnavailable) as exc:
+        result = {"kind": "review-claims", "pass": False,
+                  "violations": [{"code": "recompute_unavailable", "detail": str(exc)}], "recomputed": 0}
+    emit_json(result)
+    return 1 if fail_on_verdict and not result["pass"] else 0
+
+
+def cmd_tune_cell(path: str) -> int:
+    import tune_cell
+    raw, _ = _raw_json(path, json_only=True)
+    try:
+        result = tune_cell.query(raw, recompute_fn=_recompute_review, dex_fn=lookup_pokemon,
+                                 item_fn=lookup_items, threshold_fn=threshold.query,
+                                 validate_fn=lambda t: _validate_json(t, None))
+    except (ValueError, TypeError, KeyError, DexUnavailable, NcpUnavailable, counters.QueryError) as exc:
+        emit_json({"ok": False, "query": "tune.from_cell", "error": {"code": "bad_input", "message": str(exc)}})
+        return 2
+    emit_json(canonical_spreads(result))
+    return 0
+
+
+def cmd_review(path: str, context_path: str | None = None, *, top_k: int = 8,
+               changes_path: str | None = None, trial: bool = False,
+               view: str = "summary", fail_on_verdict: bool = False, focus_path: str | None = None,
+               opponents_path: str | None = None, conditions_path: str | None = None) -> int:
+    import team_review
+    kind = "try" if trial else "review"
+
+    def bad(message):
+        emit_json({"ok": False, "query": kind, "error": {"code": "bad_input", "message": str(message)}})
+        return 2
+
+    errors = _check_contracts(path, context_path)
+    if contracts.fatal(errors):
+        return bad("; ".join(str(e.message) for e in errors))
+    top_k = normalize_top_k(top_k)
+    team, flags = _load_team(path)
+    context_raw, _ = _raw_json(context_path, json_only=True) if context_path else ({}, [])
+    context = _load_context(context_path) if context_path else None
+    fmt = (context.format if context else None) or team.format
+    if fmt not in {"single", "double"}:
+        return bad("set team.format or context.format to single|double")
+    if team.format and context and context.format and team.format != context.format:
+        return bad("team and context battle formats disagree")
+    stamp, warnings = _stamp(context, team)
+    source = team.to_dict()
+    try:
+        scope = _load_battle_scope(opponents_path, conditions_path)
+        if scope.get("opponents"):
+            _opponent_rows(scope["opponents"], fmt)
+    except (ValueError, TypeError, DexUnavailable) as exc:
+        return bad(exc)
+    focus, _ = _raw_json(focus_path, json_only=True) if focus_path else ({}, [])
+    try:
+        team_review.check_focus(focus)
+    except ValueError as exc:
+        return bad(exc)
+    focus, focus_flags = _nested_input(focus, "focus")
+    if focus is None:
+        return 2
+    flags += focus_flags
+    candidate, changes = None, None
+    if trial:
+        raw, errs = _raw_json(changes_path, json_only=True)
+        if raw is None:
+            return bad("try requires --changes with a JSON list of {slot,set}")
+        try:
+            tentative, _ = team_review.apply_changes(source, raw)
+            errs = contracts.check_team(tentative)
+            if contracts.fatal(errs):
+                return bad("; ".join(str(e.message) for e in errs))
+            normalized, nested_flags = _nested_input({"changes": raw}, "changes")
+            if normalized is None:
+                return 2
+            flags += nested_flags
+            candidate, changes = team_review.apply_changes(source, normalized["changes"])
+            candidate, candidate_flags = _canon_team_json(candidate)
+            flags += candidate_flags
+            for row in changes:
+                row["after"] = candidate["pokemon"][row["slot"]]
+        except (ValueError, TypeError) as exc:
+            return bad(exc)
+
+    # Shared closures freeze the opponent pool and reuse damage across both copies.
+    evaluate = _review_evaluator(context_raw or {}, context, stamp, fmt, top_k, focus, scope)
+    try:
+        before = evaluate(source)
+        if trial:
+            after = evaluate(candidate)
+            result = {"kind": "try", "status": after["status"], "changes": changes,
+                      "candidate_team": candidate, "before": team_review.seal(before),
+                      "after": team_review.seal(after), "comparison": team_review.compare(before, after, changes),
+                      "note": "Explicit copy edits only; original inputs remain untouched. "
+                              "Trial evaluation does not replace the UEP proposal/answer gate."}
+        else:
+            result = before
+    except (DexUnavailable, MetaUnavailable, NcpUnavailable) as exc:
+        emit_json({"ok": False, "query": kind, "error": {"code": "engine_unavailable", "message": str(exc)}})
+        return 2
+    result["name_resolution"] = flags
+    result["warnings"] = warnings
+    result["top_k_requested"] = top_k
+    result = team_review.seal(result)
+    emit_json(result, view=view, projector=team_review.project)
+    return 1 if fail_on_verdict and result["status"] != "ready" else 0
+
+
 def cmd_select(path: str, fmt: str, context_path: str | None,
-               with_check: bool = False, top_k: int = 8) -> int:
+               with_check: bool = False, top_k: int = 8, opponents_path: str | None = None,
+               conditions_path: str | None = None) -> int:
     contract_errs = _check_contracts(path, context_path)
     _emit_contract_errs(contract_errs, fmt)
     if contracts.fatal(contract_errs):
@@ -761,6 +1191,12 @@ def cmd_select(path: str, fmt: str, context_path: str | None,
     context = _load_context(context_path) if context_path else None
     check_context = None
     try:
+        scope = _load_battle_scope(opponents_path, conditions_path)
+    except (ValueError, TypeError, DexUnavailable) as exc:
+        emit_json({"ok": False, "error": {"code": "bad_input", "message": str(exc)}})
+        return 2
+    with_check = with_check or bool(opponents_path or conditions_path)
+    try:
         # Selection enumerates picks of the REGISTERED team; it must not present them as "legal"
         # without a legality check. Validate first and attach the verdict so an invalid/unknown
         # team is flagged, not silently enumerated as if legal (audit 2026-06-21).
@@ -769,13 +1205,13 @@ def cmd_select(path: str, fmt: str, context_path: str | None,
         # OBJECTIVE facts (never a lineup ranking). Default off keeps `select` ncp-free (design §17).
         check_grid = None
         if with_check:
-            check_grid, check_context = _select_check_grid(team, context, top_k)
+            check_grid, check_context = _select_check_grid(team, context, top_k, scope)
         out = run_select(team.to_dict(), fmt=(context.format if context else None),
                          dex_fn=lookup_pokemon, item_fn=lookup_items,
                           legality_status=legality.status,
                           keep_mega=(context.keep_mega if context else None),
                           check_grid=check_grid, check_context=check_context)
-    except DexUnavailable as e:
+    except (DexUnavailable, ValueError) as e:
         print(i18n.t('team_sibling_dex_unavailable', e=e), file=sys.stderr)
         return 2
     stamp, env_warn = _stamp(context, team)
@@ -791,7 +1227,7 @@ def cmd_select(path: str, fmt: str, context_path: str | None,
     if warns:
         out["warnings"] = (out.get("warnings") or []) + warns
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(canonical_spreads(out))
     else:
         print(_env_header(stamp, env_warn) + "\n")
         if legality.status != "valid":
@@ -801,7 +1237,8 @@ def cmd_select(path: str, fmt: str, context_path: str | None,
 
 
 def cmd_matchup(path: str, fmt: str, context_path: str | None, top_k: int,
-                as_checks: bool = False, view: str = "full") -> int:
+                as_checks: bool = False, view: str = "full", opponents_path: str | None = None,
+                conditions_path: str | None = None) -> int:
     top_k = normalize_top_k(top_k)
     contract_errs = _check_contracts(path, context_path)
     _emit_contract_errs(contract_errs, fmt)
@@ -815,7 +1252,11 @@ def cmd_matchup(path: str, fmt: str, context_path: str | None, top_k: int,
     stamp, env_warn = _stamp(context, team)
     rule_scope = stamp.get("rule")
     try:
-        rows = usage_top_k(fmt_battle, top_k)
+        scope = _load_battle_scope(opponents_path, conditions_path)
+        rows = _opponent_rows(scope["opponents"], fmt_battle) if scope.get("opponents") else usage_top_k(fmt_battle, top_k)
+    except (ValueError, TypeError) as exc:
+        emit_json({"ok": False, "error": {"code": "bad_input", "message": str(exc)}})
+        return 2
     except MetaUnavailable as e:
         print(i18n.t('team_meta_unavailable_matchup', e=e), file=sys.stderr)
         return 2
@@ -826,13 +1267,14 @@ def cmd_matchup(path: str, fmt: str, context_path: str | None, top_k: int,
     try:
         out = run_matchup(team.to_dict(), rows, fmt=fmt_battle, dex_fn=lookup_pokemon,
                           sets_fn=sets_fn, damage_fn=damage_batch, move_fn=lookup_moves,
-                          item_fn=lookup_items,
+                          item_fn=lookup_items, conditions=scope.get("conditions"),
                           # One column per real build (see _make_variants_fn).
                           variants_fn=_make_variants_fn(rule=rule_scope))
     except NcpUnavailable as e:
         out = run_matchup(team.to_dict(), rows, fmt=fmt_battle, dex_fn=lookup_pokemon,
                           sets_fn=sets_fn, damage_fn=None, move_fn=lookup_moves,
-                          item_fn=lookup_items)
+                          item_fn=lookup_items, conditions=scope.get("conditions"),
+                          variants_fn=_make_variants_fn(rule=rule_scope))
         out["warnings"] = (out.get("warnings") or []) + [i18n.Msg('team_ncp_unavailable_damage_skipped', e=e)]
     except MetaUnavailable as e:
         print(i18n.t('team_sibling_meta_unavailable', e=e), file=sys.stderr)
@@ -841,11 +1283,11 @@ def cmd_matchup(path: str, fmt: str, context_path: str | None, top_k: int,
         print(i18n.t('team_sibling_dex_unavailable', e=e), file=sys.stderr)
         return 2
     out["environment"] = stamp                          # stamp/env_warn computed above (before resolving)
+    out["opponent_scope"] = "stated_roster" if scope.get("opponents") else "usage_top_k"
     if env_warn:
         out["warnings"] = (out.get("warnings") or []) + env_warn
     if fmt == "json":
-        out = project_matchup(out, view)
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(canonical_spreads(out), view=view, projector=project_matchup)
     else:
         print(_env_header(stamp, env_warn) + "\n")
         print(format_check_coverage_md(out) if as_checks else format_matchup_md(out))
@@ -867,6 +1309,10 @@ def cmd_replace(path: str, fmt: str, context_path: str | None) -> int:
     if not spec or not spec.get("member") or not spec.get("with"):
         print(i18n.t('team_replace_needs_context'), file=sys.stderr)
         return 2
+    normalized, nested_flags = _nested_input({"replace": spec}, "context")
+    if normalized is None:
+        return 2
+    spec = normalized["replace"]
     stamp, env_warn = _stamp(context, team)
 
     def _validate_after(after_dict: dict) -> dict:
@@ -877,22 +1323,25 @@ def cmd_replace(path: str, fmt: str, context_path: str | None) -> int:
 
     try:
         out = run_replace(team.to_dict(), spec["member"], spec["with"],
-                          dex_fn=lookup_pokemon, move_fn=lookup_moves, validate_fn=_validate_after)
+                          dex_fn=lookup_pokemon, move_fn=lookup_moves, item_fn=lookup_items,
+                          validate_fn=_validate_after)
     except DexUnavailable as e:
         print(i18n.t('team_sibling_dex_unavailable', e=e), file=sys.stderr)
         return 2
     out["environment"] = stamp
+    if name_flags or nested_flags:
+        out["name_resolution"] = name_flags + nested_flags
     if env_warn:
         out["warnings"] = (out.get("warnings") or []) + env_warn
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(canonical_spreads(out))
     else:
         print(_env_header(stamp, env_warn) + "\n")
         print(format_replace_impact_md(out))
     return 0
 
 
-def cmd_fill(path: str, fmt: str, context_path: str | None) -> int:
+def cmd_fill(path: str, fmt: str, context_path: str | None, trial_slot: int | None = None) -> int:
     """L3 candidate retrieval (M3): given a structured `need` (build-context), return the candidate
     pool in multiple explicit views. No composite score / single best pick."""
     contract_errs = _check_contracts(path, context_path)
@@ -906,17 +1355,48 @@ def cmd_fill(path: str, fmt: str, context_path: str | None) -> int:
     if not context or not context.need:
         print(i18n.t('team_fill_needs_context'), file=sys.stderr)
         return 2
+    if context.need.get("answer"):
+        normalized, _ = _nested_input({"need": context.need}, "context")
+        if normalized is None:
+            return 2
+        context.need = normalized["need"]
     fmt_battle = (context.format if context.format else None) or team.format
     stamp, env_warn = _stamp(context, team)
     rule_scope = stamp.get("rule")
     try:
-        out = run_fill(team.to_dict(), context.need, fmt=fmt_battle,
+        answer_cache = None
+        if context.need.get("answer"):
+            if rule_scope != environment.CURRENT_RULE:
+                raise counters.QueryError("answer uses only the current validated opponent cache", query="fill.answer")
+            answer_cache = oppcache.load_cache(fmt_battle, rule_scope)
+            if answer_cache is None:
+                raise counters.QueryError("no current opponent cache for this format", code="not_found", query="fill.answer")
+        retained = team.to_dict()
+        if trial_slot is not None:
+            if type(trial_slot) is not int or not 0 <= trial_slot < len(retained["pokemon"]):
+                raise ValueError("slot must identify an existing zero-based member")
+            retained["pokemon"] = [m for i, m in enumerate(retained["pokemon"]) if i != trial_slot]
+        out = run_fill(retained, context.need, fmt=fmt_battle,
                        dex_fn=lookup_pokemon, ranking_fn=usage_top_k, repset_fn=repset.load_teams,
-                       move_fn=lookup_moves,
+                       move_fn=lookup_moves, item_fn=lookup_items,
                        rule=rule_scope, owned=context.owned, owned_only=context.owned_only,
                        avoid=context.avoid_species, locked=context.locked,
                        avoid_items=context.avoid_items,
-                       meta_conformance=context.meta_conformance)
+                       meta_conformance=context.meta_conformance, answer_cache=answer_cache)
+        if trial_slot is not None:
+            import fill_trials
+            import team_review
+            def structural_review(value):
+                return team_review.review(value, context={"format": fmt_battle}, environment=stamp,
+                    validate_fn=lambda t: _validate_json(t, context),
+                    diagnose_fn=lambda t: _diagnostic_facts(team_from_dict(t), context),
+                    matchup_fn=lambda t: {"unavailable": "structural-only candidate query"},
+                    select_fn=lambda *args: None)
+            out = fill_trials.attach(out, team.to_dict(), trial_slot, dex_fn=lookup_pokemon,
+                                     move_fn=lookup_moves, review_fn=structural_review)
+    except (counters.QueryError, oppcache.StaleCacheError, ValueError) as exc:
+        emit_json({"ok": False, "query": "fill.answer", "error": {"code": "bad_input", "message": str(exc)}})
+        return 2
     except MetaUnavailable as e:
         print(i18n.t('team_meta_unavailable_fill', e=e), file=sys.stderr)
         return 2
@@ -927,14 +1407,15 @@ def cmd_fill(path: str, fmt: str, context_path: str | None) -> int:
     if env_warn:
         out["warnings"] = (out.get("warnings") or []) + env_warn
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(canonical_spreads(out))
     else:
         print(_env_header(stamp, env_warn) + "\n")
         print(format_fill_md(out))
     return 0
 
 
-def cmd_context_audit(team_path: str | None, fmt: str, context_path: str | None) -> int:
+def cmd_context_audit(team_path: str | None, fmt: str, context_path: str | None,
+                      fail_on_verdict: bool = False) -> int:
     """UEP P2 front gate: audit the STRUCTURED intent (build-context, + optional team) into pre-build
     facts + three-level gaps + the audit receipt (capability-chain start). Unlike the operators, the
     audit REPORTS contract errors as facts instead of refusing on them — it IS the checker; only an
@@ -971,22 +1452,32 @@ def cmd_context_audit(team_path: str | None, fmt: str, context_path: str | None)
                                    if isinstance(rd.get(k), str)})
     stamp, env_warn = _stamp(stamp_ctx, team_obj)
 
-    out = context_audit.audit(raw_ctx, team_dict, resolve_fn=_dex_resolve, item_fn=_dex_items,
-                              contract_errors=[e.to_dict() for e in contract_errs], env=stamp)
+    try:
+        out = context_audit.audit(raw_ctx, team_dict, resolve_fn=_dex_resolve, item_fn=_dex_items,
+                                  normalize_fn=lambda c: nested_names.normalize(c, "context", resolve_names),
+                                  battle_team_fn=lambda t: query_identity.battle_view([t])[0][0],
+                                  contract_errors=[e.to_dict() for e in contract_errs], env=stamp)
+    except DexUnavailable as exc:
+        emit_json({"ok": False, "error": {"code": "engine_unavailable", "message": str(exc)}})
+        return 2
+    _emit_name_flags(out.get("name_resolution") or [])
     out["environment"] = stamp
     if env_warn:
         out["warnings"] = env_warn
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        return _emit_gate(out, fail_on_verdict)
     else:
+        status = _gate_status(out)
+        print(i18n.t('team_gate_status', verdict=status['verdict'], next_step=status['next_step']))
         print(_env_header(stamp, env_warn) + "\n")
         print(context_audit.format_audit_md(out))
-    return 0
+    return 1 if fail_on_verdict and status["verdict"] == "needs_input" else 0
 
 
 def cmd_landscape(fmt: str, game_format: str | None, season: str | None, context_path: str | None,
                   species_filter: list[str] | None, max_cores: int | None,
-                  aspects: list[str] | None = None) -> int:
+                  aspects: list[str] | None = None, no_cache: bool = False,
+                  population_scope: str | None = None) -> int:
     """UEP P4: structural distributions over one format's real-team library, aggregated through the
     shared `profile` vocabulary. Counts + share + sample only — never a ranking or a recommended
     core. The whole library's dex facts are prefetched in THREE sibling batches (species/moves/
@@ -996,6 +1487,10 @@ def cmd_landscape(fmt: str, game_format: str | None, season: str | None, context
     # stringly) — an off-vocabulary aspect is refused, never silently dropped. Validated BEFORE the
     # game_format check so the session path rejects a bad aspect independently of a missing format,
     # matching argparse's format-independent `choices=` (audit 2026-07-03).
+    if population_scope not in (None, "high"):
+        emit_json({"ok": False, "query": "landscape", "error": {
+            "code": "bad_input", "message": "landscape accepts --scope high only; omit it for the ordinary library scope"}})
+        return 1
     aspects = [a for a in (aspects or []) if a]
     bad_aspects = sorted(set(aspects) - set(landscape.ASPECTS))
     if bad_aspects:
@@ -1008,6 +1503,9 @@ def cmd_landscape(fmt: str, game_format: str | None, season: str | None, context
         # "Single", "singles") must be a loud refusal, never a silent rc=0 empty landscape that the
         # orchestrator misreads as "this metagame has no teams" (audit 2026-07-06).
         print(i18n.t('team_landscape_needs_format'), file=sys.stderr)
+        return 2
+    if max_cores is not None and (type(max_cores) is not int or max_cores < 0):
+        print("landscape --limit must be a non-negative integer", file=sys.stderr)
         return 2
     # The operator gate other cmds run: a malformed / off-enum context is refused, never silently
     # half-used (external audit 2026-07-02: meta_conformance:"bogus" quietly fell back to
@@ -1035,21 +1533,64 @@ def cmd_landscape(fmt: str, game_format: str | None, season: str | None, context
             seen_filters.add(key)
             filter_members.append({"species": resolved, "item": item_filter})
     scope = _library_scope(game_format, season, context)
-    teams = _scope_teams(game_format, scope)
-    filter_members, rwarns = _reconcile_anchor_forms(filter_members, teams)
-    warns += rwarns
+    if population_scope == "high" and (season or scope.get("kind") != "rule"
+                                        or scope.get("rule") != environment.CURRENT_RULE):
+        emit_json({"ok": False, "query": "landscape", "error": {
+            "code": "bad_input", "message": "landscape --scope high describes native current-rule records; an explicit season or another rule conflicts"}})
+        return 1
+
+    def authority():
+        if population_scope == "high":
+            with repset.handover.native_only():
+                return landscape_cache.signature(repset.data_dir(), game_format, scope["rule"])
+        return landscape_cache.signature(repset.data_dir(), game_format,
+                                         scope.get("rule") or environment.CURRENT_RULE)
+
+    population = None
     try:
+        snapshot = authority()
+        if population_scope == "high":
+            with repset.handover.native_only():
+                teams = _scope_teams(game_format, scope, True)
+            teams, population = landscape.high_sample(teams)
+        else:
+            teams = _scope_teams(game_format, scope, True)
+        if authority() != snapshot:
+            raise landscape_cache.AuthorityChanged("landscape sources changed while loading teams; rerun the query")
+    except (landscape_cache.AuthorityChanged, OSError) as exc:
+        emit_json({"ok": False, "query": "landscape", "error": {"code": "authority_mismatch", "message": str(exc)}})
+        return 1
+    options = {"format": game_format, "scope": scope, "filter_members": filter_members, "order": order,
+               "max_cores": max_cores if max_cores is not None else landscape.MAX_CORES, "aspects": aspects}
+    if population is not None:
+        options["population"] = population
+
+    def compute():
         dex_fn, move_fn, item_fn = _dex_fact_fns(teams, {f["species"] for f in filter_members})
+        result = run_landscape(teams, fmt=game_format, dex_fn=dex_fn, move_fn=move_fn, item_fn=item_fn,
+                               filter_members=filter_members, order=order, max_cores=options["max_cores"], aspects=aspects)
+        if population is not None:
+            result["population"] = population
+            result["notes"].append(
+                "High-performance STRUCTURAL sample: native current-rule shipped records passing "
+                "Top Meta's performance criteria. Counts are library records, NOT unique players "
+                "or Top Meta counting units: public rows lack cross-partition identity and may omit "
+                "qualifying achievements from other source observations. Unknown performance is "
+                "excluded; no fallback to the ordinary library or cross-rule handover. Structural "
+                "distributions use all eligible records; species filters narrow observed_cores only.")
+        return result
+
+    try:
+        out, cache_info = landscape_cache.evaluate(
+            teams, options, compute, enabled=not no_cache,
+            authority=authority, expected=snapshot)
+    except (landscape_cache.AuthorityChanged, OSError) as exc:
+        emit_json({"ok": False, "query": "landscape", "error": {"code": "authority_mismatch", "message": str(exc)}})
+        return 1
     except DexUnavailable as e:
         print(i18n.t('team_sibling_dex_unavailable', e=e), file=sys.stderr)
         return 2
-    out = run_landscape(
-        teams, fmt=game_format,
-        dex_fn=dex_fn, move_fn=move_fn, item_fn=item_fn,
-        filter_members=filter_members, order=order,
-        # `is not None`, not truthiness: --limit 0 legitimately suppresses the cores list.
-        max_cores=(max_cores if max_cores is not None else landscape.MAX_CORES),
-        aspects=aspects)
+    out["cache"] = cache_info
     # Historical-season provenance mirrors repset (audit 2026-06-26): the library partition IS the
     # data's provenance, so resolve with data_season= — the _stamp(context,...) path would warn
     # "computed against current base" about data that genuinely came from that partition.
@@ -1058,10 +1599,12 @@ def cmd_landscape(fmt: str, game_format: str | None, season: str | None, context
     out["query"] = {"game_format": game_format, **_scope_query(scope, teams),
                     "filter": (out.get("core_basis") or {}).get("filter") or [], "order": order,
                     "aspects": aspects}
+    if population_scope is not None:
+        out["query"]["scope"] = population_scope
     if env_warn or warns:
         out["warnings"] = list(env_warn) + warns
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(out)
     else:
         print(_env_header(stamp, list(env_warn) + warns) + "\n")
         print(landscape.format_landscape_md(out))
@@ -1080,11 +1623,23 @@ def _fallback_fn(game_format: str, rule: str | None, current_teams: list[dict]):
         if not table or len(filter_members) != 1:
             return None
         f = filter_members[0]
-        recipe = (table.get("anchors") or {}).get(fallback_frames.anchor_key(f["species"], f.get("item")))
+        entries = []
+        for key, recipe in (table.get("anchors") or {}).items():
+            species, sep, item = key.partition("|")
+            if sep and species:
+                entries.append(({"species": species, "item": item or None}, recipe))
+        identities = query_identity.Forms([f] + [entry for entry, _ in entries])
+        wanted = identities(f)
+        matches = [recipe for entry, recipe in entries
+                   if wanted is not None and identities(entry) == wanted]
+        # Legacy table keys are species|item. Only equivalent actual forms may share a recipe;
+        # conflicting recipes remain unavailable rather than choosing an unrelated evidence pool.
+        recipe = matches[0] if matches and all(r == matches[0] for r in matches) else None
         if not recipe:
             return None
+        pool, _ = query_identity.battle_view(current_teams)
         resolved = fallback_frames.resolve(
-            recipe, fmt=game_format, rule=rule, current_teams=current_teams,
+            recipe, fmt=game_format, rule=rule, current_teams=pool,
             load_season=lambda season: repset.cached_teams(game_format, season))
         if resolved and resolved["source"] == "history":
             # frame's fact tables are prefetched over the species/moves/items the current library
@@ -1097,12 +1652,53 @@ def _fallback_fn(game_format: str, rule: str | None, current_teams: list[dict]):
     return resolve
 
 
+def _seen_teams(path: str | None, fmt: str | None) -> list[list[str]]:
+    if path is None:
+        return []
+    value, errors = _raw_json(path, json_only=True)
+    if value is None:
+        raise ValueError("cannot read seen-teams JSON")
+    teams = value.get("teams") if isinstance(value, dict) and "teams" in value else value
+    teams = teams if isinstance(teams, list) else [teams]
+    canonical = []
+    for raw in teams:
+        if contracts.fatal(contracts.check_team(raw)):
+            raise ValueError("seen-teams must contain team-json objects, singly or in a list/teams wrapper")
+        if raw.get("format") not in (None, fmt):
+            raise ValueError("seen-teams battle format differs from this query")
+        doc, flags = _canon_team_json(raw)
+        _emit_name_flags(flags)
+        canonical.append(doc)
+    forms = query_identity.Forms(query_identity.members(canonical))
+    result = []
+    for doc in canonical:
+        row = []
+        for member in doc["pokemon"]:
+            if not (forms.facts.get(member["species"]) or {}).get("found"):
+                raise ValueError("seen-teams contains an unresolved species")
+            if member.get("item") and not (forms.items.get(member["item"]) or {}).get("found"):
+                raise ValueError("seen-teams contains an unresolved item")
+            form = forms(member)
+            if not form:
+                raise ValueError("seen-teams has an unproved battle-form identity")
+            row.append(form)
+        result.append(row)
+    return result
+
+
 def cmd_frame(fmt: str, game_format: str | None, season: str | None, context_path: str | None,
-              audit_receipt_path: str | None) -> int:
+              audit_receipt_path: str | None, draw: int | None = None, seed: int | None = None,
+              seen_teams_path: str | None = None) -> int:
     """UEP P4.5 assembly front-door: emit DATA-GROUNDED skeletons (repset-backed core candidates +
     structural facts) the AI assembles ON, so `[assemble]` is not hand-waved from the training prior.
     Consumes context-audit's audit_receipt (the chain link — recomputed here, mismatch refuses) and
     emits a frame_receipt the slate gate binds each candidate's core-bearer sets against."""
+    try:
+        diversity.validate(draw, seed, seen=seen_teams_path is not None)
+        shown = _seen_teams(seen_teams_path, game_format)
+    except (ValueError, DexUnavailable) as exc:
+        emit_json({"kind": "frame", "refused": {"code": "bad_diversity_input", "reason": str(exc)}})
+        return 2
     if game_format not in ("single", "double"):
         print(i18n.t('team_frame_needs_format'), file=sys.stderr)
         return 2
@@ -1140,10 +1736,10 @@ def cmd_frame(fmt: str, game_format: str | None, season: str | None, context_pat
     if provided != expected:
         out = {"kind": "frame", "refused": {"code": "audit_receipt_mismatch",
                "expected_fingerprint": expected, "provided_fingerprint": provided}}
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        _emit_gate(out)
         print(i18n.t('team_frame_audit_mismatch'), file=sys.stderr)
         return 2
-    # Anchor = locked + prefer (format-aware Mega isolation, repset's rule); order = meta_conformance knob.
+    # Anchor = locked + prefer (exact actual forms); order = meta_conformance knob.
     raw_filter = [s for s in ((context.locked + context.prefer) if context else []) if s]
     order = "rare_first" if (context and context.meta_conformance == "off_meta") else "common_first"
     filter_members: list[dict] = []
@@ -1157,8 +1753,6 @@ def cmd_frame(fmt: str, game_format: str | None, season: str | None, context_pat
             filter_members.append({"species": resolved, "item": item_filter})
     scope = _library_scope(game_format, season, context)
     teams = _scope_teams(game_format, scope)
-    filter_members, rwarns = _reconcile_anchor_forms(filter_members, teams)
-    warns += rwarns
     try:
         dex_fn, move_fn, item_fn = _dex_fact_fns(teams, {f["species"] for f in filter_members})
     except DexUnavailable as e:
@@ -1167,15 +1761,25 @@ def cmd_frame(fmt: str, game_format: str | None, season: str | None, context_pat
     out = frame.frame_from_teams(teams, fmt=game_format, dex_fn=dex_fn, move_fn=move_fn,
                                  item_fn=item_fn, filter_members=filter_members, order=order,
                                  fallback_fn=_fallback_fn(game_format, scope.get("rule"), teams))
+    out = canonical_spreads(out)
     out["frame_receipt"] = frame.make_receipt(provided, out["skeletons"], out.get("anchor"), game_format)
+    if draw is not None:
+        from mega import form_base_species
+        names = {c["species"] for s in out["skeletons"] for c in s.get("core_candidates") or [] if c.get("species")}
+        names.update(n for row in shown for n in row)
+        facts = lookup_pokemon(sorted(names))
+        out["draw"] = diversity.draw_frames(out["skeletons"], draw, seed, shown,
+            group_fn=lambda name: form_base_species(name, facts.get(name)) or name)
     # Historical-provenance stamp mirrors landscape/repset: the library partition IS the data's season.
     stamp2, env_warn = _scope_stamp(scope, teams, context)
     out["environment"] = stamp2
     if env_warn or warns:
         out["warnings"] = list(env_warn) + warns
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        return _emit_gate(out)
     else:
+        status = _gate_status(out)
+        print(i18n.t('team_gate_status', verdict=status['verdict'], next_step=status['next_step']))
         print(_env_header(stamp2, list(env_warn) + warns) + "\n")
         print(frame.format_frame_md(out))
     return 0
@@ -1213,7 +1817,7 @@ def cmd_intake(game_format: str | None, onboarding: bool = False, context_path: 
     out["environment"] = stamp
     if env_warn:
         out["warnings"] = list(env_warn)
-    print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+    emit_json(out)
     if step and out.get("unknown_answered"):
         # `answered` is the walk's termination state — a silently dropped typo would re-ask a resolved
         # dimension and spin the loop, so fail LOUD (the unknown ids are also in the JSON above).
@@ -1224,12 +1828,19 @@ def cmd_intake(game_format: str | None, onboarding: bool = False, context_path: 
 
 
 def cmd_observed(fmt: str, game_format: str | None, season: str | None, context_path: str | None,
-                 species_filter: list[str] | None, order: str | None, limit: int | None) -> int:
+                 species_filter: list[str] | None, order: str | None, limit: int | None,
+                 seed: int | None = None, seen_teams_path: str | None = None) -> int:
     """UEP P7: observed-team retrieval — the AI-facing evidence table over the real-team library.
     Constraints ride the build-context (locked/prefer/owned/avoid, dex-canonicalized) plus ad-hoc
     --species; rows carry explicit overlap counts, the provenance evidence tier, performance fact
     tags and structural signals (profile vocabulary, computed for the returned page only).
     JSON only (AI-facing evidence, like slate/answer-audit)."""
+    try:
+        diversity.validate(seed=seed, seen=seen_teams_path is not None, order=order)
+        shown = _seen_teams(seen_teams_path, game_format)
+    except (ValueError, DexUnavailable) as exc:
+        emit_json({"ok": False, "query": "observed", "error": {"code": "bad_diversity_input", "message": str(exc)}})
+        return 2
     if game_format not in ("single", "double"):
         # Same enum-gate as cmd_landscape/cmd_intake: the session path has no argparse `choices=`, so
         # an off-vocabulary game_format must refuse loudly, not return a silent rc=0 empty page that
@@ -1248,6 +1859,7 @@ def cmd_observed(fmt: str, game_format: str | None, season: str | None, context_
         constraints = {"locked": context.locked, "prefer": context.prefer,
                        "owned": context.owned, "avoid_species": context.avoid_species,
                        "avoid_items": context.avoid_items, "owned_only": context.owned_only}
+    name_flags = []
     if species_filter:
         # Resolution failures are NEVER silent (landscape parity): an unresolved alias or a dex
         # outage must read as a name problem, not as "the library has no such species"
@@ -1257,6 +1869,7 @@ def cmd_observed(fmt: str, game_format: str | None, season: str | None, context_
             recs = resolve_names(names, "pokemon", fuzzy=True)
             canon = {q: r["canonical"] for q, r in recs.items()
                      if r.get("ok") and r.get("canonical")}
+            name_flags = query_identity.corrections({("pokemon", q): r for q, r in recs.items()})
             for miss in [n for n in names if n not in canon]:
                 warns.append(i18n.Msg('team_dex_unresolved_library', species=repr(miss)))
         except DexUnavailable:
@@ -1280,15 +1893,29 @@ def cmd_observed(fmt: str, game_format: str | None, season: str | None, context_
         return [team_profile.profile(t, dex_fn=dex_fn, move_fn=move_fn, item_fn=item_fn)
                 for t in page]
 
+    extra = [{"species": name} for key in ("locked", "prefer", "species", "avoid_species")
+             for name in constraints.get(key) or []]
+    try:
+        identities = query_identity.Forms(query_identity.members(teams, extra))
+    except DexUnavailable as exc:
+        emit_json({"ok": False, "query": "observed", "error": {"code": "engine_unavailable", "message": str(exc)}})
+        return 1
+    if any(not (identities.facts.get(m["species"]) or {}).get("found") for m in extra):
+        emit_json({"ok": False, "query": "observed", "error": {"code": "unknown_pokemon",
+                   "message": "one or more battle-form constraints could not be resolved; no retrieval was performed"}})
+        return 1
     out = observed.retrieve(teams, fmt=game_format, constraints=constraints,
                             profile_batch_fn=profile_batch_fn, order=order,
-                            limit=(limit if limit is not None else 10))
+                            limit=(limit if limit is not None else 10), identity_fn=identities, shown=shown, seed=seed)
+    out["identity_gaps"] = identities.gaps
+    if name_flags:
+        out["name_resolution"] = name_flags
     stamp, env_warn = _scope_stamp(scope, teams, context)
     out["environment"] = stamp
     out.update(_scope_query(scope, teams))
     if env_warn or warns:
         out["warnings"] = list(env_warn) + warns
-    print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+    emit_json(out)
     return 0
 
 
@@ -1314,40 +1941,101 @@ def cmd_topmeta(game_format: str | None, scope: str | None, species: list[str] |
     """Top Meta: one scope of the shipped table joined with the in-game snapshot (JSON only)."""
     scope = scope or "season"
     if game_format not in ("single", "double") or scope not in topmeta.SCOPES:
-        print(json.dumps({"ok": False, "query": "topmeta", "error": {
+        emit_json({"ok": False, "query": "topmeta", "error": {
             "code": "bad_input", "message": "topmeta needs --game-format single|double and "
-                                            "--scope season|rule"}}, ensure_ascii=False))
+                                            "--scope season|rule|high"}})
         return 2
     rule = environment.CURRENT_RULE
     table = topmeta.load_table(game_format, rule)
     if table is None:
-        print(json.dumps({"ok": False, "query": "topmeta", "error": {
+        emit_json({"ok": False, "query": "topmeta", "error": {
             "code": "not_found",
-            "message": f"no Top Meta table for {rule}/{game_format}"}}, ensure_ascii=False))
+            "message": f"no Top Meta table for {rule}/{game_format}"}})
         return 0
     try:
         ingame = _topmeta_ingame(game_format)
     except (MetaUnavailable, ValueError) as exc:
-        print(json.dumps({"ok": False, "query": "topmeta", "error": {
-            "code": "engine_unavailable", "message": str(exc)}}, ensure_ascii=False))
+        emit_json({"ok": False, "query": "topmeta", "error": {
+            "code": "engine_unavailable", "message": str(exc)}})
         return 1
-    wanted = None
+    records = None
     if species:
-        resolved = resolve_names(list(dict.fromkeys(species)), "pokemon", fuzzy=False)
-        wanted = []
-        for name in species:
-            rec = resolved.get(name) or {}
-            canon = rec.get("canonical") if rec.get("ok") else None
-            if canon:
-                wanted.append(rec.get("base_species") if rec.get("is_mega") else canon)
+        resolved = resolve_names(list(dict.fromkeys(species)), "pokemon", fuzzy=True)
+        records = [{"query": name, **(resolved.get(name) or {})} for name in species]
+    wanted, queries = topmeta.resolve_queries(table, scope, records, ingame)
     out = topmeta.compare(table, scope, ingame, species=wanted)
+    out["data_granularity"] = "species_aggregate"
+    if records is not None:
+        out["queries"] = queries
     out["environment"], _ = environment.resolve(data_rule=rule, data_seasons=out["partitions"])
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    emit_json(out)
+    return 1 if any((q.get("error") or {}).get("code") == "unsupported_mechanic" for q in queries) else 0
+
+
+def cmd_type_matchup(attack_type: str | None, pokemon: str | None,
+                     types: list[str] | None, ability: str | None) -> int:
+    try:
+        result = team_facts.type_matchup(attack_type=attack_type, pokemon=pokemon, types=types,
+                                         ability=ability, resolve_fn=resolve_names,
+                                         pokemon_fn=lookup_pokemon)
+    except team_facts.FactInputError as exc:
+        emit_json(exc.result)
+        return 0 if exc.result["error"]["code"] == "not_found" else 1
+    except DexUnavailable as exc:
+        emit_json({"ok": False, "query": "type-matchup",
+                   "error": {"code": "engine_unavailable", "message": str(exc)}})
+        return 1
+    emit_json(result)
+    return 0
+
+
+def cmd_rules_facts() -> int:
+    try:
+        result = team_facts.rules_facts()
+    except (rules.UnsupportedRulesetError, RuntimeError) as exc:
+        emit_json({"ok": False, "query": "rules-facts",
+                   "error": {"code": "authority_mismatch", "message": str(exc)}})
+        return 1
+    emit_json(result)
+    return 0
+
+
+def cmd_slate_init(path: str, context_path: str | None, audit_path: str | None,
+                   frame_path: str | None = None, intake_path: str | None = None) -> int:
+    if not context_path or not audit_path:
+        emit_json({"kind": "slate-init", "refused": {"code": "missing_inputs",
+                  "reason": "slate-init requires candidates, --context and --audit-receipt"}})
+        return 2
+    values = []
+    for source in (path, context_path, audit_path, frame_path, intake_path):
+        if not source:
+            values.append(None)
+            continue
+        value, errors = _raw_json(source, json_only=True)
+        if value is None:
+            _emit_contract_errs(errors, "json")
+            return 2
+        values.append(value)
+    spec, raw_ctx, audit, frame_out, intake_out = values
+    errors = contracts.check_context(raw_ctx)
+    if contracts.fatal(errors):
+        _emit_contract_errs(errors, "json")
+        return 2
+    context = _canonicalize_context(context_from_dict(raw_ctx))
+    stamp, _ = _stamp(context, None)
+    receipt = audit.get("audit_receipt", audit) if isinstance(audit, dict) else audit
+    try:
+        result = assembly.assemble(spec, raw_ctx, receipt, context_audit.context_fingerprint(raw_ctx, stamp),
+                                   frame_out, intake_out)
+    except assembly.AssemblyError as exc:
+        emit_json({"kind": "slate-init", "refused": {"code": exc.code, "reason": str(exc)}})
+        return 2
+    emit_json(result)
     return 0
 
 
 def cmd_slate_evaluate(path: str, fmt: str, top_k: int, frame_output_path: str | None = None,
-                       view: str = "full") -> int:
+                       view: str = "full", fail_on_verdict: bool = False) -> int:
     """UEP P5: the candidate fact-matrix gate. `path` = slate.json {context, audit_receipt,
     teams:[team-json…], frame_bindings?}. Consumes the context-audit receipt (recomputed here, mismatch
     refuses); runs the cheap funnel for every candidate and the matchup battery for survivors only;
@@ -1366,8 +2054,7 @@ def cmd_slate_evaluate(path: str, fmt: str, top_k: int, frame_output_path: str |
     # call later (external audit 2026-07-02).
     shape_err = slate_shape_error(raw)
     if shape_err:
-        print(json.dumps(i18n.jsonify({"kind": "slate-evaluate", "refused": shape_err}),
-                         ensure_ascii=False, indent=2))
+        _emit_gate({"kind": "slate-evaluate", "refused": shape_err})
         print(i18n.t('team_slate_refused', code=shape_err["code"]), file=sys.stderr)
         return 2
     ctx_raw = raw.get("context") if isinstance(raw.get("context"), dict) else {}
@@ -1396,9 +2083,13 @@ def cmd_slate_evaluate(path: str, fmt: str, top_k: int, frame_output_path: str |
 
     # Constraint membership compares CANONICAL names on both sides (the raw slate context stays the
     # receipt's binding target); the canonicalized BuildContext supplies the split avoid_species too.
+    normalized_goals, goal_flags = _nested_input({"goals": context.goals}, "context")
+    if normalized_goals is None:
+        return 2
     constraints_ctx = {"locked": context.locked, "avoid_species": context.avoid_species,
                        "avoid_items": context.avoid_items, "avoid_soft": context.avoid_soft,
-                       "prefer": context.prefer, "owned_only": context.owned_only}
+                       "prefer": context.prefer, "owned_only": context.owned_only,
+                       "goals": normalized_goals["goals"]}
     fmt_battle = context.format or next(
         (t.get("format") for t in raw.get("teams", []) if isinstance(t, dict) and t.get("format")),
         None)
@@ -1417,10 +2108,17 @@ def cmd_slate_evaluate(path: str, fmt: str, top_k: int, frame_output_path: str |
     def matchup_fn(team_c: dict) -> dict | None:
         try:
             if not rows_cache:
-                rows_cache.extend(usage_top_k(fmt_battle, top_k))
-            return run_matchup(team_c, rows_cache, fmt=fmt_battle, dex_fn=lookup_pokemon,
+                from slate_comparison import target_rows
+                rows_cache.extend(target_rows(usage_top_k(fmt_battle, top_k), constraints_ctx["goals"]))
+            result = run_matchup(team_c, rows_cache, fmt=fmt_battle, dex_fn=lookup_pokemon,
                                sets_fn=sets_fn, damage_fn=damage_fn, move_fn=lookup_moves,
                                variants_fn=variants_fn, item_fn=lookup_items)
+            result["opponent_scope"] = {
+                "ranking_top_k_requested": top_k,
+                "explicit_answer_targets": [g["species"] for g in constraints_ctx["goals"] if g["kind"] == "answer"],
+                "additional_unranked_targets": [r["pokemon_en"] for r in rows_cache if r.get("rank") is None],
+                "note": "Battery count includes the union of ranking rows and explicit answer targets; no usage rank is invented."}
+            return result
         except (NcpUnavailable, MetaUnavailable, DexUnavailable):
             return None
 
@@ -1455,14 +2153,18 @@ def cmd_slate_evaluate(path: str, fmt: str, top_k: int, frame_output_path: str |
             return 2
 
         _repset_fn_cache: dict[str, list[dict]] = {}
+        _repset_pool: list[dict] | None = None
 
         def repset_fn(species: str) -> list[dict]:
+            nonlocal _repset_pool
             if species in _repset_fn_cache:            # candidates share filler species — cache per run
                 return _repset_fn_cache[species]
             resolved, item_filter, _ = _canonicalize_repset_species(species, fmt_battle)
             try:
-                teams = repset.cached_teams_for_rule(fmt_battle, rule_scope)
-                reps = repset.representative_sets_from_teams(resolved, fmt_battle, teams, item=item_filter)
+                if _repset_pool is None:
+                    teams = repset.cached_teams_for_rule(fmt_battle, rule_scope)
+                    _repset_pool, _ = query_identity.battle_view(teams)
+                reps = repset.representative_sets_from_teams(resolved, fmt_battle, _repset_pool, item=item_filter)
             except (OSError, json.JSONDecodeError):    # narrow: a code bug MUST propagate, not masquerade
                 return []                              # as an empty library (same discipline as sources._rep_for)
             out_cl: list[dict] = []
@@ -1479,29 +2181,46 @@ def cmd_slate_evaluate(path: str, fmt: str, top_k: int, frame_output_path: str |
         out = run_slate(raw, recompute_receipt_fn=recompute_receipt_fn, check_team_fn=check_team_fn,
                         validate_fn=validate_fn, profile_fn=profile_fn, matchup_fn=matchup_fn,
                         selection_fn=selection_fn,
-                        canon_team_fn=_canon_team_json, constraints_ctx=constraints_ctx,
+                        canon_team_fn=_canon_team_json, battle_team_fn=_battle_team_view,
+                        canon_binding_fn=lambda b: _normalize_nested(b, "binding"),
+                        constraints_ctx=constraints_ctx,
                         fmt=fmt_battle,
-                        library_copy_fn=_library_copy_fn(fmt_battle, rule=rule_scope),
+                        library_copy_fn=_library_copy_fn(fmt_battle, rule=rule_scope, comparison=True),
                         frame_output=frame_output, repset_fn=repset_fn)
     except DexUnavailable as e:
         print(i18n.t('team_sibling_dex_unavailable', e=e), file=sys.stderr)
         return 2
     if out.get("refused"):
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        _emit_gate(out)
         print(i18n.t('team_slate_refused', code=out["refused"]["code"]), file=sys.stderr)
         return 2
     out["environment"] = stamp
+    if goal_flags:
+        out["goal_name_resolution"] = goal_flags
     if env_warn:
         out["warnings"] = env_warn
     # DISPLAY projection only — the FULL output must still be fed to answer-audit (it re-hashes the
     # untrimmed matchup_risk). `view=summary` keeps the slate under the bridge's 2 MiB artifact gate.
-    out = project_slate(out, view)
-    print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
-    return 0
+    return _emit_gate(out, fail_on_verdict, view)
+
+
+def cmd_localize(path: str) -> int:
+    import answer_text
+    raw, errors = _raw_json(path, json_only=True)
+    if raw is None:
+        _emit_contract_errs(errors, "json")
+        return 2
+    errors = contracts.check_team(raw)
+    if contracts.fatal(errors):
+        _emit_contract_errs(errors, "json")
+        return 2
+    out = answer_text.localize(team_from_dict(raw).to_dict(), resolve_names)
+    emit_json(out)
+    return 1 if out["unresolved"] else 0
 
 
 def cmd_answer_audit(draft_path: str, fmt: str, slate_path: str | None,
-                     slate_out_path: str | None) -> int:
+                     slate_out_path: str | None, fail_on_verdict: bool = False) -> int:
     """UEP P6: the back gate. `draft_path` = the structured answer draft; `--slate` = the ORIGINAL
     slate.json; `--slate-output` = the SAVED slate-evaluate output. The receipt chain is re-bound by
     recomputed fingerprints (draft <-> output <-> slate teams <-> context); the structural checklist
@@ -1536,7 +2255,8 @@ def cmd_answer_audit(draft_path: str, fmt: str, slate_path: str | None,
         # Full P2 recompute: the fingerprint re-binds the chain AND the blocking gaps feed the
         # disclosure check (same degraded behavior as cmd_context_audit when the dex is down —
         # the shared bridges guarantee the two gates cannot disagree).
-        return context_audit.audit(ctx, None, resolve_fn=_dex_resolve, item_fn=_dex_items, env=stamp)
+        return context_audit.audit(ctx, None, resolve_fn=_dex_resolve, item_fn=_dex_items, env=stamp,
+                                   normalize_fn=lambda c: nested_names.normalize(c, "context", resolve_names))
 
     fmt_b = (slate_out.get("format") if isinstance(slate_out, dict) else None) \
         or context.format or "single"
@@ -1656,24 +2376,30 @@ def cmd_answer_audit(draft_path: str, fmt: str, slate_path: str | None,
         except (NcpUnavailable, MetaUnavailable, DexUnavailable):
             return [None] * len(bindings)
 
+    def text_check_fn(draft, source, output):
+        import answer_text
+        from dexlink import official_names
+        return answer_text.check(draft, source, output, official_names())
+
     try:
         out = answer_audit.audit_answer(draft, slate_raw, slate_out,
                                         context_audit_fn=context_audit_fn,
                                         validate_fn=lambda tc: _validate_json(tc, context),
                                         canon_team_fn=_canon_team_json, recompute_fn=recompute_fn,
-                                        library_copy_fn=_library_copy_fn(fmt_b, rule=rule_scope))
+                                        canon_disclosures_fn=lambda d: _normalize_nested(d, "draft"),
+                                        library_copy_fn=_library_copy_fn(fmt_b, rule=rule_scope),
+                                        text_check_fn=text_check_fn)
     except DexUnavailable as e:
         print(i18n.t('team_sibling_dex_unavailable', e=e), file=sys.stderr)
         return 2
     if out.get("refused"):
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        _emit_gate(out)
         print(i18n.t('team_answer_refused', code=out["refused"]["code"]), file=sys.stderr)
         return 2
     out["environment"] = stamp
     if env_warn:
         out["warnings"] = env_warn
-    print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
-    return 0
+    return _emit_gate(out, fail_on_verdict)
 
 
 def cmd_draft_init(fmt: str, slate_path: str | None, slate_out_path: str | None,
@@ -1688,7 +2414,7 @@ def cmd_draft_init(fmt: str, slate_path: str | None, slate_out_path: str | None,
                "refused": {"code": "missing_inputs",
                            "reason": "draft-init requires --slate <slate.json> and --slate-output "
                                      "<saved slate-evaluate output.json>"}}
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(out)
         return 2
     slate_raw, errs = _raw_json(slate_path, json_only=True)
     if slate_raw is None:
@@ -1696,35 +2422,41 @@ def cmd_draft_init(fmt: str, slate_path: str | None, slate_out_path: str | None,
         return 2
     shape_err = slate_shape_error(slate_raw)
     if shape_err:
-        print(json.dumps(i18n.jsonify({"kind": "draft-init", "refused": shape_err}),
-                         ensure_ascii=False, indent=2))
+        emit_json({"kind": "draft-init", "refused": shape_err})
         return 2
     slate_out, errs = _raw_json(slate_out_path, json_only=True)
     if slate_out is None:
         _emit_contract_errs(errs, fmt)
         return 2
     if not isinstance(slate_out, dict):
-        print(json.dumps(i18n.jsonify({
+        emit_json({
             "kind": "draft-init",
             "refused": {"code": "bad_slate_output",
-                        "reason": "slate-output must be the saved slate-evaluate JSON object"}}),
-            ensure_ascii=False, indent=2))
+                        "reason": "slate-output must be the saved slate-evaluate JSON object"}})
         return 2
     receipt = slate_out.get("slate_receipt")
     if not isinstance(receipt, dict) or not receipt.get("fingerprint"):
-        print(json.dumps(i18n.jsonify({
+        emit_json({
             "kind": "draft-init",
             "refused": {"code": "missing_slate_receipt",
-                        "reason": "slate-output has no slate_receipt; run slate-evaluate first"}}),
-            ensure_ascii=False, indent=2))
+                        "reason": "slate-output has no slate_receipt; run slate-evaluate first"}})
+        return 2
+    try:
+        assembly.verify_draft_source(slate_raw, slate_out)
+    except assembly.AssemblyError as exc:
+        emit_json({"kind": "draft-init", "refused": {"code": exc.code, "reason": str(exc)}})
         return 2
     survivors = [i for i in (slate_out.get("survivors") or []) if isinstance(i, int)]
     if not survivors:
-        print(json.dumps(i18n.jsonify({
+        emit_json({
             "kind": "draft-init",
             "refused": {"code": "no_survivors",
-                        "reason": "slate-output has no survivors to recommend; revise and re-slate"}}),
-            ensure_ascii=False, indent=2))
+                        "reason": "slate-output has no survivors to recommend; revise and re-slate"}})
+        return 2
+    if (recommended is not None and not (type(recommended) is int or
+            (isinstance(recommended, list) and recommended and all(type(i) is int for i in recommended)))):
+        emit_json({"kind": "draft-init", "refused": {"code": "bad_recommended",
+                  "reason": "recommended must contain survivor integer indices"}})
         return 2
     if isinstance(recommended, int):
         rec_list: list[int] | None = [recommended]
@@ -1736,12 +2468,11 @@ def cmd_draft_init(fmt: str, slate_path: str | None, slate_out_path: str | None,
     teams = slate_raw.get("teams") or []
     bad = [i for i in selected if i not in survivors or i < 0 or i >= len(teams)]
     if bad:
-        print(json.dumps(i18n.jsonify({
+        emit_json({
             "kind": "draft-init",
             "refused": {"code": "recommended_not_survivor",
                         "reason": "recommended indices must be slate survivors",
-                        "bad_indices": bad, "survivors": survivors}}),
-            ensure_ascii=False, indent=2))
+                        "bad_indices": bad, "survivors": survivors}})
         return 2
 
     ctx = slate_raw.get("context") if isinstance(slate_raw.get("context"), dict) else {}
@@ -1775,6 +2506,7 @@ def cmd_draft_init(fmt: str, slate_path: str | None, slate_out_path: str | None,
             if overlap.get("verbatim_ids"):
                 rec["adoption_review"] = {
                     "status": "",
+                    "other_structures": {"considered": None, "reason": ""},
                     "checked_modification_types": [],
                     "attempted_changes": [],
                     "reason": "",
@@ -1782,6 +2514,11 @@ def cmd_draft_init(fmt: str, slate_path: str | None, slate_out_path: str | None,
                 }
         recommended_entries.append(rec)
 
+    try:
+        onboarding = assembly.onboarding_summary(ctx, slate_raw.get("onboarding")) if ctx.get("frame_required") is True else None
+    except assembly.AssemblyError as exc:
+        emit_json({"kind": "draft-init", "refused": {"code": exc.code, "reason": str(exc)}})
+        return 2
     draft = {
         "environment": environment,
         "context_summary": "",
@@ -1789,27 +2526,36 @@ def cmd_draft_init(fmt: str, slate_path: str | None, slate_out_path: str | None,
         "alternatives_omitted_reason": "",
         "assumptions": [],
         "confidence_notes": [],
-        "tuning_summary": {"status": "not_run", "reason": ""},
+        "tuning_summary": {"status": "not_run", "reason": "" if ctx.get("benchmarks")
+                           else "No explicit tuning benchmarks were supplied."},
         "recommended": recommended_entries,
         "frame_deviations": [],
-        "onboarding_summary": (
-            {"status": "", "answered": [], "note": ""} if ctx.get("frame_required") is True else None
-        ),
+        "onboarding_summary": onboarding,
         "convergence_rationale": {
             str(i): {"worst_matchup": "", "accepted_by_constraint": "", "opportunity_cost": ""}
             for i in survivors
         },
         "claims": [],
+        "team_claims": [],
         "slate_receipt": receipt,
     }
+    import exploration
+    if exploration.concerns(slate_out):
+        draft["exploration"] = {"reason": ""}
     out = {"kind": "draft-init", "draft": draft,
-           "notes": ["Fill every empty string/list before answer-audit. The scaffold supplies shape, "
-                     "not convergence judgment."]}
-    print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+           "exploration_facts": exploration.concerns(slate_out),
+           "claim_candidates": assembly.claim_candidates(slate_out, selected),
+           "notes": ["Complete substantive draft fields and resolve any incomplete onboarding before answer-audit. "
+                     "Claim candidates are receipt-bound static calculator facts, conditional on the stated "
+                     "opponent variant; they are not battle outcomes. Copy only facts used in the answer into "
+                     "draft.claims. Speed aggregates do not create individual speed claims. "
+                     "The helper does not supply convergence judgment."]}
+    emit_json(out)
     return 0
 
 
-def cmd_checkpoint(slate_out_path: str, fmt: str, slate_path: str | None) -> int:
+def cmd_checkpoint(slate_out_path: str, fmt: str, slate_path: str | None,
+                   fail_on_verdict: bool = False) -> int:
     """Post-slate, pre-tune pause contract for AI orchestration. JSON only."""
     if not slate_path:
         print(i18n.t('team_checkpoint_needs_inputs'), file=sys.stderr)
@@ -1835,8 +2581,7 @@ def cmd_checkpoint(slate_out_path: str, fmt: str, slate_path: str | None) -> int
         out["environment"] = stamp
     if env_warn:
         out["warnings"] = (out.get("warnings") or []) + env_warn
-    print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
-    return 2 if out.get("refused") else 0
+    return _emit_gate(out, fail_on_verdict)
 
 
 def _as_list(v):
@@ -1848,20 +2593,55 @@ def _as_list(v):
 def _dispatch_session_op(cmd: dict) -> int:
     """Run one operator inside a session, always as json. Returns its exit code."""
     op = cmd.get("op")
+    op = op.replace("_", "-") if isinstance(op, str) else op
+    if op not in COMMAND_OPTIONS:
+        raise ValueError(f"unknown session op: {op!r}")
+    allowed = (COMMAND_OPTIONS[op] - {"matchup_view", "slate_view", "next_batch"}) | {"op"}
+    file_ops = {"review", "try", "review-claims", "localize", "parse", "validate", "suggest-fixes", "diagnose", "tune", "scenario", "threshold", "select", "matchup", "fill", "replace",
+                "context-audit", "slate-init", "slate-evaluate", "checkpoint", "answer-audit"}
+    allowed |= {"file"} if op in file_ops else set()
+    allowed |= {"format"} if "game_format" in COMMAND_OPTIONS[op] else set()
+    allowed |= {"species"} if op in {"repset", "speed-ladder", "counters", "ko-scan"} else set()
+    allowed |= {"view"} if op in {"matchup", "slate-evaluate"} else set()
+    allowed |= {"max_cores"} if op == "landscape" else set()
+    allowed |= {"team_id", "id"} if op == "show" else set()
+    allowed |= {"next"} if op == "intake" else set()
+    bad = sorted(set(cmd) - allowed)
+    if bad:
+        raise ValueError(f"{op} does not consume session fields: {', '.join(bad)}; see team.py schema")
+    for field in ("fail_on_verdict", "no_cache", "opponent_ranges", "from_cell"):
+        if field in cmd and not isinstance(cmd[field], bool):
+            raise ValueError(f"{field} must be a boolean")
+    if op in {"diagnose", "select"} and "top_k" in cmd and not any(cmd.get(k) for k in ("with_check", "focus", "opponents", "conditions")):
+        raise ValueError("top_k needs with_check:true for diagnose/select")
+    if op == "intake" and "answered" in cmd and not cmd.get("next"):
+        raise ValueError("answered requires intake next:true")
     f = cmd.get("file")
     ctx = cmd.get("context")
+    strict = cmd.get("fail_on_verdict") is True
+    if op in ("review", "try"):
+        return cmd_review(f, ctx, top_k=normalize_top_k(cmd.get("top_k")), changes_path=cmd.get("changes"),
+                          trial=op == "try", view=cmd.get("view", "summary"), fail_on_verdict=strict,
+                          focus_path=cmd.get("focus"), opponents_path=cmd.get("opponents"), conditions_path=cmd.get("conditions"))
+    if op == "review-claims":
+        return cmd_review_claims(f, strict)
+    if op == "localize":
+        return cmd_localize(f)
     if op in ("context-audit", "context_audit"):
-        return cmd_context_audit(f, "json", ctx)
+        return cmd_context_audit(f, "json", ctx, strict)
     if op == "frame":
         return cmd_frame("json", cmd.get("game_format") or cmd.get("format"), cmd.get("season"),
-                         ctx, cmd.get("audit_receipt"))
+                         ctx, cmd.get("audit_receipt"), cmd.get("draw"), cmd.get("seed"), cmd.get("seen_teams"))
     if op in ("slate-evaluate", "slate_evaluate"):
         return cmd_slate_evaluate(f, "json", normalize_top_k(cmd.get("top_k")), cmd.get("frame_output"),
-                                  view=cmd.get("view", "full"))
+                                  view=cmd.get("view", "full"), fail_on_verdict=strict)
+    if op == "slate-init":
+        return cmd_slate_init(f, cmd.get("context"), cmd.get("audit_receipt"),
+                              cmd.get("frame_output"), cmd.get("intake_output"))
     if op == "checkpoint":
-        return cmd_checkpoint(f, "json", cmd.get("slate"))
+        return cmd_checkpoint(f, "json", cmd.get("slate"), strict)
     if op in ("answer-audit", "answer_audit"):
-        return cmd_answer_audit(f, "json", cmd.get("slate"), cmd.get("slate_output"))
+        return cmd_answer_audit(f, "json", cmd.get("slate"), cmd.get("slate_output"), strict)
     if op in ("draft-init", "draft_init"):
         return cmd_draft_init("json", cmd.get("slate"), cmd.get("slate_output"),
                               _as_list(cmd.get("recommended")))
@@ -1875,31 +2655,60 @@ def _dispatch_session_op(cmd: dict) -> int:
         lim = cmd.get("limit")
         return cmd_observed("json", cmd.get("game_format") or cmd.get("format"), cmd.get("season"),
                             ctx, _as_list(cmd.get("species")), cmd.get("order"),
-                            int(lim) if lim is not None else None)
+                            int(lim) if lim is not None else None, cmd.get("seed"), cmd.get("seen_teams"))
     if op == "landscape":
-        mc = cmd.get("max_cores")
+        if "max_cores" in cmd and "limit" in cmd and cmd["max_cores"] != cmd["limit"]:
+            raise ValueError("conflicting landscape max_cores and limit; use one")
+        mc = cmd.get("max_cores", cmd.get("limit"))
         return cmd_landscape("json", cmd.get("game_format") or cmd.get("format"),
                              cmd.get("season"), ctx, _as_list(cmd.get("species")),
-                             int(mc) if mc is not None else None,   # a stringly spec value must not
-                             _as_list(cmd.get("aspects")))          # reach the list slice
+                             mc,
+                             _as_list(cmd.get("aspects")), no_cache=cmd.get("no_cache") is True,
+                             population_scope=cmd.get("scope"))
     if op == "parse":
-        return cmd_parse(f, "json")
+        return cmd_parse(f, "json", cmd.get("game_format") or cmd.get("format"))
     if op == "validate":
         return cmd_validate(f, "json", ctx)
+    if op == "suggest-fixes":
+        return cmd_suggest_fixes(f, ctx)
     if op == "diagnose":
         return cmd_diagnose(f, "json", cmd.get("aspect", "all"), ctx,
                             with_check=bool(cmd.get("with_check")),
-                            top_k=normalize_top_k(cmd.get("top_k")))
+                            top_k=normalize_top_k(cmd.get("top_k")), focus_path=cmd.get("focus"))
     if op == "tune":
+        if cmd.get("from_cell"):
+            if ctx:
+                raise ValueError("tune from_cell reads context from its bound report; omit context")
+            return cmd_tune_cell(f)
         return cmd_tune(f, "json", ctx)
+    if op == "type-matchup":
+        return cmd_type_matchup(cmd.get("attack_type"), cmd.get("pokemon"),
+                                cmd.get("types"), cmd.get("ability"))
+    if op == "rules-facts":
+        return cmd_rules_facts()
+    if op == "speed-ladder":
+        return cmd_speed_ladder(cmd.get("species"), cmd.get("game_format") or cmd.get("format"),
+                                cmd.get("set"), cmd.get("conditions"), cmd.get("limit"),
+                                cmd.get("opponent_ranges", False), "json")
+    if op == "counters":
+        return cmd_counters(cmd.get("species"), cmd.get("game_format") or cmd.get("format"), cmd.get("top_n"), "json")
+    if op == "ko-scan":
+        return cmd_ko_scan(cmd.get("species"), cmd.get("game_format") or cmd.get("format"),
+                           cmd.get("top_n"), cmd.get("direction", "both"), "json")
+    if op == "scenario":
+        return cmd_scenario(f)
+    if op == "threshold":
+        return cmd_threshold(f)
     if op == "select":
         return cmd_select(f, "json", ctx, with_check=bool(cmd.get("with_check")),
-                          top_k=normalize_top_k(cmd.get("top_k")))
+                          top_k=normalize_top_k(cmd.get("top_k")), opponents_path=cmd.get("opponents"),
+                          conditions_path=cmd.get("conditions"))
     if op == "matchup":
         return cmd_matchup(f, "json", ctx, normalize_top_k(cmd.get("top_k")),
-                           view=cmd.get("view", "full"))
+                           view=cmd.get("view", "full"), as_checks=bool(cmd.get("as_checks")),
+                           opponents_path=cmd.get("opponents"), conditions_path=cmd.get("conditions"))
     if op == "fill":
-        return cmd_fill(f, "json", ctx)
+        return cmd_fill(f, "json", ctx, cmd.get("slot"))
     if op == "replace":
         return cmd_replace(f, "json", ctx)
     # L4 library / cache reads — no team file; the NL flows that chain build+review routinely need
@@ -1912,7 +2721,10 @@ def _dispatch_session_op(cmd: dict) -> int:
     if op == "oppmatrix":
         return cmd_oppmatrix(cmd.get("species"), cmd.get("game_format") or cmd.get("format"),
                              cmd.get("season"), cmd.get("vs"), "json",
-                             as_checks=bool(cmd.get("as_checks")))
+                             as_checks=bool(cmd.get("as_checks")), all_species=cmd.get("all") is True)
+    if op == "topmeta":
+        return cmd_topmeta(cmd.get("game_format") or cmd.get("format"), cmd.get("scope"),
+                           _as_list(cmd.get("species")))
     if op == "search":
         q = cmd.get("query")
         if isinstance(q, (dict, list)):
@@ -1928,58 +2740,99 @@ def _dispatch_session_op(cmd: dict) -> int:
     raise ValueError(f"unknown session op: {op!r}")
 
 
-def cmd_session(spec_path: str) -> int:
-    """Run several operators in ONE process under a persistent-worker session (perf ①+④).
+def cmd_session(spec_path: str | None, spec_json: str | None = None, fail_on_verdict: bool = False) -> int:
+    """Run operators in one process with inline inputs and prior full-result references.
 
     `spec_path` is a JSON list of commands, e.g.
       [{"op":"validate","file":"team.json","context":"ctx.json"},
        {"op":"matchup","file":"team.json","top_k":8,"view":"summary"}]
-    Output is a JSON list aligned to the input, each {op, rc, result} (or {op, error}). The sibling
-    skills (dex/meta/ncp) stay resident for the whole list, so their startup is paid once."""
+    File/inline JSON arrays and --spec stdin use the same dispatch. Each item emits {op,rc,result}
+    or {op,error}; failed/missing/forward references never dispatch a dependent operation.
+    Full results supply references and saved artifacts even when stdout projects summaries."""
     import io
+    import tempfile
     from contextlib import redirect_stdout
     try:
-        spec = json.loads(Path(spec_path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
+        if spec_json is not None:
+            text = sys.stdin.read() if spec_json == "-" else spec_json
+        elif spec_path and spec_path.lstrip().startswith(("[", "{")):
+            text = spec_path
+        elif spec_path:
+            text = Path(spec_path).read_text(encoding="utf-8")
+        else:
+            raise ValueError("session requires a spec.json file or --spec '<JSON array>' (use --spec - for stdin)")
+        spec = json.loads(text)
+    except (OSError, ValueError) as e:
         print(i18n.t('team_session_unreadable', e=e), file=sys.stderr)
         return 2
     if not isinstance(spec, list):
         print(i18n.t('team_session_not_list'), file=sys.stderr)
         return 2
     results: list[dict] = []
-    with worker.session():
-        for cmd in spec:
+    full_results: list[dict] = []
+    aggregate_out = output_path()
+    all_inputs = [cmd[field] for cmd in spec if isinstance(cmd, dict) for field in FILE_FIELDS
+                  if isinstance(cmd.get(field), str) and "\n" not in cmd[field]]
+    if spec_json is None and spec_path and not spec_path.lstrip().startswith(("[", "{")):
+        all_inputs.append(spec_path)
+    try:
+        protect_inputs(aggregate_out, all_inputs)
+    except ValueError as exc:
+        raise OutputError(str(exc)) from exc
+    destinations = {Path(aggregate_out).resolve()} if aggregate_out else set()
+    with worker.session(), tempfile.TemporaryDirectory(prefix="quark-team-session-") as directory:
+        for index, cmd in enumerate(spec):
             if not isinstance(cmd, dict):
-                results.append({"op": None,
-                                "error": i18n.Msg('team_session_cmd_not_object', type=type(cmd).__name__)})
+                error = {"op": None, "error": i18n.Msg('team_session_cmd_not_object', type=type(cmd).__name__)}
+                results.append(error)
+                full_results.append(error)
                 continue
             op = cmd.get("op")
             buf = io.StringIO()
             try:
-                with redirect_stdout(buf):
-                    rc = _dispatch_session_op(cmd)
+                resolved = resolve_refs(cmd, full_results)
+                out = resolved.pop("out", None)
+                if out is not None and (not isinstance(out, str) or not out):
+                    raise ValueError("session out must be a nonempty file path")
+                if out:
+                    destination = Path(out).resolve()
+                    if destination in destinations:
+                        raise ValueError("session output paths must be distinct, including the aggregate --out")
+                    destinations.add(destination)
+                protect_inputs(out, all_inputs + [resolved[f] for f in FILE_FIELDS
+                                                 if isinstance(resolved.get(f), str) and "\n" not in resolved[f]])
+                ready = materialize_inputs(resolved, Path(directory), index)
+                command = str(op).replace("_", "-")
+                view = ready.pop("view", None) if command in team_views.COMMANDS else ready.get("view")
+                limit = ready.pop("summary_limit", 6)
+                if view is not None and (command not in VIEW_COMMANDS or view not in {"full", "summary"}):
+                    raise ValueError("view must be full|summary on a supported operator; see schema")
+                if type(limit) is not int or limit < 1:
+                    raise ValueError("summary_limit must be a positive integer")
+                if command == "intake" and view == "summary" and not (ready.get("onboarding") or ready.get("next")):
+                    raise ValueError("intake summary requires onboarding:true or next:true")
+                if "summary_limit" in resolved and (command not in team_views.LIMITED_COMMANDS or view != "summary"):
+                    raise ValueError("summary_limit requires view:summary on a supported operator")
+                with output_options(out, command=command, view=view, limit=limit) as state, redirect_stdout(buf):
+                    rc = _dispatch_session_op(ready)
                 payload = buf.getvalue().strip()
-                results.append({"op": op, "rc": rc,
-                                "result": json.loads(payload) if payload else None})
+                displayed = json.loads(payload) if payload else None
+                results.append({"op": op, "rc": rc, "result": displayed})
+                full_results.append({"op": op, "rc": rc,
+                                     "result": state.full if state.emitted else displayed})
             except Exception as e:  # noqa: BLE001
-                results.append({"op": op, "error": str(e)})
-    print(json.dumps(i18n.jsonify(results), ensure_ascii=False, indent=2))
-    return 0
+                error = {"op": op, "error": str(e)}
+                results.append(error)
+                full_results.append(error)
+    emit_json(full_results, projector=lambda value, view: results)
+    failed = any(item.get("error") or item.get("rc", 1) != 0 or result_failed(item.get("result"))
+                 for item in full_results)
+    return 1 if fail_on_verdict and failed else 0
 
 
 def _canonicalize_repset_species(species: str, fmt: str) -> tuple[str, str | None, list[str]]:
-    """Resolve a raw CLI species (Chinese/Japanese alias, or a Mega display name) to the key the
-    real-team library actually stores, returning (resolved_name, item_filter, warnings).
-
-    The library stores dex-canonical English names, so without this an alias like '烈咬陆鲨' or a Mega
-    name silently returns []. Mega resolution is FORMAT-AWARE because library partitions encode Megas
-    either as the BASE species + stone item (query the base, filtered to required_item) or as the
-    direct `Mega X` species (the dex canonical name matches as-is).
-
-    Resolution goes through the dex `resolve` bridge, not plain batch: only resolve composes
-    Mega-affixed names in any language ('Mega喷火龙Y' -> Mega Charizard Y) — a batch lookup left
-    them unresolved, so a zh Mega filter silently matched nothing (external audit 2026-07-02)."""
-    warns: list[str] = []
+    """Resolve a requested battle form without broadening it to a storage convention."""
+    warns = []
     try:
         rec = resolve_names([species], "pokemon", fuzzy=True).get(species, {})
     except DexUnavailable:
@@ -1988,63 +2841,10 @@ def _canonicalize_repset_species(species: str, fmt: str) -> tuple[str, str | Non
     if not (rec.get("ok") and rec.get("canonical")):
         warns.append(i18n.Msg('team_dex_unresolved_library', species=repr(species)))
         return species, None, warns
-    if rec.get("is_mega"):
-        if fmt == "double":
-            # doubles store the Mega as base + stone; isolate it by the required item.
-            return rec.get("base_species") or rec["canonical"], rec.get("required_item"), warns
-        return rec["canonical"], None, warns     # singles store the 'Mega X' species directly
+    if rec.get("match_type") == "fuzzy":
+        warns.append(i18n.Msg('team_name_corrected', frm=species, to=rec["canonical"],
+                             distance=rec.get("distance"), score=rec.get("score")))
     return rec["canonical"], None, warns
-
-
-def _reconcile_anchor_forms(filter_members: list[dict], teams: list[dict]) -> tuple[list[dict], list]:
-    """Reconcile each resolved anchor filter against how the library ACTUALLY stores that mon, so a
-    query phrased in the wrong storage convention never yields a SILENT empty pool.
-
-    A Mega is stored under ONE convention per format: singles use the 'Mega X' form name, doubles the
-    base species + stone. A resolved anchor written the OTHER way — base 'Meganium' when the singles
-    library stores 'Mega Meganium' — matches ZERO teams by exact species string, with no signal (the
-    repset/frame/landscape trap that produced a FALSE meta_fallback while 2 real joint teams existed;
-    observed/search base-fold and never hit it). Per filter entry: if the resolved (species,item) has
-    no presence in `teams` but a base-equivalent stored form (base_key match) does —
-      * exactly one such form -> switch to it + warn (the unambiguous Meganium case);
-      * several (Mega X vs Y)  -> keep the query + warn WITH the options (never silently pick a form —
-                                  the X/Y precision this form-precise stack exists to keep);
-      * none                   -> leave it (a genuine data-gated empty stays honest).
-    Reuses libsearch.base_key (the same fold observed/search use) — one folding primitive, not a
-    parallel matcher. Returns (reconciled_filter_members, warnings). Empty/absent filter = no-op."""
-    warns: list = []
-    out: list[dict] = []
-    seen: set = set()
-    for f in filter_members:
-        sp, it = f.get("species"), f.get("item")
-        present = any(m.get("species") == sp and (not it or m.get("item") == it)
-                      for t in teams for m in t.get("pokemon", []))
-        if present or not sp:
-            new = f
-        else:
-            bk = libsearch.base_key(sp)
-            alt: dict[str, int] = {}                    # {stored form: # teams carrying it}
-            for t in teams:
-                for form in {m.get("species") for m in t.get("pokemon", [])
-                             if m.get("species") and m.get("species") != sp
-                             and libsearch.base_key(m.get("species")) == bk}:
-                    alt[form] = alt.get(form, 0) + 1
-            if len(alt) == 1:
-                new_sp, n = next(iter(alt.items()))
-                new = {"species": new_sp, "item": None}
-                warns.append(i18n.Msg('team_anchor_form_reconciled', query=sp, resolved=new_sp, n=n))
-            elif alt:
-                new = f
-                opts = ", ".join(f"{k} ({v})" for k, v in
-                                 sorted(alt.items(), key=lambda kv: (-kv[1], kv[0])))
-                warns.append(i18n.Msg('team_anchor_form_ambiguous', query=sp, options=opts))
-            else:
-                new = f
-        key = (new.get("species"), new.get("item"))
-        if key not in seen:                             # a reconcile can collapse two writings to one form
-            seen.add(key)
-            out.append(new)
-    return out, warns
 
 
 def _format_repset_md(species: str, fmt: str, archetypes: list[dict], resolved: str | None = None,
@@ -2089,6 +2889,8 @@ def _format_repset_md(species: str, fmt: str, archetypes: list[dict], resolved: 
                      f"({i18n.t('team_repset_share')} {a['share']}{cov_s}) · "
                      f"{i18n.t('confidence')} **{a['confidence']}**")
         lines.append(f"  - {i18n.t('team_repset_moves')}: {', '.join(a['moves']) or '—'}")
+        if note := query_identity.registration_note(a):
+            lines.append(f"  - {note}")
         sps = a.get("sps")
         if sps:
             # The spread's OWN sample stats: only some modal-set teams carry a spread, so its
@@ -2120,7 +2922,7 @@ def cmd_repset(species: str, fmt: str | None, season: str | None, max_clusters: 
     Facts only: every set carries cluster/coverage/share/sample/spread_origin/confidence and is NEVER a
     strength score. Format is REQUIRED (no single/double default — never mix metagames); omitted season
     reads the current rule pool (an empty library yields an empty result, not an error). The raw species is
-    canonicalized via dex first so aliases and Mega names resolve to the library's storage key."""
+    canonicalized via dex first, then matched against the actual battle-form library view."""
     if not fmt:
         print(i18n.t('team_repset_needs_format'), file=sys.stderr)
         return 2
@@ -2131,10 +2933,10 @@ def cmd_repset(species: str, fmt: str | None, season: str | None, max_clusters: 
     try:
         resolved, item_filter, name_warns = _canonicalize_repset_species(species, fmt)
         teams = _scope_teams(fmt, scope)
-        (fm,), rwarns = _reconcile_anchor_forms([{"species": resolved, "item": item_filter}], teams)
-        resolved, item_filter, name_warns = fm["species"], fm["item"], list(name_warns) + rwarns
+        teams, identities = query_identity.battle_view(teams, [{"species": resolved}])
         archetypes = repset.representative_sets_from_teams(
             resolved, fmt, teams, max_clusters=max_clusters, item=item_filter)
+        archetypes = canonical_spreads(archetypes)
     except Exception as e:
         print(i18n.t('team_repset_failed', e=e), file=sys.stderr)
         return 2
@@ -2158,6 +2960,7 @@ def cmd_repset(species: str, fmt: str | None, season: str | None, max_clusters: 
         "query": {"species": species, "resolved": resolved, "item_filter": item_filter,
                   "format": fmt, **_scope_query(scope, teams), "max_clusters": max_clusters},
         "archetypes": archetypes,
+        "identity_basis": "dex_battle_form", "identity_gaps": identities.gaps,
         "environment": stamp,
         "note": "real-team (item,ability)-clustered archetypes by prevalence; facts only, no strength "
                 "score; empty when the library is too thin (resolve via meta fallback).",
@@ -2165,23 +2968,134 @@ def cmd_repset(species: str, fmt: str | None, season: str | None, max_clusters: 
     if warns:
         payload["warnings"] = warns
     if out_fmt == "json":
-        print(json.dumps(i18n.jsonify(payload), ensure_ascii=False, indent=2))
+        emit_json(payload)
     else:
         print(_env_header(stamp, warns) + "\n")
         print(_format_repset_md(species, fmt, archetypes, resolved, item_filter))
     return 0
 
 
+def cmd_counters(species, game_format, top_n, fmt):
+    return _cmd_cached_facts("counters", counters, species, game_format, top_n, fmt)
+
+
+def cmd_ko_scan(species, game_format, top_n, direction, fmt):
+    return _cmd_cached_facts("ko-scan", ko_scan, species, game_format, top_n, fmt, direction=direction)
+
+
+def cmd_scenario(path):
+    try:
+        spec = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(spec, dict):
+            raise counters.QueryError("scenario input must be a JSON object", query="scenario")
+        fmt = spec.get("format")
+        if fmt not in ("single", "double"):
+            raise counters.QueryError("format must be single or double", code="unknown_format", query="format")
+        cache = oppcache.load_cache(fmt, environment.CURRENT_RULE)
+        if cache is None:
+            raise counters.QueryError("no current opponent cache for this format", code="not_found", query="scenario")
+        if (cache.get("built_for") or {}).get("rule") != environment.CURRENT_RULE:
+            raise oppcache.StaleCacheError("opponent cache does not match the current rule")
+        out = scenario.query(spec, cache)
+        out["environment"], warns = environment.resolve(data_rule=(cache.get("built_for") or {}).get("data_rule"),
+                                                         data_seasons=(cache.get("built_for") or {}).get("data_seasons"))
+        if warns:
+            out["warnings"] = warns
+        emit_json(out)
+        return 0
+    except counters.QueryError as exc:
+        emit_json(exc.result())
+        return 0 if exc.code == "not_found" else 1
+    except oppcache.StaleCacheError as exc:
+        emit_json({"ok": False, "query": "scenario", "error": {"code": "authority_mismatch", "message": str(exc)}})
+    except (OSError, json.JSONDecodeError) as exc:
+        emit_json({"ok": False, "query": "scenario", "error": {"code": "bad_input", "message": str(exc)}})
+    except (DexUnavailable, NcpUnavailable, NcpInputError) as exc:
+        emit_json({"ok": False, "query": "scenario", "error": {"code": "engine_unavailable", "message": str(exc)}})
+    return 1
+
+
+def cmd_threshold(path):
+    try:
+        spec = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(spec, dict):
+            raise counters.QueryError("threshold input must be a JSON object", query="threshold")
+        fmt = spec.get("format")
+        if fmt not in ("single", "double"):
+            raise counters.QueryError("format must be single or double", code="unknown_format", query="format")
+        cache = oppcache.load_cache(fmt, environment.CURRENT_RULE)
+        if cache is None:
+            raise counters.QueryError("no current opponent cache for this format", code="not_found", query="threshold")
+        if (cache.get("built_for") or {}).get("rule") != environment.CURRENT_RULE:
+            raise oppcache.StaleCacheError("opponent cache does not match the current rule")
+        out = threshold.query(spec, cache)
+        built = cache.get("built_for") or {}
+        out["environment"], warns = environment.resolve(data_rule=built.get("data_rule"),
+                                                         data_seasons=built.get("data_seasons"))
+        if warns:
+            out["warnings"] = warns
+        emit_json(out)
+        return 0
+    except counters.QueryError as exc:
+        emit_json(exc.result())
+        return 0 if exc.code == "not_found" else 1
+    except oppcache.StaleCacheError as exc:
+        emit_json({"ok": False, "query": "threshold", "error": {"code": "authority_mismatch", "message": str(exc)}})
+    except (OSError, json.JSONDecodeError) as exc:
+        emit_json({"ok": False, "query": "threshold", "error": {"code": "bad_input", "message": str(exc)}})
+    except (DexUnavailable, NcpUnavailable, NcpInputError) as exc:
+        emit_json({"ok": False, "query": "threshold", "error": {"code": "engine_unavailable", "message": str(exc)}})
+    return 1
+
+
+def _cmd_cached_facts(command, operator, species, game_format, top_n, fmt, **options):
+    try:
+        if command == "ko-scan" and options.get("direction") not in ko_scan.DIRECTIONS:
+            raise counters.QueryError("direction must be both, attacking or defending", query="direction")
+        canonical, top_n, flags = counters.prepare(species, game_format, top_n, resolve_names)
+        cache = oppcache.load_cache(game_format, environment.CURRENT_RULE)
+        if cache is None:
+            raise counters.QueryError("no opponent cache for the current rule and format", code="not_found", query=command)
+        if (cache.get("built_for") or {}).get("rule") != environment.CURRENT_RULE:
+            raise oppcache.StaleCacheError("opponent cache does not match the current rule")
+        out = operator.query(cache, canonical, game_format, top_n, **options)
+    except counters.QueryError as exc:
+        emit_json(exc.result())
+        return 0 if exc.code == "not_found" else 1
+    except oppcache.StaleCacheError as exc:
+        emit_json({"ok": False, "query": command, "error": {"code": "authority_mismatch", "message": str(exc)}})
+        return 1
+    except (DexUnavailable, OSError, ValueError, KeyError, TypeError) as exc:
+        emit_json({"ok": False, "query": command, "error": {"code": "engine_unavailable", "message": str(exc)}})
+        return 1
+    built = cache.get("built_for") or {}
+    out["environment"], warns = environment.resolve(data_rule=built.get("data_rule"), data_seasons=built.get("data_seasons"))
+    out["name_resolution"] = flags
+    if warns:
+        out["warnings"] = warns
+    _emit_name_flags(flags)
+    if fmt == "json":
+        emit_json(canonical_spreads(out))
+    else:
+        print(operator.format_md(out))
+    return 0
+
+
 def cmd_oppmatrix(species: str | None, fmt: str | None, season: str | None,
-                  vs: str | None, out_fmt: str, as_checks: bool = False) -> int:
+                  vs: str | None, out_fmt: str, as_checks: bool = False, all_species: bool = False) -> int:
     """Read the precomputed opponent observed-build matchup cache (M5 step 2). FACTS ONLY —
     a retained-build reference grid, every cell `low` confidence (reason=vs-observed-build); it is
     NOT your team (match a real team LIVE via `matchup`). Format is REQUIRED (metagames never mixed);
-    season defaults to the current base. With no `species` the whole matrix prints; with `species` only
+    season defaults to the current base. Explicit `--all` prints the whole matrix; `species` restricts
     that attacker's row; with `--vs` only the one ordered (attacker -> defender) cell. The cache is
     built by the dev pipeline (`update.py team-cache`); a missing file is reported, not an error."""
     if not fmt:
         print(i18n.t('team_oppmatrix_needs_format'), file=sys.stderr)
+        return 2
+    if (not species and not all_species) or (vs and not species) or (all_species and (species or vs)):
+        print("oppmatrix requires an attacker: team.py oppmatrix Garchomp --game-format double "
+              "[--vs Charizard]. Use --all explicitly for the full matrix (tens of MB); "
+              "do not combine --all with an attacker or --vs.", file=sys.stderr)
         return 2
     season = season or environment.CURRENT_SEASON
     # The cache is keyed by RULE. `--season` stays accepted (it is how users think about the
@@ -2198,10 +3112,10 @@ def cmd_oppmatrix(species: str | None, fmt: str | None, season: str | None,
     if cache is None:
         msg = i18n.Msg('team_oppmatrix_no_cache', rule=rule, fmt=fmt)
         if out_fmt == "json":
-            print(json.dumps(i18n.jsonify({"ok": False, "query": {"format": fmt, "season": season,
+            emit_json(canonical_spreads({"ok": False, "query": {"format": fmt, "season": season,
                                                                   "rule": rule},
                               "environment": stamp,
-                              "error": {"code": "no_cache", "message": msg}}), ensure_ascii=False, indent=2))
+                              "error": {"code": "no_cache", "message": msg}}))
         else:
             print(_env_header(stamp, env_warn) + "\n\n" + msg)
         return 0
@@ -2215,6 +3129,15 @@ def cmd_oppmatrix(species: str | None, fmt: str | None, season: str | None,
                                            if canonical_atk else None)
     dfd = canonical_dfd if as_checks else (_resolve_cache_key(cache, canonical_dfd)
                                            if canonical_dfd else None)
+    if not as_checks and ((canonical_atk and atk is None) or (canonical_dfd and dfd is None)):
+        missing = canonical_atk if atk is None else canonical_dfd
+        if out_fmt == "json":
+            emit_json({"ok": False, "query": "oppmatrix", "environment": stamp,
+                       **({"warnings": warns} if warns else {}),
+                       "error": {"code": "not_found", "message": f"no retained build for the exact battle form {missing}"}})
+        else:
+            print(f"no retained build for the exact battle form {missing}")
+        return 0
     if dfd and not atk:
         print(i18n.t('team_oppmatrix_vs_needs_attacker'), file=sys.stderr)
         return 2
@@ -2230,7 +3153,7 @@ def cmd_oppmatrix(species: str | None, fmt: str | None, season: str | None,
                        "built_for": cache.get("built_for"), "environment": stamp, **derived}
             if warns:
                 payload["warnings"] = warns
-            print(json.dumps(i18n.jsonify(payload), ensure_ascii=False, indent=2))
+            emit_json(canonical_spreads(payload))
         else:
             print(_env_header(stamp, warns) + "\n")
             blocks = []
@@ -2253,10 +3176,10 @@ def cmd_oppmatrix(species: str | None, fmt: str | None, season: str | None,
                    "confidence_reason": cache.get("confidence_reason"), "environment": stamp, **payload}
         if warns:
             payload["warnings"] = warns
-        print(json.dumps(i18n.jsonify(payload), ensure_ascii=False, indent=2))
+        emit_json(canonical_spreads(payload))
     else:
         print(_env_header(stamp, warns) + "\n")
-        print(oppcache.format_oppcache_md(cache, attacker=atk, defender=dfd))
+        print(oppcache.format_oppcache_md(canonical_spreads(cache), attacker=atk, defender=dfd))
     return 0
 
 
@@ -2266,11 +3189,15 @@ def _canonicalize_oppmatrix_name(name: str, warns: list[str]) -> str:
     if name.startswith("variant:"):
         return name
     try:
-        info = lookup_pokemon([name]).get(name, {})
+        info = lookup_pokemon([name], fuzzy=True).get(name, {})
     except DexUnavailable:
         warns.append(i18n.Msg('team_dex_down_query_cache'))
         return name
     if info.get("found"):
+        if info.get("resolution"):
+            rec = info["resolution"]
+            warns.append(i18n.Msg('team_name_corrected', frm=name, to=info.get("name"),
+                                 distance=rec.get("distance"), score=rec.get("score")))
         return info.get("name") or name
     warns.append(i18n.Msg('team_dex_unresolved_cache', name=repr(name)))
     return name
@@ -2289,16 +3216,16 @@ def _resolve_cache_key(cache: dict, canonical: str) -> str:
     if canonical is None:
         return canonical
     sets = cache.get("sets") or {}
-    if canonical in sets:                       # exact variant_id, or a legacy species-keyed cache
-        return canonical
-    modal = first = None
-    for key, s in sets.items():
-        s = s or {}
-        if s.get("species") == canonical or s.get("run_form") == canonical:
-            first = first or key
-            if s.get("is_modal"):
-                modal = modal or key
-    return modal or first or canonical
+    keys = oppcache.selector_keys(cache, canonical, list(sets))
+
+    def prevalence(key):
+        config = sets[key] or {}
+        def number(field):
+            value = config.get(field)
+            return value if isinstance(value, (int, float)) else -1
+        return bool(config.get("is_modal")), number("coverage"), number("variant_count")
+
+    return max(keys, key=prevalence, default=None)
 
 
 def _build_search_query(query_arg: str | None, species: list[str] | None, has_move: list[str] | None,
@@ -2397,9 +3324,9 @@ def cmd_search(query_arg, species, has_move, has_item, has_ability, fmt, season,
         # genuine bad REQUEST (§3): emit the uniform error on stdout, exit 1 — so an AI caller parsing the
         # JSON gets a `bad_input` code, not an unparseable traceback (matches cmd_show's error discipline).
         if out_fmt == "json":
-            print(json.dumps(i18n.jsonify({
+            emit_json({
                 "ok": False, "query": where if where is not None else (query_arg or "(flags)"),
-                "error": {"code": "bad_input", "message": str(e)}}), ensure_ascii=False, indent=2))
+                "error": {"code": "bad_input", "message": str(e)}})
         else:
             print(i18n.t('team_search_bad_input', e=e))
         return 1
@@ -2430,7 +3357,7 @@ def cmd_search(query_arg, species, has_move, has_item, has_ability, fmt, season,
                          season=resolved_season or resolved_rule, fmt=(fmt or "all"))]
     out["disclosure"] = _OBSERVED_TEAM_DISCLOSURE
     if out_fmt == "json":
-        print(json.dumps(i18n.jsonify(out), ensure_ascii=False, indent=2))
+        emit_json(out)
     else:
         header = (i18n.t('team_search_cross_season') if cross_season else _env_header(stamp, env_warn))
         print(header + "\n")
@@ -2446,16 +3373,15 @@ def cmd_show(team_id: str, fmt: str | None, season: str | None, out_fmt: str) ->
         # A graceful lookup-miss (§3): uniform error shape on stdout for json, localized prose for md,
         # exit 0 — matching `oppmatrix`'s no-cache path, not a hard failure.
         if out_fmt == "json":
-            print(json.dumps(i18n.jsonify({
+            emit_json({
                 "ok": False, "query": team_id,
-                "error": {"code": "not_found", "message": f"no team with id {team_id}"}}),
-                ensure_ascii=False, indent=2))
+                "error": {"code": "not_found", "message": f"no team with id {team_id}"}})
         else:
             print(i18n.t('team_show_not_found', id=team_id))
         return 0
     team["disclosure"] = _OBSERVED_TEAM_DISCLOSURE
     if out_fmt == "json":
-        print(json.dumps(i18n.jsonify(team), ensure_ascii=False, indent=2))
+        emit_json(team)
     else:
         perf = team.get("performance") or {}
         tag = f" ({perf.get('kind')} #{perf.get('placing')})" if perf.get("placing") else ""
@@ -2470,10 +3396,19 @@ def cmd_show(team_id: str, fmt: str | None, season: str | None, out_fmt: str) ->
 # can learn the team CLI's commands + shapes without reading source. Pinned by the team contract test.
 TEAM_SCHEMA = {
     "skill": "pokemon-champions-team",
-    "contract": "dev/conventions.md",
+    "contract": "references/schema.md",
     "input": "team-json or Showdown-text file; member: {species|name, ability, item, nature, "
              "spread:{hp,atk,def,spa,spd,spe}, moves:[str], tera, completeness}",
     "stat_keys": ["hp", "atk", "def", "spa", "spd", "spe"],
+    "output_artifacts": {
+        "out": "JSON commands accept --out <file>: atomically save the full result from the same computation; input paths are protected",
+        "views": "--view full|summary affects stdout only; review/try default summary, other supported commands default full. Summary reports cannot certify gates. Legacy --matchup-view/--slate-view accepted; conflicting flags refuse",
+        "summary_limit": "topmeta/oppmatrix --summary-limit N (positive, default 6) requires --view summary; caps displayed tables/panels in source order, never reranks population entries; projection.omitted discloses omissions",
+        "landscape_cache": "landscape caches structural facts by source content, implementation, query and live handover validity; --no-cache bypasses local reads/writes; cache:{status,fingerprint}; authority changes refuse mixed results",
+        "session": "per-op out saves the full operation result; session --out saves full result envelopes; stdout preserves selected per-op views",
+        "sp": "public configuration SP keys are hp/atk/def/spa/spd/spe; legacy short-key caches remain readable; original receipt-bound input objects stay unchanged",
+        "names": "authored species/item/ability/nature/moves normalize on a working copy through the public dex resolver; fuzzy corrections are disclosed; unresolved values stay for strict validation",
+    },
     "ruleset": (lambda rs: {
         "rule": rs.rule,
         "sp_per_stat_cap": rs.sp_per_stat_cap,
@@ -2488,35 +3423,142 @@ TEAM_SCHEMA = {
                  "never 252/508). item_clause=each held item at most once across the team; "
                  "species_clause=each base species at most once; team_size=[min,max] registered.",
     })(get_ruleset()),
+    "review_spec": {
+        "input": "review team.json [--context ctx.json] [--focus targets.json] [--top-k 8]; JSON only",
+        "readiness": "invalid|needs_input|unknown|ready|partial|calculation_unavailable; missing moves/ability/nature/SP or untrusted source sets never run CHECK or select",
+        "trial": "try team.json --changes changes.json; nonempty [{slot:zero-based int,set:{species?,item?,ability?,moves?,nature?,spread?}}]; distinct slots; whole fields replace; different species clears prior set; no source mutation",
+        "focus": "{opponents:[canonical-or-alias species],members:[species|zero-based slot]}; named opponents supplement top-K without fabricated ranks; absent/ambiguous members stay explicit; diagnose --focus uses the coordinated review contract (JSON, aspect all)",
+        "evidence": "full review.evidence_index:[{ref:{scope:team_floor|opponent_variant|member_cell,opponent,variant_id?,member_slot?},fact:complete qualified object}]; summary keeps refs only",
+        "claims": "review-claims claims.json accepts {report:full review,claims:[{claim:str,ref:exact reference,expect:complete fact}]}; verifies receipt and recomputes one battery for all three scopes; environment drift/missing evidence refuse",
+        "gates": "--fail-on-verdict returns 1 for non-ready reviews or failed claims; default returns the report for repair. Incomplete reports may feed try but cannot certify claims; try.before/after are independently sealed reviews. Does not replace UEP slate/answer-audit",
+    },
+    "battle_scope_spec": {
+        "commands": "review, try, select, matchup accept --opponents team.json and --conditions field.json; session uses inline opponents/conditions",
+        "opponents": "1..6 members; each is species-only (retained observed variants) or a complete legal set (stated configuration). Partial overrides refuse; omitted item or null means none on a complete set. Format must agree with the requested battle",
+        "conditions": "weather:rain|sun|sand|snow; terrain:electric|grassy|psychic|misty; names are case-insensitive and output uses Title Case; trick_room:boolean; unknown fields refuse",
+        "scope": "specified roster replaces usage top-K; stated set replaces observed variants, coverage=1 is scenario coverage, never usage. Damage is recalculated in both directions; trick_room changes acts_first, not numeric faster. Static equal-priority reference, not full battle simulation",
+    },
+    "fill_trial_spec": {
+        "input": "fill team.json --context need.json --slot N; N is an existing zero-based slot, removed before retrieval to release its species and item",
+        "output": "complete observed joint builds only; team_member, changes:[{slot,set}], structure_diff, legality and set_speed; missing/meta-filled SP and occupied/avoided items excluded; all need fields checked on that actual build",
+        "next": "choose explicit changes and pass to try; structural difference does not imply matchup improvement; no automatic selection or per-candidate matchup battery",
+    },
+    "tune_cell_spec": {
+        "input": "tune spec.json --from-cell; JSON only; spec:{report:full sealed review,ref:member_cell reference,goal,solve_for,probability?,compare_items?,maximize?}",
+        "binding": "recomputes the cell, binds actual battle forms and both exact configurations, move and weather/terrain/trick_room; solve_for must address the team member",
+        "output": "source_check, benchmark, bound_sets, threshold nature/item lanes and trials; unreachable lanes retain closest damage percentages. trials include explicit changes, legality and available; only available trials may be adopted, then try and UEP gates",
+    },
+    "scenario_spec": {
+        "input": "JSON object: attacker, defender, move, format:single|double; optional attacker_set, defender_set, field",
+        "set_overrides": "item, ability, nature, sps:{hp,atk,def,spa,spd,spe} (replaces whole spread), boosts:{atk,def,spa,spd,spe}, status",
+        "field": "weather:rain|sun|sand|snow; terrain:electric|grassy|psychic|misty; reflect, light_screen, aurora_veil, helping_hand booleans",
+        "source": "current-rule opponent cache; highest-coverage retained exact-form build or exact variant; no outside-cache fallback",
+        "legality": "strict Champions dex item, ability, nature, learnset and Mega stone; SP 0..32 per stat and <=66 total",
+        "output": "actual actors, source builds and overrides, applied field/conditions, rolls, HP, KO chance and caveats",
+    },
+    "threshold_spec": {
+        "input": "scenario fields plus solve_for, goal, probability, compare_items, maximize and speed_field",
+        "solve_for": sorted(threshold.SOLVE_FOR), "goal": sorted(threshold.GOALS),
+        "probability": ["guaranteed", "any"],
+        "compare_items": "up to three additional Champions items or null; each legal, same-form item gets a separate lane",
+        "maximize": "optional distinct SP stat on the solved side, e.g. attacker.spe after an OHKO requirement; not available with defender.bulk",
+        "budget": "every evaluated spread uses current rule per-stat and total SP caps, fixing other stats",
+        "result": "per nature/item lane: minimum feasible SP or null, nearest goal probability/speed when unreachable, optional maximizing allocation, full witness and qualifications",
+    },
+    "ko_scan_spec": {
+        "top_n": {"min": 1, "max": counters.TOP_N_MAX, "default": counters.TOP_N_DEFAULT,
+                  "meaning": "opponent usage-rank cutoff, not output count"},
+        "direction": {"choices": list(ko_scan.DIRECTIONS), "default": "both"},
+        "reference": "highest retained coverage of the exact battle form (variant-id breaks ties), or an exact variant selector; other builds disclosed",
+        "authority": "cached NCP ko_chance; never infer 2HKO from static damage buckets",
+        "groups": "hits 1/2, calculator_guaranteed and complete mechanical qualifications; separate concrete build rows",
+        "missing": "absent/unclassifiable evidence remains unknown, never proof of survival",
+        "views": "summary caps rows within every qualification group, preserving group metadata/counts; out saves full evidence",
+    },
+    "counters_spec": {
+        "top_n": {"min": 1, "max": counters.TOP_N_MAX, "default": counters.TOP_N_DEFAULT,
+                  "meaning": "candidate usage-rank cutoff, not output count"},
+        "identity": "exact run_form, or one exact variant id; never expand an ordinary form into a Mega",
+        "grade_authority": "opponent cache check_matrix, explained by existing checks.build_check; mismatch refuses",
+        "rows": "one candidate build, all retained target builds; full C2/C1 observed floor only when calculation_complete",
+        "conditional_rows": "floor remains C0; answers and blocked_by retain every named target variant and its evidence",
+        "incomplete_rows": "grade and observed_floor null; calculated_subset_floor never establishes a complete answer",
+        "coverage": "sample mass within coverage_basis; parent usage rank does not imply form usage",
+        "views": "summary limits whole rows in usage order; all answer/blocker qualifiers of retained rows survive; out saves full result",
+    },
+    "correction_spec": {
+        "schema": "team-corrections.v1",
+        "input": "team-json only; --context optional; strict dex alias normalization is reported, no fuzzy repairs",
+        "output": "input_fingerprint (original JSON content hash), applied:false, validation, name_normalization, suggestions, gaps, item_shortlist, environment",
+        "suggestions": "ability_illegal|mega_item|item_pool: options; ineffective_mega_stone: advisory options; item_clause: all holders with their options and minimum_changes",
+        "option": "{changes:[{path,member_index,field,from,present,to}],available,blocked_by_members?,blocked_by_avoid?}; paths address original pokemon/decklist slots; absent fields need add semantics, not replace",
+        "scope": "dex-verified alphabetical convenience item shortlist plus null (no held item); not exhaustive or ranked. Preserve explicit Mega/base+own-stone identity. Unknown facts leave gaps, never guessed options",
+        "adoption": "Host chooses and discloses changes on a copy, checks original hash and from/present preconditions, then reruns validate and affected UEP gates; options from separate issues/holders can conflict",
+        "exit": "0 for a successful suggestions query even if original validation is invalid; malformed inputs or unavailable dex return canonical error/exit 1",
+    },
+    "speed_ladder_spec": {
+        "set": {"optional_fields": sorted(speed_ladder.SET_FIELDS),
+                "spread": "canonical SP keys; legacy aliases accepted; omitted stats in an explicit spread are 0",
+                "item": "omitted from a stated set means no held item; a Mega defaults to its required stone",
+                "boosts": "spe only, integer -6..6", "status": sorted(contracts.MEMBER_STATUSES)},
+        "conditions": {"weather": "Sun|Rain|Sand|Snow|Harsh Sun|Heavy Rain|Strong Winds",
+                       "terrain": "Electric|Grassy|Psychic|Misty", "tailwind": "none|mine|opponents|both",
+                       "trickroom": "boolean; reverse order at equal priority, not speed values"},
+        "population": "current rule pool, all seasons/event partitions accepted by the existing reader; no raw-team limit",
+        "reference": "most frequent complete observed speed configuration per actual form; exact-form meta marginals only when absent",
+        "limit": "positive integer, default 20 ranked parent species; dex-declared forms may expand the output row count",
+        "shares": {"min_sample": speed_ladder.MIN_SAMPLE, "reliable": speed_ladder.RELIABLE,
+                   "usual": speed_ladder.USUAL, "usually_ties": speed_ladder.USUAL_TIE,
+                   "basis": "opponent reference against asked form's eligible observed sample; failures suppress labels"},
+    },
     "commands": {
+        "review": "<team.json> [--context ctx.json] [--focus targets.json] [--top-k 8] [--opponents roster.json --conditions field.json] [--view summary|full --out full.json] -> completeness-gated validate/diagnose/matchup/select from one battery; see review_spec and battle_scope_spec",
+        "try": "<team.json> --changes changes.json [review options] -> explicit copy, before/after full reviews, replace structural differences and qualified opponent floors; see review_spec",
+        "review-claims": "<claims.json> [--fail-on-verdict] -> verify a full review and recompute its scoped claims; see review_spec",
+        "localize": "<team.json> -> official trilingual member/move/item/ability/nature labels from dex; unresolved inputs remain explicit; also available in session",
+        "type-matchup": "[--attack-type TYPE] [--pokemon NAME | --types TYPE [TYPE]] [--ability NAME] -> JSON type effectiveness with defender ability modifiers; ambiguous natural abilities remain conditional",
+        "rules-facts": "-> JSON current reviewed registration rules and pick sizes from the meta authority",
+        "threshold": "<threshold.json> -> legal SP cliffs for OHKO/2HKO/survival/outspeed; nature and item lanes, closest feasible result, optional maximize",
+        "scenario": "<scenario.json> -> exact-form retained common builds plus stated set/field overrides; current-rule cache, strict dex legality and NCP damage",
+        "ko-scan": "<species|variant-id> --game-format single|double [--top-n 30] [--direction both|attacking|defending] [--view summary --out full.json] -> cached exact-form OHKO/2HKO reference with qualification groups and explicit missing evidence",
+        "counters": "<species|variant-id> --game-format single|double [--top-n 30] [--view summary --summary-limit 6 --out full.json] -> reverse CHECK by individual candidate build; exact target form, complete C2/C1 floors, conditional C0 answers/blockers and missing evidence; usage order, no score",
+        "speed-ladder": "<species> --game-format single|double [--set JSON-or-file] [--conditions JSON-or-file] [--limit N] [--opponent-ranges] -> exact-form reference speeds and complete rule-pool observed distributions; one calculator batch; no team cap",
         "code": "<public-code> [--cache-only] -> {schema:team-code.v1,code,team,cache}; explicit bounded network lookup, unknown format/season/rule stay null",
         "code-status": "-> private operator configuration/dependency/circuit status; never contains identity or tokens",
-        "parse": "<file> -> {schema_version, format, season, rule, pokemon:[member], provenance}",
+        "parse": "<file> [--game-format single|double] -> {schema_version, format, season, rule, pokemon:[member], provenance}; format conflicts refuse",
         "validate": "<file> [--context] -> {status: valid|invalid|unknown, valid, confidence, errors, warnings}",
+        "suggest-fixes": "<team.json> [--context ctx.json] -> JSON team-corrections.v1: original validation, strict alias normalization, explicit ability/Mega/item choices and every Item Clause holder. Never applies edits; choose on a copy and rerun validate/UEP. See correction_spec.",
         "diagnose": "<file> [--aspect defense|offense|speed|roles|all] [--context] "
                     f"[--with-check [--top-k N ({MATCHUP_TOP_K_MIN}..{MATCHUP_TOP_K_MAX})]] -> per-aspect "
                     "objective signals + evidence. offense carries luck_lines (the team's <100%-accuracy moves, "
                     "dex accuracy); context variance_tolerance=averse FLAGS them (surfaced either way, never a "
                     "score). --with-check adds ncp-grounded check_coverage as a complement to the type-layer "
                     "defense (default off keeps diagnose ncp-free)",
-        "select": f"<file> [--with-check [--top-k N ({MATCHUP_TOP_K_MIN}..{MATCHUP_TOP_K_MAX})]] -> "
+        "select": f"<file> [--with-check [--top-k N ({MATCHUP_TOP_K_MIN}..{MATCHUP_TOP_K_MAX})]] [--opponents roster.json --conditions field.json] -> "
                    "6->3 (single) / ->4 (double) objective facts "
                    "(no strength score); --with-check adds per-lineup CHECK coverage vs meta top-K "
                    "(opt-in, ncp-grounded, per-opponent facts — lineups NOT ranked). Each lineup "
                    "enumerates zero-or-one active Mega states; mega_routes counts each registered "
-                   "option's exclusive/shared lineup availability without selecting a preferred route",
-        "matchup": "<file> [--top-k N] [--as-checks] [--matchup-view full|summary] -> 1..N actual "
+                   "option's exclusive/shared lineup availability without selecting a preferred route; see battle_scope_spec",
+        "matchup": "<file> [--top-k N] [--opponents roster.json --conditions field.json] [--as-checks] [--matchup-view full|summary] -> 1..N actual "
                    "member configurations x meta top-K speed/type/damage battery; top_k is caller-selected "
                    f"within {MATCHUP_TOP_K_MIN}..{MATCHUP_TOP_K_MAX} (default {MATCHUP_TOP_K_DEFAULT}). "
                    "each cell carries a derived CHECK grade (C2/C1/C0), + a check_coverage roll-up "
                    "(holes = opponents with no safe switch-in check). JSON full keeps the complete evidence "
                    "surface; summary keeps stable source/target/cell ids + KO/incoming/speed/atomic checks. "
-                   "--as-checks renders the map",
-        "tune": "<file> --context <benchmarks.json> -> SP cliff cards (multi-view, never a single best)",
+                   "--as-checks renders the map; see battle_scope_spec",
+        "tune": "<file> --context <benchmarks.json> -> SP cliff cards (multi-view, never a single best); "
+                "or <cell-spec.json> --from-cell -> verified member-cell threshold lanes and explicit try edits",
         "fill": "<file> --context <need.json> -> candidate pool for a structured gap "
-                "(need: resist/offense_type/role/min_speed/coverage_move_type) in multiple explicit views "
+                "(need: resist/offense_type/role/min_speed/coverage_move_type/answer) in multiple explicit views "
                 "(usage/off_meta/co_occurrence/tournament_sample/owned; no score). context meta_conformance "
-                "picks the DEFAULT order (proven/unset=common-first, off_meta=rare-first) — a VIEW, never a score",
+                "picks the DEFAULT order (proven/unset=common-first, off_meta=rare-first). Off-meta also includes "
+                "real-team-backed species outside the usage pool, with sample/witness ids. answer:name|[name] "
+                "intersects counters on one exact variant and returns complete observed builds with team_member "
+                "and answer_facts. Meta SP fallbacks/unknowns are omitted, occupied/avoided items excluded. "
+                "Read answer_scope for retained target builds and static CHECK qualifications. "
+                "--slot N releases the existing zero-based slot and returns complete legal replacement builds "
+                "with changes for try, concrete Speed and neutral structural differences; see fill_trial_spec.",
         "replace": "<file> --context <{replace:{member,with}}> -> objective before/after diff of a "
                    "swap (defense/offense/speed/roles); never a better/worse verdict",
         "repset": "<species> --game-format single|double [--season] [--max-clusters N] -> up to N "
@@ -2524,12 +3566,14 @@ TEAM_SCHEMA = {
                   "sample/spread_origin/confidence; facts only, no strength score; [] when too thin. "
                   "Default reads the current rule pool across its eligible season partitions; "
                   "--season is an exact season partition query.",
-        "oppmatrix": "[species] --game-format single|double [--vs <defender>] [--season] [--as-checks] -> "
+        "oppmatrix": "<species> (or --species <species>, or explicit --all) --game-format single|double [--vs <defender>] [--season] [--as-checks] -> "
                      "precomputed observed-build matchup matrix over meta top-K (offense band/KO + speed "
                      "line per ordered pair); attacker rows only for real-team-backed species; EVERY cell "
                      "low confidence (vs-observed-build); a reference grid, NOT your team (match live). "
+                     "Name selectors use exact cached run_form, with modal selection within that form; "
+                     "exact variant ids select their own builds. Missing raw form returns not_found. "
                      "--as-checks derives the C2/C1/C0 grid (attacker x attacker reference view)",
-        "topmeta": "--game-format single|double [--scope season|rule] [--species A B] -> JSON only. Top "
+        "topmeta": "--game-format single|double [--scope season|rule|high] [--species A B] -> JSON only. Top "
                    "Meta: the real-team library counted on the in-game metagame's fields (species "
                    "presence, moves/items/abilities/natures/spreads, partners) over dedup units (one "
                    "player's distinct composition / distinct build), joined with the in-game snapshot. "
@@ -2546,7 +3590,9 @@ TEAM_SCHEMA = {
                   "'<json>' OR convenience flags (--species A B / --has-move / --has-item / --has-ability). "
                   "Query = list of member SLOTS; each slot is a conjunction {species?, move(s)?, item?, "
                   "ability?, nature?} and every slot must match a DISTINCT member. Values are dex-resolved "
-                  "(Mega-compose + nicknames + fuzzy; species matched BASE-normalized so 耿鬼≡Mega Gengar). "
+                  "(Mega-compose + nicknames + fuzzy); exact battle forms match, including base+own-stone "
+                  "equivalence to its Mega. Ordinary/X/Y/Z forms remain distinct. Unknown leaves retain "
+                  "unknown truth under NOT. name_resolution and identity_gaps disclose corrections/gaps. "
                   "-> {game_format, season, slots, unresolved_conditions, scanned, match_count, "
                   "teams:[{id, pokemon:[member], performance, fetched_at}] | (with --collapse) groups:"
                   "[{species_set, variant_count, variants:[team]}], environment, disclosure}. Facts "
@@ -2572,7 +3618,10 @@ TEAM_SCHEMA = {
                          "fingerprint — proves the audit ran, not that gaps were acted on). Facts only: "
                          "it never decides ask-vs-default for you.",
         "frame": "--game-format single|double --context <ctx.json> --audit-receipt <context-audit "
-                 "output.json> -> UEP P4.5 assembly front-door (JSON+md). Consumes context-audit's "
+                 "output.json> [--draw N --seed INT --seen-teams teams.json] -> UEP P4.5 assembly front-door "
+                 "(JSON+md). draw adds a seeded weighted sample of frame ids with low core overlap; it leaves "
+                 "the full skeleton array and receipt intact. Shown cores use Species Clause grouping; "
+                 "repeat_unavoidable discloses fallback when every remaining core repeats. Consumes context-audit's "
                  "audit_receipt (chain link — recomputed, mismatch refuses) and emits DATA-GROUNDED "
                  "skeletons you assemble ON (so [assemble] is not built from the training prior): "
                  "each skeleton = {frame_id (mechanical hash), group_signature{axis,key} (the Tier-1 "
@@ -2600,6 +3649,16 @@ TEAM_SCHEMA = {
                  "says the same for the run: ground every member through repset/search and disclose "
                  "that the frame supplied no roster. Emits frame_receipt the slate binds against. "
                  "FACTS only, no strength score, no best-archetype.",
+        "slate-init": "<assembly.json> --context context.json --audit-receipt audit.json "
+                      "[--frame-output full-frame.json] [--intake-output last-intake-step.json] -> directly usable "
+                      "slate {context,audit_receipt,teams,frame_bindings?,onboarding,assembly}. "
+                      "Input {candidates:[{team:<unchanged team-json> OR members:[member-json|{from_frame:<exact "
+                      "battle-form species>}], frame_id?, off_meta?, deviations?, mega_deviation?, off_meta_build?}]}. "
+                      "Explicit frame references copy that frame's joint primary set into canonical team-json; "
+                      "missing fields remain null, never defaulted. Frame/audit receipts are checked. The helper "
+                      "neither selects candidates nor acknowledges deviations. Intake carries explicit answered ids "
+                      "only for the matching final context; unresolved dimensions remain incomplete. "
+                      "Evaluate this output with the same --frame-output; assembly itself is not certification.",
         "slate-evaluate": f"<slate.json> [--top-k N ({MATCHUP_TOP_K_MIN}..{MATCHUP_TOP_K_MAX})] [--slate-view full|summary] "
                           "[--frame-output <saved frame output.json>] -> UEP "
                           "P5 candidate fact-matrix gate (JSON only, AI-facing). Input {context:"
@@ -2643,8 +3702,9 @@ TEAM_SCHEMA = {
                       "pause:true, pause unless the slate context explicitly set direct_final:true "
                        "or skip_checkpoint:true. Slate survivors already carry neutral 6-pick-N "
                        "selection facts; checkpoint does not pause merely because multiple Mega "
-                       "options are registered, but it does pause when the candidate set misses the "
-                       "bound frame's observed modal Mega-registration lane.",
+                       "options are registered. Candidate/confidence/provenance choices only pause "
+                       "when checkpoint_required:true; missing benchmarks are not a question. It "
+                       "still pauses when the candidate set misses the bound frame's observed modal Mega-registration lane.",
         "answer-audit": "<draft.json> --slate <slate.json> --slate-output <saved slate-evaluate "
                         "output.json> -> UEP P6 back gate (JSON only, AI-facing). Refuses (exit 2) on "
                         "a broken receipt chain: the draft's slate_receipt must equal the saved "
@@ -2664,12 +3724,15 @@ TEAM_SCHEMA = {
                         "construction the battery used — fabricated numbers are violations, sibling "
                         "outages are disclosed notes). See context_specs.draft_spec.",
         "draft-init": "--slate <slate.json> --slate-output <saved slate-evaluate output.json> "
+                      "Rebinds full saved facts, carries slate-init onboarding without guessing answers, "
+                      "and supplies optional claim_candidates (exact variant and numeric expect; not auto-added "
+                      "to draft.claims). "
                       "[--recommended I J] -> JSON skeleton for answer-audit: copies environment, "
                       "slate_receipt, selected survivor teams, convergence_rationale stubs for every "
                       "survivor, tuning_summary stub, and claim/deviation placeholders. Form helper "
                       "only; the AI must fill the substantive empty fields before answer-audit.",
         "landscape": "--game-format single|double [--season] [--context] [--species A B] [--limit N] "
-                     "[--aspects offense defense] "
+                     "[--aspects offense defense] [--scope high] "
                      "-> UEP P4 structural distributions over the real-team library, aggregated "
                      "through the shared profile vocabulary: speed_control_modes / structural_signals "
                      "/ role_composition_norms (count+share+sample) + observed_cores (co-occurrence "
@@ -2680,17 +3743,27 @@ TEAM_SCHEMA = {
                      "an adequacy target. meta_conformance=off_meta flips the core view rare-first "
                      f"(an ordering, never a score). thin flag below {landscape.THIN_BAR} teams. "
                      "Counts only — no best core, no recommendation. Default reads the current rule pool; "
-                     "--season reads an exact season partition.",
+                     "--season reads an exact season partition. --scope high selects native current-rule "
+                     "published records by Top Meta performance criteria; population discloses record "
+                     "counts and exclusions, not Top Meta identity units. No season/other-rule override.",
         "observed": "--game-format single|double [--season] [--context <build-context>] [--species A B] "
-                    "[--order overlap|tier|recent] [--limit N] -> UEP P7 observed-team retrieval (JSON "
-                    "only, consumer: ai-facing-evidence). FACT rows over the real-team library: explicit "
-                    "constraint overlap (locked/prefer/--species hit counts vs the context, Mega/base-"
-                    "insensitive; base-folded like search — Mega X ≡ Y ≡ base; landscape's core filter is "
-                    "item-aware instead), evidence_tier (provenance-kind ladder tournament > community > "
+                    "[--order overlap|tier|recent|diversity] [--limit N] [--seed INT --seen-teams teams.json] "
+                    "-> UEP P7 observed-team retrieval (JSON "
+                    "only, consumer: ai-facing-evidence). diversity keeps constraint overlap first, then "
+                    "minimizes maximum actual-form member overlap with shown/selected teams; already-shown "
+                    "and duplicate rosters excluded. Seed randomizes only ties, otherwise tier/recency/id "
+                    "break ties. seen-teams takes one team-json, an ordered list, or {teams:[...]}. "
+                    "FACT rows over the real-team library: explicit "
+                    "constraint overlap (locked/prefer/--species hit counts by exact dex battle form, "
+                    "base+own-stone equivalent to its Mega), evidence_tier (provenance-kind ladder tournament > community > "
                     "ladder + declared sink unknown — categories, never a score), raw performance tags, "
                     "owned_coverage, recency, and "
                     "structural_signals (profile vocabulary) for the returned page. avoid_species excludes "
-                    "mechanically at BOTH levels — species (base-folded) and exact held item (avoid_items) — and is counted; the thin flag measures the POST-avoid pool; owned_only is NOT a filter here and is echoed under constraints_not_enforced (read owned_coverage); ordering keys are "
+                    "mechanically by exact battle form and exact held item (avoid_items). Unknown forms "
+                    "cannot prove an avoid constraint; excluded_by_identity counts those rows separately. "
+                    "owned_coverage is an inventory fact with base-species grouping; owned_only is NOT a "
+                    "filter here and is echoed under constraints_not_enforced. The thin flag measures "
+                    "the post-exclusion pool; ordering keys are "
                     "overlap/tier/recent ONLY. Retrieval, not "
                     "generation: rows are stored teams (fetch one via show <id>); decompose into facts to "
                     "build YOUR OWN team — never echo a row to the user as the answer. Default reads the "
@@ -2711,7 +3784,7 @@ TEAM_SCHEMA = {
                   "at a time — loop with --answered <resolved ids so far> (holds asked ids AND dims the "
                   "request resolved via draft/answer-shape; unknown ids -> rc2) until done:true. "
                   "--game-format narrows format-tagged options (no Tailwind in singles, no hazards).",
-        "session": "<spec.json> -> batched ops in one process",
+        "session": "<spec.json> OR --spec <inline JSON array|-> [--out full.json] [--fail-on-verdict] -> batched ops in one process; inline file/context/receipt values and backward {$ref:'/0/result/...'} references use complete prior results even when stdout is summary",
         "vocab": "-> queryable vocabulary + field-consumption surface (no file): {roles (need.role "
                   "taxonomy), exclude_tactics, style_lean, meta_conformance, mega_posture, variance_tolerance, "
                  "field_status (which build-context field is mechanically consumed by what — the single "
@@ -2735,11 +3808,13 @@ TEAM_SCHEMA = {
                           "off_meta disables observed-registration deviation gates), "
                          "style_lean:offense|balance|defense (posture lens, AI-side), "
                          "variance_tolerance:averse|tolerant (averse flags diagnose luck_lines), need:<need>, "
-                         "benchmarks:[<benchmark>], replace:<replace>, direct_final:bool, "
-                         "skip_checkpoint:bool, frame_required:bool}. " + context_audit.field_status_note()
+                         "benchmarks:[<benchmark>], goals:[{kind:answer|include,species:<Pokemon>}], replace:<replace>, direct_final:bool, "
+                         "skip_checkpoint:bool, checkpoint_required:bool (user-requested intermediate choice), frame_required:bool}. " + context_audit.field_status_note()
                          + " Enumerated vocab (roles/tactics/knobs) + field_status: run `vocab`.",
         "need": "fill <team.json> --context {\"need\": {resist:[Type], offense_type:[Type], role:[str], "
-                "min_speed:int, coverage_move_type:[Type]}} — the diagnosed gap; every key optional, str or [str].",
+                "min_speed:int, coverage_move_type:[Type], answer:name|[name]}} — criteria combine with AND. "
+                "answer uses same-variant static CHECK facts against all retained target builds; build-level "
+                "addresses carry actual ability/move matches; min_speed remains a theoretical species ceiling.",
         "benchmark": "tune --context {\"benchmarks\": [{member:<species-in-team>, "
                      "kind:survive|outspeed|ohko|2hko, vs:<species> (or a raw Speed int for outspeed), "
                      "move:<name> (required for survive/ohko/2hko), conditions:{weather,terrain,"
@@ -2797,20 +3872,27 @@ TEAM_SCHEMA = {
                       "— species EXACTLY as canonicalized in the slate output; copy damage ids "
                       "verbatim (the audit re-binds their member/modal direction from the saved "
                       "output); the spd opponent side is ALWAYS the modal set, "
-                      "expect:{ko_guaranteed|ko_possible|min_percent|max_percent} or "
-                      "{faster|member|opponent}, team?:int (required when the same "
-                      "evidence coordinates match multiple recommended teams)}], "
+                      "expect:object (nonempty subset) {ko_guaranteed:number|null,ko_possible:number|null,min_percent:number,max_percent:number} or "
+                      "{faster:member|opponent|tie,member:number,opponent:number}, team?:int (required when the same "
+                      "evidence coordinates match multiple recommended teams), direction?:we|them, "
+                      "opponent_variant?:str, opponent_is_modal?:bool (damage qualifiers must match saved cells; "
+                      "ambiguous coordinates require exact build/direction)}], "
+                      "exploration?:{reason:str} (required for over-half/unknown bound core overlap), "
+                      "team_claims?:[{claim:str,evidence_ref:<saved candidate by_opponent JSON Pointer>,expect:<complete row>}], "
+                      "text_check?:{text:str,lang:zh|ja|en} (optional bounded official-entity, member-name, percentage and script checks), "
                       "slate_receipt:<from the saved slate-evaluate output>}.",
         "session_spec": "session <spec.json> = [{op, ...}] -> [{op, rc, result}]. Team ops "
-                        "(parse|validate|diagnose|tune|select|matchup|fill|replace|context-audit): "
+                        "(parse|validate|suggest-fixes|diagnose|tune|select|matchup|fill|replace|context-audit): "
                         "file:<team> (optional for context-audit), "
                         "context:<context-file>, aspect?, top_k?, with_check? (diagnose/select). "
                         "L4 library/cache reads (no team file): "
-                        "repset{species, game_format, season?, max_clusters?}, oppmatrix{species?, "
-                        "game_format, season?, vs?, as_checks?}, search{query|species|has_move|has_item|has_ability, "
+                        "parse{file,game_format?}, repset{species, game_format, season?, max_clusters?}, oppmatrix{species (or all:true), "
+                        "game_format, season?, vs?, as_checks?}, topmeta{game_format,scope?:season|rule|high,species?}, search{query|species|has_move|has_item|has_ability, "
                         "game_format, season?, limit?, collapse?}, show{team_id, game_format?, season?}, "
-                        "landscape{game_format, season?, context?, species?, max_cores?, aspects?}, "
-                        "observed{game_format, season?, context?, species?, order?, limit?}, "
+                        "landscape{game_format, season?, context?, species?, max_cores?, aspects?, no_cache?:bool, scope?:high (native current-rule record sample, not Top Meta identity units)}, "
+                        "observed{game_format, season?, context?, species?, order?, limit?, seed?, seen_teams?}, "
+                        "frame{game_format,context,audit_receipt,season?,draw?,seed?,seen_teams?}; "
+                        "seen_teams is a file field accepting inline JSON/references. "
                         "intake{game_format?, onboarding?:bool, next?:bool, context?:<ctx.json>, "
                         "answered?:[base-question id...]}, vocab{}, "
                         f"slate-evaluate{{file:<slate.json>, top_k?, view?:full|summary (summary = compact panel projection)}}, matchup top_k range="
@@ -2819,7 +3901,17 @@ TEAM_SCHEMA = {
                         "(build flows should include this op after slate-evaluate; inspect pause), "
                         "answer-audit{file:<draft.json>, slate:<slate.json>, slate_output:<saved output>}, "
                         "draft-init{slate:<slate.json>, slate_output:<saved output>, recommended?:[int]}. "
-                        "game_format accepts `format` too; search `query` may be an inline object/list.",
+                        "slate-init{file:<assembly.json>, context, audit_receipt, frame_output?, intake_output?} "
+                        "emits a directly usable slate; all these file fields also accept inline JSON/references. "
+                        "game_format accepts `format` too; search `query` may be an inline object/list. "
+                        "context-audit/slate-evaluate/checkpoint/answer-audit may set fail_on_verdict:true "
+                        "(rc=1 for negative verdict, rc=2 for unusable input). File/context/receipt values "
+                        "may be inline JSON; {$ref:'/0/result/...'} is a backward-only JSON Pointer into full prior envelopes. "
+                        "Missing/failed/forward dependencies refuse the dependent op; independent ops continue. "
+                        "Any op may set out:<file> to save full JSON. Session --out saves the full result array; "
+                        "diagnose/select/oppmatrix/topmeta/frame/tune/intake/matchup/slate-evaluate accept view:full|summary; "
+                        "topmeta/oppmatrix additionally accept summary_limit:N with view:summary. "
+                        "--fail-on-verdict returns 1 if any op failed, refused or returned pass:false. Unknown op fields refuse.",
     },
     "note": "member identity accepts `name` or the Showdown `species` (normalized to species). validate's "
             "three-state result is a domain result, NOT the uniform error shape (conventions §3).",
@@ -2848,7 +3940,7 @@ def cmd_vocab(fmt: str) -> int:
     field_status (which field is mechanically consumed by what). Facts only; no team/context needed."""
     v = context_audit.vocab()
     if fmt == "json":
-        print(json.dumps(i18n.jsonify(v), ensure_ascii=False, indent=2))
+        emit_json(v)
         return 0
     lines = [f"# {i18n.t('vocab_title')}", "", f"## {i18n.t('vocab_roles')} (need.role)"]
     lines += [f"- `{k}` — {label}" for k, label in v["roles"].items()]
@@ -2863,20 +3955,84 @@ def cmd_vocab(fmt: str) -> int:
     return 0
 
 
+COMMAND_OPTIONS = {
+    "review": {"context", "top_k", "focus", "opponents", "conditions", "view", "fail_on_verdict"},
+    "try": {"context", "top_k", "focus", "opponents", "conditions", "changes", "view", "fail_on_verdict"},
+    "review-claims": {"fail_on_verdict"},
+    "type-matchup": {"attack_type", "pokemon", "types", "ability"},
+    "rules-facts": set(),
+    "threshold": set(),
+    "scenario": set(),
+    "ko-scan": {"game_format", "top_n", "direction"},
+    "counters": {"game_format", "top_n"},
+    "speed-ladder": {"game_format", "set", "conditions", "limit", "opponent_ranges"},
+    "parse": {"game_format"}, "validate": {"context"}, "suggest-fixes": {"context"},
+    "diagnose": {"context", "aspect", "with_check", "top_k", "focus"},
+    "tune": {"context", "from_cell"}, "select": {"context", "with_check", "top_k", "opponents", "conditions"},
+    "matchup": {"context", "top_k", "as_checks", "matchup_view", "opponents", "conditions"},
+    "fill": {"context", "slot"}, "replace": {"context"},
+    "context-audit": {"context", "fail_on_verdict"},
+    "frame": {"context", "game_format", "season", "audit_receipt", "draw", "seed", "seen_teams"},
+    "slate-evaluate": {"top_k", "frame_output", "slate_view", "fail_on_verdict"},
+    "slate-init": {"context", "audit_receipt", "frame_output", "intake_output"},
+    "checkpoint": {"slate", "fail_on_verdict"},
+    "answer-audit": {"slate", "slate_output", "fail_on_verdict"},
+    "draft-init": {"slate", "slate_output", "recommended"},
+    "landscape": {"context", "game_format", "season", "species", "limit", "aspects", "no_cache", "scope"},
+    "observed": {"context", "game_format", "season", "species", "limit", "order", "seed", "seen_teams"},
+    "intake": {"context", "game_format", "onboarding", "next_batch", "answered"},
+    "repset": {"game_format", "season", "max_clusters"},
+    "oppmatrix": {"game_format", "season", "species", "vs", "as_checks", "all"},
+    "topmeta": {"game_format", "scope", "species"},
+    "search": {"query", "where", "species", "has_move", "has_item", "has_ability",
+               "game_format", "season", "limit", "collapse"},
+    "show": {"game_format", "season"}, "session": {"spec", "fail_on_verdict"}, "schema": set(), "vocab": set(),
+    "code": {"cache_only"}, "code-status": set(), "localize": set(),
+}
+VIEW_COMMANDS = team_views.COMMANDS | {"matchup", "slate-evaluate", "review", "try"}
+for _command in VIEW_COMMANDS:
+    COMMAND_OPTIONS[_command].add("view")
+for _command in team_views.LIMITED_COMMANDS:
+    COMMAND_OPTIONS[_command].add("summary_limit")
+
+
 def main() -> int:
-    p = argparse.ArgumentParser(description=i18n.t('team_cli_description'))
+    p = argparse.ArgumentParser(description=i18n.t('team_cli_description'), allow_abbrev=False)
     p.add_argument("--lang", choices=list(i18n.LANGS),
                    help="output language for md labels/errors (default: env POKEMON_CHAMPIONS_LANG or en)")
     p.add_argument("command",
-                   choices=["parse", "validate", "diagnose", "tune", "select", "matchup", "fill", "replace",
-                            "context-audit", "frame", "slate-evaluate", "checkpoint", "answer-audit", "draft-init", "landscape", "observed",
+                 choices=["review", "try", "review-claims", "localize", "parse", "validate", "suggest-fixes", "diagnose", "tune", "type-matchup", "rules-facts", "speed-ladder", "counters", "ko-scan", "scenario", "threshold", "select", "matchup", "fill", "replace",
+                            "context-audit", "frame", "slate-init", "slate-evaluate", "checkpoint", "answer-audit", "draft-init", "landscape", "observed",
                             "intake", "repset", "oppmatrix", "topmeta", "search", "show", "session", "schema", "vocab", "code", "code-status"])
     p.add_argument("--cache-only", action="store_true", help="code: use a fresh shared cache result without a network request")
+    p.add_argument("--all", action="store_true", help="oppmatrix: explicitly request the entire large matrix")
+    p.add_argument("--fail-on-verdict", action="store_true",
+                   help="gates: return exit 1 for a negative verdict; unusable input still returns 2")
+    p.add_argument("--out", help="save the FULL canonical JSON artifact once; stdout may use a compact view")
+    p.add_argument("--view", choices=["full", "summary"], help="JSON display projection; --out always saves full evidence")
+    p.add_argument("--summary-limit", type=_positive_int, default=6,
+                   help="summary only: table/panel display limit (default 6), without changing calculations or population ranks")
+    p.add_argument("--spec", help="session: inline JSON array, or - to read it from stdin")
+    p.add_argument("--no-cache", action="store_true", help="landscape: recompute structural facts without reading/writing its local cache")
     p.add_argument("file", nargs="?",
                    help="team-json/Showdown file; for `repset` it is the SPECIES name, for `oppmatrix` "
-                        "the (optional) attacker species, for `show` the team id")
+                   "the (optional) attacker species, for `show` the team id")
     p.add_argument("--format", choices=["md", "json"], default="md")
     p.add_argument("--context", help="build-context JSON file (intent/constraints)")
+    p.add_argument("--changes", help="try: JSON list of {slot,set}; each field including spread replaces its prior value")
+    p.add_argument("--focus", help="review/try/diagnose: JSON {opponents:[species],members:[species|zero-based slot]}")
+    p.add_argument("--slot", type=int, help="fill: zero-based replacement slot; return complete trial configurations and structural differences")
+    p.add_argument("--opponents", help="matchup/select/review/try: team-json roster of 1..6 opponents; species-only or complete stated sets")
+    p.add_argument("--from-cell", action="store_true", help="tune: input is {report,ref,goal,solve_for,...}; derive threshold lanes and explicit trial changes")
+    p.add_argument("--attack-type", help="type-matchup: attacking type in English, Chinese or Japanese")
+    p.add_argument("--pokemon", help="type-matchup: defending Pokemon; use instead of --types")
+    p.add_argument("--types", nargs="+", help="type-matchup: one or two defending types")
+    p.add_argument("--ability", help="type-matchup: stated defending ability")
+    p.add_argument("--set", help="speed-ladder: stated configuration as JSON or file; an omitted item does not inherit Choice Scarf")
+    p.add_argument("--conditions", help="matchup/select/review/try: field JSON file (weather, terrain, trick_room); speed-ladder: JSON or file with weather, terrain, tailwind side and trickroom")
+    p.add_argument("--opponent-ranges", action="store_true", help="speed-ladder: include each opponent form's complete observed speed distribution")
+    p.add_argument("--top-n", type=_positive_int, help="counters/ko-scan: usage-rank scope, 1..60 (default 30); not a result count")
+    p.add_argument("--direction", choices=ko_scan.DIRECTIONS, default="both", help="ko-scan: attacking, defending or both (default)")
     p.add_argument("--aspect", choices=["defense", "offense", "speed", "roles", "all"], default="all",
                    help="diagnose: which aspect(s) to run")
     p.add_argument("--aspects", nargs="+", choices=list(landscape.ASPECTS), default=None,
@@ -2904,12 +4060,18 @@ def main() -> int:
                    help="repset/oppmatrix/landscape/observed: which metagame to read (never mixed; landscape and observed REQUIRE it)")
     p.add_argument("--vs", help="oppmatrix: defender species for a single (attacker -> defender) cell")
     p.add_argument("--scope", choices=list(topmeta.SCOPES),
-                   help="topmeta: season (the current season, compared with its in-game snapshot) or "
+                   help="topmeta: season (the current season, compared with its in-game snapshot), "
                         "rule (every current-rule partition, compared with the current in-game "
-                        "snapshot — different time ranges). Default season")
+                        "snapshot — different time ranges) or high (the rule scope filtered to "
+                        "high-performance teams, compared like rule). Default season. "
+                        "landscape: high only, native current-rule joint records; omit for ordinary library scope")
     p.add_argument("--slate", help="answer-audit: the ORIGINAL slate.json the candidates were slated with")
     p.add_argument("--slate-output", dest="slate_output",
                    help="answer-audit: the SAVED slate-evaluate output JSON (its slate_receipt is re-bound)")
+    p.add_argument("--intake-output", help="slate-init: full intake --next output for the final context; carries resolved ids")
+    p.add_argument("--draw", type=int, help="frame: number of weighted, low-overlap frame ids to draw")
+    p.add_argument("--seed", type=int, help="reproducible frame draw or observed diversity tie order")
+    p.add_argument("--seen-teams", help="frame draw/observed diversity: previously shown team-json, list or teams wrapper")
     p.add_argument("--recommended", nargs="*", type=int,
                    help="draft-init: survivor slate indices to include as recommended entries; default "
                         "is the first up to three survivors in slate order")
@@ -2942,7 +4104,7 @@ def main() -> int:
     p.add_argument("--has-item", nargs="*", help="search: each item must be held by some (distinct) member")
     p.add_argument("--has-ability", nargs="*", help="search: each ability must be present on some member")
     p.add_argument("--limit", type=int, help="search/observed: cap the number of teams/groups returned")
-    p.add_argument("--order", choices=["overlap", "tier", "recent"],
+    p.add_argument("--order", choices=list(observed.ORDERS),
                    help="observed: ordering key (default: overlap when constraints exist, else tier). "
                         "Evidence tier / recency / explicit overlap only — never a strength ranking")
     p.add_argument("--collapse", action="store_true",
@@ -2961,24 +4123,82 @@ def main() -> int:
                         "(e.g. answer_shape when the user said 'just one team'). Unknown ids -> rc=2.")
     ns = p.parse_args()
     i18n.set_lang(getattr(ns, "lang", None))   # must run BEFORE any command produces output
+    supplied = {p._option_string_actions[token.split("=", 1)[0]].dest
+                for token in sys.argv[1:] if token.split("=", 1)[0] in p._option_string_actions}
+    unused = supplied - COMMAND_OPTIONS[ns.command] - {"lang", "format", "out"}
+    if unused:
+        p.error(f"{ns.command} does not consume: " + ", ".join("--" + k.replace("_", "-") for k in sorted(unused))
+                + "; see team.py schema for supported options")
+    json_only = {"review", "try", "review-claims", "localize", "type-matchup", "rules-facts", "suggest-fixes", "scenario", "threshold", "topmeta", "observed", "intake", "slate-init", "slate-evaluate", "checkpoint",
+                 "answer-audit", "draft-init", "session", "schema", "code", "code-status"}
+    if ns.command == "tune" and ns.from_cell:
+        json_only.add("tune")
+    if ns.command in json_only and (("format" in supplied and ns.format != "json")
+                                   or (ns.command == "topmeta" and "lang" in supplied)):
+        print(f"{ns.command} emits canonical JSON only; --lang does not translate JSON and --format md "
+              "cannot select Markdown. Use --format json.", file=sys.stderr)
+    no_file = {"type-matchup", "rules-facts", "topmeta", "frame", "landscape", "observed", "intake", "draft-init", "schema", "vocab", "code-status", "search"}
+    if ns.file and ns.command in no_file:
+        p.error(f"{ns.command} does not take a positional file/species; see team.py schema")
+    if ns.command == "oppmatrix" and ns.species is not None:
+        if ns.file or len(ns.species) != 1:
+            p.error("oppmatrix accepts one attacker: use oppmatrix Garchomp or --species Garchomp")
+        ns.file = ns.species[0]
+    if ns.command in {"diagnose", "select"} and "top_k" in supplied and not any((ns.with_check, ns.focus, ns.opponents, ns.conditions)):
+        p.error("--top-k needs --with-check for diagnose/select; otherwise no matchup battery runs")
+    if ns.command == "intake" and ns.answered is not None and not ns.next_batch:
+        p.error("--answered requires intake --next")
+    if ns.command == "session" and ns.file and ns.spec is not None:
+        p.error("session accepts a spec file OR --spec, not both")
+    if ns.out is not None and not ns.out:
+        p.error("--out must be a nonempty file path")
+    if ns.out and ns.format != "json" and ns.command not in json_only:
+        p.error("--out saves a JSON artifact; add --format json")
+    if ns.view and ns.format != "json" and ns.command not in json_only:
+        p.error("--view selects a JSON projection; add --format json")
+    legacy_view = "matchup_view" if ns.command == "matchup" else "slate_view"
+    if ns.view and legacy_view in supplied and ns.view != getattr(ns, legacy_view):
+        p.error("conflicting --view and legacy view flags; use one projection")
+    if "summary_limit" in supplied and ns.view != "summary":
+        p.error("--summary-limit requires --view summary")
+    if ns.command == "intake" and ns.view == "summary" and not (ns.onboarding or ns.next_batch):
+        p.error("intake summary requires --onboarding or --next")
+    inputs = [getattr(ns, field) for field in FILE_FIELDS - {"file"} if getattr(ns, field, None)
+              and not (field in {"set", "conditions"} and getattr(ns, field).lstrip().startswith("{"))]
+    if (ns.file and ns.command not in {"repset", "speed-ladder", "counters", "ko-scan", "oppmatrix", "show", "code"}
+            and not (ns.command == "session" and ns.file.lstrip().startswith(("[", "{")))):
+        inputs.append(ns.file)
+    try:
+        protect_inputs(ns.out, inputs)
+    except (ValueError, OSError) as exc:
+        p.error(str(exc))
+    try:
+        with output_options(ns.out, command=ns.command, view=ns.view, limit=ns.summary_limit):
+            return _dispatch_cli(ns, p)
+    except OutputError as exc:
+        emit_json({"ok": False, "query": "out", "error": {"code": "bad_input", "message": str(exc)}})
+        return 1
+
+
+def _dispatch_cli(ns, p) -> int:
     if ns.command in {"code", "code-status"}:
         import team_codes
         try:
             result = (team_codes.status() if ns.command == "code-status" else
                       team_codes.lookup(ns.file or "", network=not ns.cache_only))
         except team_codes.TeamCodeError as exc:
-            print(json.dumps(exc.result(), ensure_ascii=False, indent=2))
+            emit_json(exc.result())
             return 0 if exc.code == "not_found" else 1
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        emit_json(result)
         return 0
     if ns.command == "schema":
-        print(json.dumps(i18n.jsonify(TEAM_SCHEMA), ensure_ascii=False, indent=2))
+        emit_json(TEAM_SCHEMA)
         return 0
     if ns.command == "vocab":
         return cmd_vocab(ns.format)
     # oppmatrix species / search query are optional; context-audit audits a bare context (team
     # optional); landscape reads the library, no team file at all; vocab/schema take no file.
-    if not ns.file and ns.command not in ("oppmatrix", "topmeta", "search", "context-audit", "frame", "landscape", "observed", "intake", "vocab", "draft-init"):
+    if not ns.file and ns.command not in ("type-matchup", "rules-facts", "oppmatrix", "topmeta", "search", "context-audit", "frame", "landscape", "observed", "intake", "vocab", "draft-init", "session"):
         target = {"repset": "species (for command 'repset')",
                   "show": "team id (for command 'show')",
                   "fill": "team file (for command 'fill'; pass a partial or full team-json, plus --context containing need)",
@@ -2987,37 +4207,72 @@ def main() -> int:
             ns.command, "file")
         p.error(f"the following arguments are required: {target} (for command '{ns.command}')")
     if ns.command == "parse":
-        return cmd_parse(ns.file, ns.format)
+        return cmd_parse(ns.file, ns.format, ns.game_format)
     if ns.command == "validate":
         return cmd_validate(ns.file, ns.format, ns.context)
+    if ns.command == "suggest-fixes":
+        return cmd_suggest_fixes(ns.file, ns.context)
     if ns.command == "diagnose":
-        return cmd_diagnose(ns.file, ns.format, ns.aspect, ns.context, with_check=ns.with_check, top_k=ns.top_k)
+        return cmd_diagnose(ns.file, ns.format, ns.aspect, ns.context, with_check=ns.with_check,
+                            top_k=ns.top_k, focus_path=ns.focus)
     if ns.command == "tune":
+        if ns.from_cell:
+            if ns.context:
+                p.error("tune --from-cell reads its bound report context; omit --context")
+            return cmd_tune_cell(ns.file)
         return cmd_tune(ns.file, ns.format, ns.context)
+    if ns.command == "type-matchup":
+        return cmd_type_matchup(ns.attack_type, ns.pokemon, ns.types, ns.ability)
+    if ns.command == "rules-facts":
+        return cmd_rules_facts()
+    if ns.command == "speed-ladder":
+        return cmd_speed_ladder(ns.file, ns.game_format, ns.set, ns.conditions, ns.limit, ns.opponent_ranges, ns.format)
+    if ns.command == "counters":
+        return cmd_counters(ns.file, ns.game_format, ns.top_n, ns.format)
+    if ns.command == "ko-scan":
+        return cmd_ko_scan(ns.file, ns.game_format, ns.top_n, ns.direction, ns.format)
+    if ns.command == "scenario":
+        return cmd_scenario(ns.file)
+    if ns.command == "threshold":
+        return cmd_threshold(ns.file)
+    if ns.command == "localize":
+        return cmd_localize(ns.file)
+    if ns.command in ("review", "try"):
+        return cmd_review(ns.file, ns.context, top_k=ns.top_k, changes_path=ns.changes,
+                          trial=ns.command == "try", view=ns.view or "summary", fail_on_verdict=ns.fail_on_verdict,
+                          focus_path=ns.focus, opponents_path=ns.opponents, conditions_path=ns.conditions)
+    if ns.command == "review-claims":
+        return cmd_review_claims(ns.file, ns.fail_on_verdict)
     if ns.command == "select":
-        return cmd_select(ns.file, ns.format, ns.context, with_check=ns.with_check, top_k=ns.top_k)
+        return cmd_select(ns.file, ns.format, ns.context, with_check=ns.with_check, top_k=ns.top_k,
+                          opponents_path=ns.opponents, conditions_path=ns.conditions)
     if ns.command == "matchup":
         return cmd_matchup(ns.file, ns.format, ns.context, ns.top_k, as_checks=ns.as_checks,
-                           view=ns.matchup_view)
+                           view=ns.matchup_view, opponents_path=ns.opponents, conditions_path=ns.conditions)
     if ns.command == "fill":
-        return cmd_fill(ns.file, ns.format, ns.context)
+        return cmd_fill(ns.file, ns.format, ns.context, ns.slot)
     if ns.command == "context-audit":
-        return cmd_context_audit(ns.file, ns.format, ns.context)
+        return cmd_context_audit(ns.file, ns.format, ns.context, ns.fail_on_verdict)
     if ns.command == "frame":
-        return cmd_frame(ns.format, ns.game_format, ns.season, ns.context, ns.audit_receipt)
+        return cmd_frame(ns.format, ns.game_format, ns.season, ns.context, ns.audit_receipt,
+                         ns.draw, ns.seed, ns.seen_teams)
     if ns.command == "slate-evaluate":
-        return cmd_slate_evaluate(ns.file, ns.format, ns.top_k, ns.frame_output, view=ns.slate_view)
+        return cmd_slate_evaluate(ns.file, ns.format, ns.top_k, ns.frame_output, view=ns.slate_view,
+                                  fail_on_verdict=ns.fail_on_verdict)
+    if ns.command == "slate-init":
+        return cmd_slate_init(ns.file, ns.context, ns.audit_receipt, ns.frame_output, ns.intake_output)
     if ns.command == "checkpoint":
-        return cmd_checkpoint(ns.file, ns.format, ns.slate)
+        return cmd_checkpoint(ns.file, ns.format, ns.slate, ns.fail_on_verdict)
     if ns.command == "answer-audit":
-        return cmd_answer_audit(ns.file, ns.format, ns.slate, ns.slate_output)
+        return cmd_answer_audit(ns.file, ns.format, ns.slate, ns.slate_output, ns.fail_on_verdict)
     if ns.command == "draft-init":
         return cmd_draft_init(ns.format, ns.slate, ns.slate_output, ns.recommended)
     if ns.command == "landscape":
         return cmd_landscape(ns.format, ns.game_format, ns.season, ns.context, ns.species, ns.limit,
-                             ns.aspects)
+                             ns.aspects, no_cache=ns.no_cache, population_scope=ns.scope)
     if ns.command == "observed":
-        return cmd_observed(ns.format, ns.game_format, ns.season, ns.context, ns.species, ns.order, ns.limit)
+        return cmd_observed(ns.format, ns.game_format, ns.season, ns.context, ns.species, ns.order, ns.limit,
+                            ns.seed, ns.seen_teams)
     if ns.command == "intake":
         return cmd_intake(ns.game_format, ns.onboarding, ns.context, ns.next_batch, ns.answered)
     if ns.command == "replace":
@@ -3026,7 +4281,7 @@ def main() -> int:
         return cmd_repset(ns.file, ns.game_format, ns.season, ns.max_clusters, ns.format)
     if ns.command == "oppmatrix":
         return cmd_oppmatrix(ns.file, ns.game_format, ns.season, ns.vs, ns.format,
-                             as_checks=ns.as_checks)
+                             as_checks=ns.as_checks, all_species=ns.all)
     if ns.command == "topmeta":
         return cmd_topmeta(ns.game_format, ns.scope, ns.species)
     if ns.command == "search":
@@ -3035,7 +4290,7 @@ def main() -> int:
     if ns.command == "show":
         return cmd_show(ns.file, ns.game_format, ns.season, ns.format)
     if ns.command == "session":
-        return cmd_session(ns.file)
+        return cmd_session(ns.file, ns.spec, ns.fail_on_verdict)
     return 2
 
 

@@ -24,6 +24,10 @@ GATES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "tune": (("tune-result", "output", None),),
     # The raw diagnosis does not carry the team, which the panel's report needs beside it.
     "diagnose": (("team", "input", "file"), ("diagnose", "output", None)),
+    "review": (("review", "output", None),),
+    "try": (("trial", "output", None),),
+    "review-claims": (("review-claims", "output", None),),
+    "slate-init": (("slate-input", "output", None),),
 }
 _ALIASES = {"context_audit": "context-audit", "slate_evaluate": "slate-evaluate",
             "answer_audit": "answer-audit"}
@@ -58,6 +62,8 @@ def gate_artifacts(op: dict, inputs: dict[str, bytes], row: dict) -> list[tuple[
     result = row.get("result")
     if not isinstance(result, (dict, list)):
         return []
+    if name == "diagnose" and isinstance(result, dict) and result.get("kind") == "review":
+        name = "review"
     out: list[tuple[str, bytes]] = []
     for kind, source, field in GATES[name]:
         if source == "input":
@@ -65,5 +71,10 @@ def gate_artifacts(op: dict, inputs: dict[str, bytes], row: dict) -> list[tuple[
                 out.append((kind, inputs[field]))
             continue
         value = _slate_summary(result) if name == "slate-evaluate" else result
+        if name in {"review", "try"} and isinstance(result, dict) and not result.get("error"):
+            if str(_TEAM_SCRIPTS) not in sys.path:
+                sys.path.insert(0, str(_TEAM_SCRIPTS))
+            import team_review
+            value = team_review.project(result, "summary")
         out.append((kind, json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8")))
     return out

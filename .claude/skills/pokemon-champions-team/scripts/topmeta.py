@@ -43,7 +43,16 @@ DEFAULT_DIR = SCRIPTS.parent / "data" / "top_meta"
 
 SCHEMA_VERSION = 1
 OUTPUT_SCHEMA = "top_meta.v1"
-SCOPES = ("season", "rule")
+SCOPES = ("season", "rule", "high")
+# The high-performance slice (scope "high"; 高端 / 上位 / top level): the rule scope's teams whose RAW
+# performance facts pass a fixed bar inside their own source kind. It is a filter, never a weight:
+# performance is not normalized across kinds, no unit counts more than once, and the slice reports how
+# many units each kind contributed. Tournament and ladder bars stay separate facts.
+HIGH_PLACING = 8                 # a top-8 finish ...
+HIGH_MIN_FIELD = 16              # ... in an event of at least 16 entrants (smaller events have no cut)
+HIGH_LADDER_RANK = 100           # a final ladder rank in the top 100 ...
+HIGH_LADDER_RATING = 2000        # ... or a ladder rating of at least 2000
+HIGH_TIERS = ("tournament_top8", "ladder_top")
 VALUE_PANELS = ("moves", "items", "abilities", "natures", "spreads")
 PANELS = VALUE_PANELS + ("partners",)
 STAT_KEYS = ("hp", "atk", "def", "spa", "spd", "spe")
@@ -83,6 +92,27 @@ def spread_key(spread: Mapping[str, Any] | None) -> str | None:
 
 def spread_of(key: str) -> dict[str, int]:
     return {k: int(v) for k, v in zip(STAT_KEYS, key.split("/"))}
+
+
+def high_tier(performance: Mapping[str, Any] | None) -> str | None:
+    """The high-performance bar a team's raw performance facts pass, or None (unknown never passes)."""
+    perf = performance or {}
+    if perf.get("kind") == "tournament":
+        placing, field = perf.get("placing"), perf.get("field_size")
+        if isinstance(placing, int) and isinstance(field, int) and placing <= HIGH_PLACING \
+                and field >= HIGH_MIN_FIELD:
+            return "tournament_top8"
+    if perf.get("kind") == "ladder":
+        rank, rating = perf.get("placing"), perf.get("rating")
+        if (isinstance(rank, int) and rank <= HIGH_LADDER_RANK) \
+                or (isinstance(rating, (int, float)) and rating >= HIGH_LADDER_RATING):
+            return "ladder_top"
+    return None
+
+
+def high_criteria() -> dict[str, Any]:
+    return {"tournament_top8": {"placing_at_most": HIGH_PLACING, "field_size_at_least": HIGH_MIN_FIELD},
+            "ladder_top": {"rank_at_most": HIGH_LADDER_RANK, "or_rating_at_least": HIGH_LADDER_RATING}}
 
 
 def tier(n: int) -> str:
@@ -176,15 +206,21 @@ def build_scope(team_units: Iterable[Iterable[str]],
 
 def build_table(*, fmt: str, rule: str, season: str, scopes: Mapping[str, Mapping[str, Any]],
                 base_species: Mapping[str, str], built_for: Mapping[str, Any]) -> dict[str, Any]:
-    """The shipped table. `scopes` maps each of SCOPES to {partitions, team_units, set_units};
-    `base_species` is the dex base for every folded name whose base differs (the query-time join
-    needs it to meet the in-game ranking's identity without calling the dex again)."""
+    """The shipped table. `scopes` maps each of SCOPES to {partitions, team_units, set_units} (the high
+    slice also carries `composition`, its team units per HIGH_TIERS bar; a table built without it simply
+    has no high scope); `base_species` is the dex base for every folded name whose base differs (the
+    query-time join needs it to meet the in-game ranking's identity without calling the dex again)."""
     out_scopes = {}
     for scope in SCOPES:
+        if scope == "high" and scope not in scopes:
+            continue
         spec = scopes[scope]
         out_scopes[scope] = {"partitions": sorted(spec["partitions"]),
                              **build_scope(spec["team_units"], spec["set_units"])}
     out_scopes["season"]["season"] = season
+    if "high" in out_scopes:
+        out_scopes["high"].update(criteria=high_criteria(),
+                                  composition=dict(scopes["high"].get("composition") or {}))
     return {"schema_version": SCHEMA_VERSION, "format": fmt, "rule": rule, "season": season,
             "built_for": dict(built_for),
             "base_species": dict(sorted((k, v) for k, v in base_species.items() if k != v)),
@@ -421,16 +457,20 @@ def compare(table: Mapping[str, Any], scope: str, ingame: Mapping[str, Any] | No
     it only when it is the same season (`window: same_season`). The rule scope spans seasons whose
     in-game numbers cannot be pooled (snapshots are per season, the species ranking is ordinal), so it
     compares with the current in-game snapshot and says so (`window: current_snapshot`): the two
-    sides then cover different time ranges, and every consumer must show that. Identity folds to the
-    in-game names whenever a snapshot is supplied, so links and joins agree across both views."""
+    sides then cover different time ranges, and every consumer must show that. The high slice is a
+    subset of the rule scope and compares the same way. Identity folds to the in-game names whenever a
+    snapshot is supplied, so links and joins agree across both views."""
     if scope not in SCOPES:
         raise ValueError(f"scope must be one of {SCOPES}")
+    if scope not in table["scopes"]:
+        raise ValueError(f"this Top Meta table has no {scope} scope; rebuild it")
     doc = table["scopes"][scope]
     base_species = table.get("base_species") or {}
-    names = set((ingame or {}).get("ranks") or {})
+    same_rule = ingame is not None and ingame.get("rule") == table.get("rule")
+    names = set((ingame or {}).get("ranks") or {}) if same_rule else set()
     merged, folds = _fold_scope(doc, base_species, names)
     same_season = ingame is not None and ingame.get("season") == doc.get("season", table.get("season"))
-    comparable = ingame is not None and (scope == "rule" or same_season)
+    comparable = same_rule and (scope != "season" or same_season)
     side = ingame if comparable else None
     wanted = set(species) if species is not None else None
     out_species: dict[str, Any] = {}
@@ -463,7 +503,40 @@ def compare(table: Mapping[str, Any], scope: str, ingame: Mapping[str, Any] | No
                           if side else None),
         "thresholds": {"count_below": COUNT_TIER_BELOW, "reliable": RELIABLE_N,
                        "unseen_p": UNSEEN_P, "interval": "wilson95"},
-        "identity_folds": folds,
-        "ranking": _ranking(merged, int(doc["teams"]), side),
+        **({"criteria": doc["criteria"], "composition": doc.get("composition") or {}}
+           if scope == "high" else {}),
+        "identity_folds": [f for f in folds if wanted is None or f["to"] in wanted],
+        "ranking": [r for r in _ranking(merged, int(doc["teams"]), side)
+                    if wanted is None or r["name"] in wanted],
         "species": out_species,
     }
+
+
+def resolve_queries(table: Mapping[str, Any], scope: str, records: list[dict] | None,
+                    ingame: Mapping[str, Any] | None = None) -> tuple[list[str] | None, list[dict]]:
+    """Keep exact requested forms; a species-aggregate table cannot answer a Mega-only question."""
+    if records is None:
+        return None, []
+    same_rule = ingame is not None and ingame.get("rule") == table.get("rule")
+    merged, _ = _fold_scope(table["scopes"][scope], table.get("base_species") or {},
+                            set((ingame or {}).get("ranks") or {}) if same_rule else set())
+    wanted, queries = [], []
+    for record in records:
+        canonical = record.get("canonical") if record.get("ok") else None
+        out = {key: record[key] for key in ("query", "canonical", "match_type", "score", "distance",
+                                            "is_mega", "base_species", "required_item", "suggestions") if key in record}
+        if not canonical:
+            out.update(ok=False, error=record.get("error") or {"code": "not_found", "message": "name did not resolve"})
+        elif record.get("is_mega") and canonical not in merged:
+            out.update(ok=False, error={"code": "unsupported_mechanic", "message":
+                       "published Top Meta counts are species aggregates; a Mega-only distribution cannot be recovered from marginal panels"})
+            # base_species can be a Species Clause group (e.g. Floette), not a published roster row.
+            if record.get("base_species") in merged:
+                out["available_reference"] = {"name": record["base_species"], "granularity": "species_aggregate"}
+        elif canonical not in merged:
+            out.update(ok=False, error={"code": "not_found", "message": f"no published {scope} counts for this exact form"})
+        else:
+            wanted.append(canonical)
+            out.update(ok=True, name=canonical, granularity="species_aggregate")
+        queries.append(out)
+    return wanted, queries

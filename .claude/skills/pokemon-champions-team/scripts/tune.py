@@ -31,9 +31,10 @@ from mega import (  # noqa: E402
 from battle_effects import INTIMIDATE_BLOCKING_ITEMS, INTIMIDATE_NO_RELIEF_ABILITIES  # noqa: E402
 import completeness  # noqa: E402
 import team_i18n as i18n  # noqa: E402
+from stat_keys import canonical_spread, engine_spread, ENGINE_STATS  # noqa: E402
 
 SP_TOTAL_CAP = get_ruleset().sp_total_cap   # centralized registration constant (rules.py)
-SPREAD_TO_SPS = {"hp": "hp", "atk": "at", "def": "df", "spa": "sa", "spd": "sd", "spe": "sp"}
+SPREAD_TO_SPS = ENGINE_STATS
 SPS_TO_SPREAD = {v: k for k, v in SPREAD_TO_SPS.items()}
 DEF_SPS = {"physical": "df", "special": "sd"}        # which defensive stat a move pressures
 DEF_SPREAD = {"physical": "def", "special": "spd"}   # the same stat as a team-json spread key
@@ -364,10 +365,19 @@ def _nature_lanes(target_spread_stat: str, current_nature: str | None, cur: int,
 
 def _sps_from_spread(spread: dict[str, int] | None) -> dict[str, int]:
     out = {v: 0 for v in SPREAD_TO_SPS.values()}
-    for k, v in (spread or {}).items():
+    for k, v in canonical_spread(spread or {}).items():
         if k in SPREAD_TO_SPS:
             out[SPREAD_TO_SPS[k]] = int(v or 0)
     return out
+
+
+def _explicit_set(config: dict[str, Any]) -> dict[str, Any]:
+    config = dict(config)
+    if isinstance(config.get("sps"), dict):
+        config["sps"] = engine_spread(config["sps"])
+    elif isinstance(config.get("spread"), dict):
+        config["sps"] = _sps_from_spread(config["spread"])
+    return config
 
 
 def _member_ncp(member: dict[str, Any], sps: dict[str, int]) -> dict[str, Any]:
@@ -414,9 +424,7 @@ def _attacker_ncp(species: str, category: str, attacker_set: dict[str, Any] | No
     otherwise a synthetic max-offense attacker that models NO ability/item, flagged low-confidence
     so a falsely "survivable" verdict is never presented as solid (audit 2026-06-21)."""
     if attacker_set:
-        aset = dict(attacker_set)
-        if "sps" not in aset and isinstance(aset.get("spread"), dict):
-            aset["sps"] = _sps_from_spread(aset.get("spread"))
+        aset = _explicit_set(attacker_set)
         return ({"name": species, **aset},
                 {"source": "explicit", "confidence": "high",
                  "note": "attacker set supplied by the caller"})
@@ -507,14 +515,7 @@ def _meta_set(meta_fn: Callable | None, species: str, fmt: str | None,
     falls through to the synthetic attacker rather than crashing the whole tune call."""
     if attacker_set or not meta_fn:
         return None
-    names = [species]
-    if dex_fn:
-        try:
-            base = _base_form_name(species, dex_fn)
-            if base and base not in names:
-                names.append(base)
-        except Exception:
-            pass
+    names = [species]  # explicit forms cannot borrow another form's modal configuration
     for name in names:
         try:
             got = meta_fn(name, fmt)
@@ -1242,7 +1243,7 @@ def _outspeed_card(member: dict[str, Any], b: dict[str, Any], fmt: str, *,
         if tr_floor_base is None:
             tr_floor_base = tgt_base
         if target_set:
-            target_sps = (target_set.get("sps") or {})
+            target_sps = engine_spread(target_set.get("sps") or {})
             if not target_sps and isinstance(target_set.get("spread"), dict):
                 target_sps = _sps_from_spread(target_set.get("spread"))
             target_nature = target_set.get("nature") or "Hardy"
@@ -1626,9 +1627,7 @@ def _kill_card(member: dict[str, Any], b: dict[str, Any], fmt: str, *,
     explicit_defender = b.get("opponent_set")
     d_meta = _meta_set(meta_fn, b["vs"], fmt, explicit_defender, dex_fn=dex_fn)
     if explicit_defender:
-        dset = dict(explicit_defender)
-        if "sps" not in dset and isinstance(dset.get("spread"), dict):
-            dset["sps"] = _sps_from_spread(dset.get("spread"))
+        dset = _explicit_set(explicit_defender)
         defender0 = {"name": b["vs"], **dset}
         d_prov = {"source": "explicit", "confidence": "high",
                   "note": "opponent set supplied by the benchmark", "prevalence": None}
@@ -1922,32 +1921,18 @@ def tune(team: dict[str, Any], benchmarks: list[dict[str, Any]], *, fmt: str | N
     move_fn = _memoized_batch_lookup(move_fn) or move_fn
     item_fn = _memoized_batch_lookup(item_fn) if item_fn else None
     meta_fn = _memoized_meta_lookup(meta_fn)
-    members = {m.get("species"): m for m in team.get("pokemon", [])}
-    member_aliases: dict[int, list[str]] = {}
+    members = {}
     member_effective: dict[int, dict[str, Any]] = {}
 
-    def _uniq(names: list[str | None]) -> list[str]:
-        out: list[str] = []
-        seen: set[str] = set()
-        for n in names:
-            if n and n not in seen:
-                out.append(n)
-                seen.add(n)
-        return out
-
     for m in team.get("pokemon", []):
-        eff: dict[str, Any] | None = None
-        try:
-            eff = _effective_form(m, dex_fn, item_fn)
-            member_effective[id(m)] = eff
-        except Exception:
-            pass
-        aliases = _uniq([m.get("species"), m.get("name"),
-                         eff.get("name") if eff else None,
-                         eff.get("base_name") if eff else None])
-        member_aliases[id(m)] = aliases
-        for a in aliases:
-            members.setdefault(a, m)
+        eff = _effective_form(m, dex_fn, item_fn)
+        member_effective[id(m)] = eff
+        actual = eff.get("name")
+        # Select and lock actual forms only. Registration/base aliases remain solely for provenance.
+        if actual in members:
+            members[actual] = None  # malformed duplicate form: never silently choose a slot
+        else:
+            members[actual] = m
     # Team-level field gates (computed once): our Intimidate provider and our Tailwind / Stealth Rock
     # setters. A field effect is only modelled when we can actually put it up (re-audit 2026-07-07).
     team_flags = {
@@ -1957,8 +1942,7 @@ def tune(team: dict[str, Any], benchmarks: list[dict[str, Any]], *, fmt: str | N
         "stealth_rock": fmt_battle == "single" and _team_has_move(team, "Stealth Rock"),
     }
     locked_set = set(locked or [])
-    locked_members = {id(m) for m in team.get("pokemon", [])
-                      if set(member_aliases.get(id(m), [])) & locked_set}
+    locked_members = {id(m) for name, m in members.items() if m is not None and name in locked_set}
     nat_cache: dict[str, dict[str, float]] = {}
 
     def _member_natures(member: dict[str, Any]) -> dict[str, float]:
@@ -1967,9 +1951,7 @@ def tune(team: dict[str, Any], benchmarks: list[dict[str, Any]], *, fmt: str | N
         uses it as a membership gate (`n in dist`) but also reads the % so a 2%-run lane isn't shown as
         equal to a 60%-run one (audit 2026-06-24 — the old set() dropped meta_pct)."""
         species = member.get("species")
-        names = member_aliases.get(id(member), [species])
-        # Meta panels usually key a singles Mega under its base species, while the real-team library may
-        # surface the Mega name. Try the authored/effective aliases first, then the base alias.
+        names = [(member_effective.get(id(member)) or {}).get("name") or species]
         key = "|".join(n for n in names if n)
         if key not in nat_cache:
             try:
@@ -1994,7 +1976,10 @@ def tune(team: dict[str, Any], benchmarks: list[dict[str, Any]], *, fmt: str | N
         sp = b.get("member")
         member = members.get(sp)
         if not member:
-            notes.append(f"benchmark member '{sp}' not in team; skipped")
+            cards.append({"aspect": "identity", "kind": b.get("kind"), "member": sp, "vs": b.get("vs"),
+                          "benchmark_index": benchmark_index, "result": "skipped",
+                          "reason": "member_not_found_or_ambiguous",
+                          "note": "benchmark member must identify exactly one actual battle form on this team"})
             continue
         kind = b.get("kind")
         m_locked, mnat = id(member) in locked_members, _member_natures(member)
@@ -2026,6 +2011,9 @@ def tune(team: dict[str, Any], benchmarks: list[dict[str, Any]], *, fmt: str | N
         else:
             notes.append(f"benchmark kind '{kind}' not supported (survive/outspeed/ohko/2hko)")
         if len(cards) > previous_card_count:
+            if member.get("species") != sp:
+                cards[-1]["registration_member"] = member.get("species")
+            cards[-1]["member"] = sp
             cards[-1]["benchmark_index"] = benchmark_index
             any_lane = any_lane or bool(cards[-1].get("nature_alternatives"))
 

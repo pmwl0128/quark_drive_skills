@@ -5,11 +5,11 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-25T10:15:07Z"
+  "built_at": "2026-10-29T08:42:55Z"
  },
  "counts": {
-  "partners": 8,
-  "stand_in": 1
+  "history": 3,
+  "partners": 12
  },
  "anchors": {
   "Aegislash-Shield|": {
@@ -25,9 +25,10 @@
    "source": "partners",
    "partners": [
     "Basculegion",
-    "Aegislash"
+    "Glimmora",
+    "Meowscarada"
    ],
-   "teams": 11
+   "teams": 3
   },
   "Gourgeist-Large|": {
    "source": "partners",
@@ -41,9 +42,9 @@
    "source": "partners",
    "partners": [
     "Meowscarada",
-    "Metagross"
+    "Hippowdon"
    ],
-   "teams": 21
+   "teams": 90
   },
   "Hydrapple|": {
    "source": "partners",
@@ -51,45 +52,91 @@
     "Toxapex",
     "Corviknight"
    ],
-   "teams": 31
+   "teams": 35
+  },
+  "Mega Excadrill|": {
+   "source": "history",
+   "seasons": [
+    "M-1",
+    "M-2",
+    "M-B-events"
+   ],
+   "teams": 4
+  },
+  "Mega Golurk|": {
+   "source": "history",
+   "seasons": [
+    "M-2",
+    "M-3",
+    "M-4"
+   ],
+   "teams": 4
+  },
+  "Mega Hawlucha|": {
+   "source": "history",
+   "seasons": [
+    "M-1",
+    "M-4",
+    "M-5"
+   ],
+   "teams": 3
+  },
+  "Mega Houndoom|": {
+   "source": "partners",
+   "partners": [
+    "Meowscarada",
+    "Metagross"
+   ],
+   "teams": 23
+  },
+  "Mega Manectric|": {
+   "source": "partners",
+   "partners": [
+    "Rillaboom",
+    "Cinderace"
+   ],
+   "teams": 23
+  },
+  "Mega Medicham|": {
+   "source": "partners",
+   "partners": [
+    "Glimmora",
+    "Corviknight"
+   ],
+   "teams": 16
   },
   "Meowstic-F|": {
    "source": "partners",
    "partners": [
     "Meowscarada",
-    "Indeedee",
-    "Sneasler"
+    "Sneasler",
+    "Indeedee"
    ],
    "teams": 5
   },
   "Morpeko-Hangry|": {
-   "source": "stand_in",
-   "species": "Pawmot",
-   "hits": {
-    "types": 1,
-    "lean": 1,
-    "speed_band": 1,
-    "roles": 2,
-    "field": 0
-   },
-   "teams": 157
+   "source": "partners",
+   "partners": [
+    "Gholdengo",
+    "Raichu"
+   ],
+   "teams": 4
   },
   "Passimian|": {
    "source": "partners",
    "partners": [
-    "Baxcalibur",
-    "Gyarados"
+    "Basculegion",
+    "Baxcalibur"
    ],
-   "teams": 20
+   "teams": 27
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
     "Salamence",
-    "Rillaboom",
-    "Glimmora"
+    "Rillaboom"
    ],
-   "teams": 4
+   "teams": 45
   }
  }
 }

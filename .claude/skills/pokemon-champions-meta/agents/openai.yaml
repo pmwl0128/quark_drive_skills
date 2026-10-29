@@ -1,4 +1,4 @@
 interface:
   display_name: "Pokémon Champions Meta"
-  short_description: "Pokémon Champions metagame cache and queries"
-  default_prompt: "Use $pokemon-champions-meta to query current or historical Pokémon Champions single/double metagame usage."
+  short_description: "Usage and competitive Top Meta queries"
+  default_prompt: "Use $pokemon-champions-meta for Pokémon Champions usage or competitive Top Meta. Route high ladder, top cut, 高端 and 上位帯 requests to topmeta --scope high; disclose population, sample and data gaps."

@@ -333,7 +333,8 @@ def build_check(cell: dict[str, Any], member: str, opp_set: dict[str, Any] | Non
 
     # This pair names one concrete build on each side. The broad incoming list is the complete move
     # surface carried by that named representative set; no second modal/strict reading exists.
-    we_first = (speed.get("faster") == "member" and speed_first_ok) or priority_first
+    acts_first = speed.get("acts_first", speed.get("faster"))
+    we_first = (acts_first == "member" and speed_first_ok) or priority_first
     graded = grade_over_surface(offense, _broad_incoming(cell), we_first, resist_stab)
 
     # C0 sub-kind (ORTHOGONAL to the ordinal — it never re-ranks C0): a defensive STALEMATE (we can't
@@ -416,7 +417,7 @@ def build_check(cell: dict[str, Any], member: str, opp_set: dict[str, Any] | Non
             add_caveat("switch_survival_uncertain",
                        f"switch_in survival uncertain — {sw['integrity_gate']}",
                        gate=sw["integrity_gate"])
-    if our_prio > 0 and not priority_first and speed.get("faster") != "member":
+    if our_prio > 0 and not priority_first and acts_first != "member":
         reason = ("ability_block" if ability_blocks else
                   "conditional" if prio_move in _CONDITIONAL_PRIORITY else "opponent_priority")
         why = ("blocked by opponent " + opp_ability if reason == "ability_block"

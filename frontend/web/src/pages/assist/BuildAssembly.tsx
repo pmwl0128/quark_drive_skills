@@ -68,6 +68,7 @@ function useFact() {
       }
       case "generate": {
         const parts = [t("asm.fact.generate").replace("{n}", String(count(d.team)))];
+        if (count(d.candidates) > 1) parts.push(t("asm.fact.candidates").replace("{n}", String(count(d.candidates))));
         if (count(d.fixes)) parts.push(t("asm.fact.fixes").replace("{n}", String(count(d.fixes))));
         return parts.join(" · ");
       }
