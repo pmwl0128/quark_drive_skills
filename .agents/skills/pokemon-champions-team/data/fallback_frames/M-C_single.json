@@ -5,7 +5,7 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-29T08:42:55Z"
+  "built_at": "2026-10-31T05:10:55Z"
  },
  "counts": {
   "history": 3,
@@ -33,10 +33,11 @@
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
-    "Gengar",
-    "Tyranitar"
+    "Basculegion",
+    "Archaludon",
+    "Rillaboom"
    ],
-   "teams": 8
+   "teams": 5
   },
   "Gourgeist-Small|": {
    "source": "partners",
@@ -117,8 +118,8 @@
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
-    "Gholdengo",
-    "Raichu"
+    "Raichu",
+    "Gholdengo"
    ],
    "teams": 4
   },

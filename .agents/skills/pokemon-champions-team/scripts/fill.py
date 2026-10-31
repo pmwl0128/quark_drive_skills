@@ -134,12 +134,17 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
          avoid_items: list[str] | None = None,
          meta_conformance: str | None = None,
          answer_cache: dict | None = None,
+         defer_min_speed: bool = False,
          pool_k: int = POOL_K) -> dict[str, Any]:
     """Build the candidate pool for `need` and present it in multiple explicit views (no score)."""
     fmt = (fmt or team.get("format") or "single").lower()
     if not need:
         return {"kind": "fill", "format": fmt, "need": need, "candidates": [], "views": {},
                 "notes": ["no `need` given — nothing to fill"], "confidence": "low"}
+
+    # Slot replacements check full observed sets in fill_trials, including held-item speed.
+    # A species' unmodified speed ceiling must not discard those sets before that check.
+    match_need = {k: v for k, v in need.items() if not (defer_min_speed and k == "min_speed")}
 
     avoid_n = {_norm(a) for a in (avoid or [])}
     owned_n = {_norm(o) for o in (owned or [])}
@@ -302,7 +307,7 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
         fact = facts.get(nm) or {}
         if not fact or (not fact.get("found", True) and "types" not in fact):
             continue
-        addresses = _addresses(need, fact, cov_by_species.get(_norm(nm)))
+        addresses = _addresses(match_need, fact, cov_by_species.get(_norm(nm)))
         if addresses is None:
             continue
         sample, co = _counts(nm)
@@ -392,7 +397,7 @@ def fill(team: dict[str, Any], need: dict[str, Any], *, fmt: str | None = None,
         import fill_answers
         if answer_cache is None:
             raise ValueError("answer requires the current validated opponent cache")
-        other = {k: v for k, v in need.items() if k != "answer"}
+        other = {k: v for k, v in match_need.items() if k != "answer"}
         def build_matches(member):
             fact = {**(facts.get(member["species"]) or {}), "abilities": [member["ability"]], "moves": member["moves"]}
             coverage = {}

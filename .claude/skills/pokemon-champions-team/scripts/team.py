@@ -1382,7 +1382,8 @@ def cmd_fill(path: str, fmt: str, context_path: str | None, trial_slot: int | No
                        rule=rule_scope, owned=context.owned, owned_only=context.owned_only,
                        avoid=context.avoid_species, locked=context.locked,
                        avoid_items=context.avoid_items,
-                       meta_conformance=context.meta_conformance, answer_cache=answer_cache)
+                       meta_conformance=context.meta_conformance, answer_cache=answer_cache,
+                       defer_min_speed=trial_slot is not None)
         if trial_slot is not None:
             import fill_trials
             import team_review
@@ -3441,11 +3442,12 @@ TEAM_SCHEMA = {
     "fill_trial_spec": {
         "input": "fill team.json --context need.json --slot N; N is an existing zero-based slot, removed before retrieval to release its species and item",
         "output": "complete observed joint builds only; team_member, changes:[{slot,set}], structure_diff, legality and set_speed; missing/meta-filled SP and occupied/avoided items excluded; all need fields checked on that actual build",
+        "min_speed": "actual configuration speed in neutral conditions, including nature, SP, ability and item; builds[].addresses.min_speed gives target and set_speed",
         "next": "choose explicit changes and pass to try; structural difference does not imply matchup improvement; no automatic selection or per-candidate matchup battery",
     },
     "tune_cell_spec": {
         "input": "tune spec.json --from-cell; JSON only; spec:{report:full sealed review,ref:member_cell reference,goal,solve_for,probability?,compare_items?,maximize?}",
-        "binding": "recomputes the cell, binds actual battle forms and both exact configurations, move and weather/terrain/trick_room; solve_for must address the team member",
+        "binding": "recomputes the cell, binds actual battle forms and both exact configurations, move and weather/terrain/trick_room, plus switch_in_drops:false for history-free damage; solve_for must address the team member",
         "output": "source_check, benchmark, bound_sets, threshold nature/item lanes and trials; unreachable lanes retain closest damage percentages. trials include explicit changes, legality and available; only available trials may be adopted, then try and UEP gates",
     },
     "scenario_spec": {
@@ -3457,7 +3459,8 @@ TEAM_SCHEMA = {
         "output": "actual actors, source builds and overrides, applied field/conditions, rolls, HP, KO chance and caveats",
     },
     "threshold_spec": {
-        "input": "scenario fields plus solve_for, goal, probability, compare_items, maximize and speed_field",
+        "input": "scenario fields plus solve_for, goal, probability, compare_items, maximize, speed_field and switch_in_drops",
+        "switch_in_drops": "boolean, default true; false disables automatic switch-in Attack drops for static comparisons; applied value returned in conditions.switch_in_drops",
         "solve_for": sorted(threshold.SOLVE_FOR), "goal": sorted(threshold.GOALS),
         "probability": ["guaranteed", "any"],
         "compare_items": "up to three additional Champions items or null; each legal, same-form item gets a separate lane",
@@ -3814,7 +3817,8 @@ TEAM_SCHEMA = {
         "need": "fill <team.json> --context {\"need\": {resist:[Type], offense_type:[Type], role:[str], "
                 "min_speed:int, coverage_move_type:[Type], answer:name|[name]}} — criteria combine with AND. "
                 "answer uses same-variant static CHECK facts against all retained target builds; build-level "
-                "addresses carry actual ability/move matches; min_speed remains a theoretical species ceiling.",
+                "addresses carry actual ability/move matches; min_speed is a theoretical species ceiling without "
+                "--slot and actual configuration speed (including held item) with --slot.",
         "benchmark": "tune --context {\"benchmarks\": [{member:<species-in-team>, "
                      "kind:survive|outspeed|ohko|2hko, vs:<species> (or a raw Speed int for outspeed), "
                      "move:<name> (required for survive/ohko/2hko), conditions:{weather,terrain,"

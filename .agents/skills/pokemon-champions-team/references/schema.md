@@ -729,7 +729,8 @@ variant/source/SP provenance, a ready-to-use `team_member`, `observed_complete:t
 including observed SP are transported: meta SP fallbacks and unknown fields are omitted. The
 existing team's items and avoided items are excluded at build level without replacement. Other
 need predicates must hold on the same build, whose `addresses` lists the actual matching ability
-or moves; `min_speed` retains its existing theoretical species-ceiling meaning. Neutral static
+or moves; without `--slot`, `min_speed` retains its theoretical species-ceiling meaning.
+With `--slot`, it checks the actual configuration speed as described in §18. Neutral static
 CHECK and isolated doubles pairs are conditional reference facts, not a win-rate claim.
 
 With `meta_conformance:off_meta`, the ordinary fill pool also includes actual-form species
@@ -1130,6 +1131,9 @@ Psyshock, Psystrike and Secret Sword direct the `defender.bulk` search to physic
 Speed questions may omit `move`. `probability` is `guaranteed` (default) or `any`; outspeed is
 deterministic. `speed_field` accepts boolean `attacker_tailwind`, `defender_tailwind`, `trick_room`.
 Weather and terrain come from the inherited `field` and are passed to both damage and Speed calculations.
+`switch_in_drops` is a boolean (default `true`) controlling the calculator's automatic switch-in
+Attack drops. Set it to `false` for a history-free static comparison. The applied value is returned
+in `conditions.switch_in_drops`.
 
 The solved stat ranges from 0 to the current rule's per-stat cap. All other SP stay fixed, and every
 evaluated allocation must satisfy the total budget. `defender.bulk` searches legal HP + relevant Defense
@@ -1251,7 +1255,10 @@ do not replace context-audit or the proposal slate/checkpoint/answer-audit chain
 before retrieval, releasing its species and held item. The other members and context constraints
 remain in force. Every returned `candidates[].builds[]` is a complete observed joint configuration
 with `team_member`, `changes:[{slot,set}]`, `structure_diff`, `legality`, and actual `set_speed`.
-The concrete set must meet all requested needs. Missing or meta-filled SP, retained/avoided items,
+The concrete set must meet all requested needs. In slot mode, `min_speed` uses the set's actual
+nature, SP, ability and held item in neutral conditions; the item-free species ceiling does not
+exclude it during retrieval. Each build's `addresses.min_speed` gives `target` and `set_speed`.
+Missing or meta-filled SP, retained/avoided items,
 and invalid whole-team replacements are excluded; `trial_scope.omitted` counts reasons. A structural
 difference is not a calculated improvement. Select a build explicitly and pass its `changes` to
 `try`; retrieval does not calculate a battery or choose a replacement. Without `--slot`, the
@@ -1287,7 +1294,9 @@ specified roster. With non-neutral conditions, neutral-field SP jump suggestions
 `report` is an object, not the illustrative string above; copy `ref` from its `evidence_index`.
 The source report must pass receipt verification and the cell must reproduce under current data.
 Both exact sets, the member's actual battle form/ability, the damaging move in the requested
-direction and weather/terrain/trick_room are bound before calling threshold (§14). No ordinary-form
+direction and weather/terrain/trick_room are bound before calling threshold (§14). The benchmark
+also binds `switch_in_drops:false` to retain the source review's history-free damage assumptions.
+No ordinary-form
 substitution is allowed. `solve_for` must address the member: attacker for attack/outspeed, defender
 for survive/survive_2. `goal`, `probability`, `compare_items`, `maximize` follow §14.
 

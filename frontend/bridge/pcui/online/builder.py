@@ -1158,6 +1158,22 @@ def _fill_draft(skeleton: dict, assumptions: list[str], slate_out: dict,
                                              "(disclosed on the result page)")
     candidates = slate_out.get("candidates") if isinstance(
         slate_out.get("candidates"), list) else []
+    pairs = (slate_out.get("comparison") or {}).get("pairs") or []
+    # draft-init owns which disclosures are required. These describe the host's bounded
+    # search, so changing the model's team cannot fill them or repair their absence.
+    if isinstance(draft.get("exploration"), dict):
+        limitations = []
+        for pair in pairs:
+            fraction = (pair.get("core_overlap") or {}).get("fraction_of_smaller")
+            label = f"candidates {pair.get('left')} and {pair.get('right')}"
+            if fraction is None:
+                limitations.append(f"{label} lack comparable bound cores")
+            elif fraction > 0.5:
+                limitations.append(f"{label} share more than half of the smaller bound core")
+        draft["exploration"]["reason"] = (
+            "; ".join(limitations) + ". The wizard accepts this limited candidate comparison "
+            "within its bounded frame draw and assembly budget; it compares the evaluated "
+            "sets without claiming independent structures or an exhaustive search.")
 
     def _cand(idx: Any) -> dict:
         c = candidates[idx] if isinstance(idx, int) and 0 <= idx < len(candidates) else {}
@@ -1201,8 +1217,21 @@ def _fill_draft(skeleton: dict, assumptions: list[str], slate_out: dict,
                 " — the overlap is disclosed, adopted because the slate facts fit the "
                 "requested profile")
         if "adoption_review" in rec:
+            distinct_cores = any(
+                rec.get("slate_index") in (pair.get("left"), pair.get("right"))
+                and (fraction := (pair.get("core_overlap") or {}).get("fraction_of_smaller")) is not None
+                and fraction <= 0.5 for pair in pairs)
             rec["adoption_review"] = {
                 "status": "accepted_as_is",
+                "other_structures": {
+                    "considered": distinct_cores,
+                    "reason": ("The slate evaluated another candidate sharing at most half of "
+                               "the smaller bound core; all passing candidates remain unranked."
+                               if distinct_cores else
+                               "The bounded wizard comparison does not establish another structure "
+                               "with at most half of the smaller bound core shared; no broader "
+                               "structural search is claimed."),
+                },
                 "checked_modification_types": ["item", "moves", "spread"],
                 "attempted_changes": [],
                 "reason": "the usage-grounded set matched an observed team verbatim; the "

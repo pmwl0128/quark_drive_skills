@@ -2,6 +2,7 @@
 from copy import deepcopy
 
 import matchup
+import ncplink
 import team_review
 from stat_keys import canonical_spread
 
@@ -41,6 +42,7 @@ def query(spec, *, recompute_fn, dex_fn, item_fn, threshold_fn, validate_fn):
     conditions = (report.get("battle_scope") or {}).get("conditions") or {}
     benchmark = {k: deepcopy(spec[k]) for k in ("goal", "solve_for", "probability", "compare_items", "maximize") if k in spec}
     benchmark.update(format=fmt, attacker=opp_key if survival else own_key, defender=own_key if survival else opp_key,
+                     switch_in_drops=ncplink.SWITCH_IN_DROPS,
                      field={k: v for k, v in conditions.items() if k != "trick_room"},
                      speed_field={"trick_room": conditions.get("trick_room", False)})
     if spec.get("goal") != "outspeed":

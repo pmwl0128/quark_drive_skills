@@ -18,7 +18,7 @@ GOALS = frozenset({"ohko", "2hko", "survive", "survive_2", "outspeed"})
 SOLVE_FOR = frozenset({"attacker.atk", "attacker.def", "attacker.spa", "attacker.spe", "defender.hp",
                       "defender.def", "defender.spd", "defender.spe", "defender.bulk"})
 PLUS_NATURE = {"atk": "Adamant", "spa": "Modest", "def": "Bold", "spd": "Calm", "spe": "Jolly"}
-EXTRAS = frozenset({"solve_for", "goal", "probability", "compare_items", "maximize", "speed_field"})
+EXTRAS = frozenset({"solve_for", "goal", "probability", "compare_items", "maximize", "speed_field", "switch_in_drops"})
 SPEED_FIELD = frozenset({"attacker_tailwind", "defender_tailwind", "trick_room"})
 BATCH_SIZE = 256
 
@@ -58,6 +58,8 @@ def _validate(spec):
     sf = spec.get("speed_field", {})
     if not isinstance(sf, dict) or set(sf) - SPEED_FIELD or any(type(v) is not bool for v in sf.values()):
         _fail("speed_field accepts boolean attacker_tailwind, defender_tailwind and trick_room", "speed_field")
+    if type(spec.get("switch_in_drops", True)) is not bool:
+        _fail("switch_in_drops must be boolean", "switch_in_drops")
     if set(spec) - (set(EXTRAS) | {"attacker", "defender", "move", "format", "attacker_set", "defender_set", "field"}):
         _fail("unsupported threshold field")
     return side, stat, goal, probability, extra, maximize, sf
@@ -170,7 +172,7 @@ def _points(actor, stat, maximize, rules):
             if fixed + p + (0 if maximize is None else m) <= rules.sp_total_cap]
 
 
-def _damage_lane(actors, side, stat, maximize, move, field, goal, probability):
+def _damage_lane(actors, side, stat, maximize, move, field, goal, probability, switch_in_drops):
     rules = get_ruleset()
     actor = actors[side]
     points = _points(actor, stat, maximize, rules)
@@ -183,7 +185,7 @@ def _damage_lane(actors, side, stat, maximize, move, field, goal, probability):
             varied["sps"][maximize] = m
         pair = {**actors, side: varied}
         requests.append({"attacker": pair["attacker"], "defender": pair["defender"],
-                         "move": move, "field": field, "switch_in_drops": True})
+                         "move": move, "field": field, "switch_in_drops": switch_in_drops})
         allocations.append(varied["sps"])
     docs = _batch_damage(requests)
     readings = [_damage_reading(doc, goal, probability, move) for doc in docs]
@@ -203,7 +205,7 @@ def _damage_lane(actors, side, stat, maximize, move, field, goal, probability):
             "maximized": optimized, "feasible_points": len(rows), "primary_cap": base[-1]["primary_sp"]}
 
 
-def _bulk_lane(actors, stat, move, field, goal, probability):
+def _bulk_lane(actors, stat, move, field, goal, probability, switch_in_drops):
     rules = get_ruleset()
     defender = actors["defender"]
     fixed = sum(v for k, v in defender["sps"].items() if k not in ("hp", stat))
@@ -215,7 +217,7 @@ def _bulk_lane(actors, stat, move, field, goal, probability):
         varied = deepcopy(defender)
         varied["sps"].update(hp=hp, **{stat: defense})
         requests.append({"attacker": actors["attacker"], "defender": varied,
-                         "move": move, "field": field, "switch_in_drops": True})
+                         "move": move, "field": field, "switch_in_drops": switch_in_drops})
     docs = _batch_damage(requests)
     rows = []
     for (hp, defense), doc in zip(points, docs):
@@ -274,6 +276,7 @@ def _speed_lane(actors, side, stat, maximize, field, speed_field):
 
 def query(spec, cache):
     side, stat, goal, probability, compared, maximize, speed_field = _validate(spec)
+    switch_in_drops = spec.get("switch_in_drops", True)
     base_spec = {k: v for k, v in spec.items() if k not in EXTRAS}
     prepared = scenario.prepare(base_spec, cache, require_move=goal != "outspeed")
     actors, basis, move, field = (prepared[k] for k in ("actors", "basis", "move", "field"))
@@ -303,9 +306,9 @@ def query(spec, cache):
             if goal == "outspeed":
                 lane = _speed_lane(pair, side, stat, secondary, field, speed_field)
             elif spec["solve_for"] == "defender.bulk":
-                lane = _bulk_lane(pair, stat, move, calc_field, goal, probability)
+                lane = _bulk_lane(pair, stat, move, calc_field, goal, probability, switch_in_drops)
             else:
-                lane = _damage_lane(pair, side, stat, secondary, move, calc_field, goal, probability)
+                lane = _damage_lane(pair, side, stat, secondary, move, calc_field, goal, probability, switch_in_drops)
             if secondary == "spe" and lane.get("maximized") and goal != "outspeed":
                 optimized = deepcopy(pair[side])
                 optimized["sps"] = lane["maximized"]["allocation"]
@@ -324,7 +327,7 @@ def query(spec, cache):
             "conditions": {"weather": field.get("weather") or "none", "terrain": field.get("terrain") or "none",
                            "attacker_tailwind": bool(speed_field.get("attacker_tailwind")),
                            "defender_tailwind": bool(speed_field.get("defender_tailwind")),
-                           "trick_room": bool(speed_field.get("trick_room"))},
+                           "trick_room": bool(speed_field.get("trick_room")), "switch_in_drops": switch_in_drops},
             "lanes": lanes, "confidence": "low", "confidence_reason": "retained-common-build-with-stated-overrides",
             "coverage": {"cache_top_k": (cache.get("built_for") or {}).get("top_k"), "reference_only": True},
             "notes": ["All tested allocations obey the current rule's per-stat and total SP caps; other SP coordinates stay fixed unless maximize names one.",

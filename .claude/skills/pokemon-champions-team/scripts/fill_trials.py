@@ -32,7 +32,8 @@ def attach(output, original, slot, *, dex_fn, move_fn, review_fn):
                 omitted["unavailable_item"] += 1
                 continue
             fact = {**(facts.get(member["species"]) or {}), "abilities": [member["ability"]], "moves": member["moves"]}
-            need = {k: v for k, v in output["need"].items() if k != "answer"}
+            need = {k: v for k, v in output["need"].items() if k not in {"answer", "min_speed"}}
+            min_speed = output["need"].get("min_speed")
             coverage = {}
             if need.get("coverage_move_type"):
                 for name, move in move_fn(member["moves"]).items():
@@ -42,10 +43,11 @@ def attach(output, original, slot, *, dex_fn, move_fn, review_fn):
             base = (fact.get("stats") or {}).get("spe")
             speed = effective_speed(base, member["spread"].get("spe", 0), member["nature"],
                                     item=member.get("item"), ability=member["ability"]) if base is not None else None
-            if matched is None or (need.get("min_speed") is not None and
-                                    (speed is None or speed < need["min_speed"])):
+            if matched is None or (min_speed is not None and (speed is None or speed < min_speed)):
                 omitted["need_not_met"] += 1
                 continue
+            if min_speed is not None:
+                matched["min_speed"] = {"target": min_speed, "set_speed": speed}
             changes = [{"slot": slot, "set": member}]
             try:
                 trial, ledger = team_review.apply_changes(original, changes)
@@ -57,7 +59,8 @@ def attach(output, original, slot, *, dex_fn, move_fn, review_fn):
                 continue
             diff = team_review.compare(before, after, ledger)["structure"]
             builds.append({**build, "team_member": member, "changes": changes,
-                           "structure_diff": diff, "legality": after["legality"], "set_speed": speed})
+                           "structure_diff": diff, "legality": after["legality"], "set_speed": speed,
+                           "addresses": matched})
         if builds:
             candidates.append({**candidate, "builds": builds})
     names = {c["species"] for c in candidates}
