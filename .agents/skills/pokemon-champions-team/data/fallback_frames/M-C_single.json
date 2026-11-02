@@ -5,11 +5,11 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-10-31T05:10:55Z"
+  "built_at": "2026-11-02T07:10:43Z"
  },
  "counts": {
   "history": 3,
-  "partners": 12
+  "partners": 11
  },
  "anchors": {
   "Aegislash-Shield|": {
@@ -43,9 +43,10 @@
    "source": "partners",
    "partners": [
     "Meowscarada",
-    "Hippowdon"
+    "Hippowdon",
+    "Gyarados"
    ],
-   "teams": 90
+   "teams": 3
   },
   "Hydrapple|": {
    "source": "partners",
@@ -53,7 +54,7 @@
     "Toxapex",
     "Corviknight"
    ],
-   "teams": 35
+   "teams": 36
   },
   "Mega Excadrill|": {
    "source": "history",
@@ -104,7 +105,7 @@
     "Glimmora",
     "Corviknight"
    ],
-   "teams": 16
+   "teams": 17
   },
   "Meowstic-F|": {
    "source": "partners",
@@ -118,18 +119,10 @@
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
-    "Raichu",
-    "Gholdengo"
+    "Gholdengo",
+    "Cinderace"
    ],
-   "teams": 4
-  },
-  "Passimian|": {
-   "source": "partners",
-   "partners": [
-    "Basculegion",
-    "Baxcalibur"
-   ],
-   "teams": 27
+   "teams": 23
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",

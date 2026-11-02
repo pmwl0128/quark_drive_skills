@@ -58,6 +58,7 @@ const FAIL_COPY = {
   audit_failed: "builder.error.failed",
   llm_unavailable: "builder.error.unavailable",
   expired: "builder.error.expired",
+  invalid_response: "builder.error.response",
 } as const;
 
 /** The server takes at most this many owned species (and says so if sent more). */
@@ -151,6 +152,9 @@ function follow(record: AssistRecord<BuildInput>, api: BuilderApi): void {
   };
   const lapsed = (e: unknown) => {
     if (e instanceof HttpError && e.status === 404 && !stopped) { failRecord(record.id, "expired"); stop(); }
+    else if (e instanceof HttpError && e.code === "invalid_response" && !stopped) {
+      failRecord(record.id, "invalid_response"); stop();
+    }
   };
   following.set(record.id, stop);
   // Read the snapshot first: a lapsed id is rejected by the cheap GET instead of an SSE timeout.

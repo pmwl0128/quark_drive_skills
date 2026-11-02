@@ -2,15 +2,23 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 
 def full_result_args(op: str, args: dict) -> dict:
     """A saved result is an evidence input; request its full body before projecting the display."""
+    from .mappers import _TEAM_SCRIPTS
+
+    if str(_TEAM_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(_TEAM_SCRIPTS))
+    import team_views
+
     result = dict(args)
-    if op in {"review", "try", "counters", "ko-scan", "slate-evaluate", "matchup", "diagnose"}:
+    if op in team_views.COMMANDS | {"review", "try", "slate-evaluate", "matchup"}:
         result["view"] = "full"
+        result.pop("summary_limit", None)
     return result
 
 

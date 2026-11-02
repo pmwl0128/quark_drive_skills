@@ -232,6 +232,25 @@ export type BuilderCandidateDto = z.infer<typeof BuilderCandidateDtoSchema>;
 
 const ObservedFloorSchema = z.enum(["C0", "C1", "C2"]).nullable();
 
+/** Owner/smoke diagnostics include structured prose checks and the frame draw, alongside counters.
+ * Future diagnostic fields must not make an otherwise valid team unreadable. */
+const BuilderDebugDtoSchema = z.object({
+  tokens: z.number().optional(),
+  promptTokens: z.number().optional(),
+  completionTokens: z.number().optional(),
+  cacheHitTokens: z.number().optional(),
+  llmCalls: z.number().optional(),
+  rationaleGate: z.array(z.array(z.string())).optional(),
+  rationaleGateDetail: z.array(z.array(z.string())).optional(),
+  rationaleSalvaged: z.array(z.string()).optional(),
+  variation: z.object({
+    seed: z.number().int(),
+    frames: z.record(z.string(), z.string().nullable()),
+    drawn: z.array(z.string().nullable()),
+    reasks: z.number().int().nonnegative(),
+  }).optional(),
+}).catchall(z.unknown());
+
 export const BuilderResultDtoSchema = z.object({
   /** team-json. Deliberately unknown-shaped at the protocol boundary: the SPA reads it with
    * the same lenient team readers the UEP panel uses (lib/team.ts) — the inner team shape is
@@ -310,7 +329,7 @@ export const BuilderResultDtoSchema = z.object({
   /** Assembled candidates that failed their checks after a repair and were not delivered. */
   droppedCandidates: z.number().int().nonnegative().optional(),
   /** Dev-key-only metric split (§9 benchmark); never present for real visitors. */
-  debug: z.record(z.string(), z.number()).optional(),
+  debug: BuilderDebugDtoSchema.optional(),
 });
 export type BuilderResultDto = z.infer<typeof BuilderResultDtoSchema>;
 

@@ -139,6 +139,7 @@ TEXT = {
     "no_artifact": {"zh": "会话中没有“{kind}”产物", "ja": "セッションに「{kind}」成果物がありません", "en": "session has no '{kind}' artifact"},
     "run_need_daemon": {"zh": "pcui run 需要已启动的服务（先运行 `pcui serve`）；算子会在常驻查询进程中执行。", "ja": "pcui run には起動中のサービスが必要です（先に `pcui serve` を実行）。処理は常駐ワーカー内で実行されます。", "en": "pcui run needs a running daemon (`pcui serve`); operators execute inside its resident workers."},
     "args_object": {"zh": "--args 必须是 JSON 对象", "ja": "--args はJSONオブジェクトで指定してください", "en": "--args must be a JSON object"},
+    "run_out_input": {"zh": "--out 不能覆盖输入文件，请指定独立的输出路径。", "ja": "--out で入力ファイルを上書きできません。別の出力先を指定してください。", "en": "--out cannot overwrite an input file; choose a separate output path."},
     "write_confirm": {"zh": "输入 yes 写入：", "ja": "書き込むには yes と入力：", "en": "type 'yes' to write: "},
     "installed": {"zh": "已安装。触发语：“处理当前 Pokémon UI 会话”／“work on the current Pokémon UI session”。", "ja": "インストールしました。呼び出し文：「現在の Pokémon UI セッションを処理して」／「work on the current Pokémon UI session」。", "en": "Installed. Trigger phrase: \"work on the current Pokémon UI session\"."},
     "refuse_delete": {"zh": "{dest} 不是已安装的 {name} 技能，拒绝删除。", "ja": "{dest} はインストール済みの {name} スキルではないため、削除しません。", "en": "{dest} is not an installed {name} skill; refusing to delete."},

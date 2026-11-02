@@ -3389,12 +3389,99 @@
             },
             "debug": {
               "type": "object",
-              "propertyNames": {
-                "type": "string"
+              "properties": {
+                "tokens": {
+                  "type": "number"
+                },
+                "promptTokens": {
+                  "type": "number"
+                },
+                "completionTokens": {
+                  "type": "number"
+                },
+                "cacheHitTokens": {
+                  "type": "number"
+                },
+                "llmCalls": {
+                  "type": "number"
+                },
+                "rationaleGate": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "rationaleGateDetail": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "rationaleSalvaged": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "variation": {
+                  "type": "object",
+                  "properties": {
+                    "seed": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "frames": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "drawn": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "reasks": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "seed",
+                    "frames",
+                    "drawn",
+                    "reasks"
+                  ],
+                  "additionalProperties": false
+                }
               },
-              "additionalProperties": {
-                "type": "number"
-              }
+              "additionalProperties": {}
             }
           },
           "required": [
@@ -4373,12 +4460,99 @@
         },
         "debug": {
           "type": "object",
-          "propertyNames": {
-            "type": "string"
+          "properties": {
+            "tokens": {
+              "type": "number"
+            },
+            "promptTokens": {
+              "type": "number"
+            },
+            "completionTokens": {
+              "type": "number"
+            },
+            "cacheHitTokens": {
+              "type": "number"
+            },
+            "llmCalls": {
+              "type": "number"
+            },
+            "rationaleGate": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "rationaleGateDetail": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "rationaleSalvaged": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "variation": {
+              "type": "object",
+              "properties": {
+                "seed": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "frames": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "drawn": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "reasks": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "seed",
+                "frames",
+                "drawn",
+                "reasks"
+              ],
+              "additionalProperties": false
+            }
           },
-          "additionalProperties": {
-            "type": "number"
-          }
+          "additionalProperties": {}
         }
       },
       "required": [

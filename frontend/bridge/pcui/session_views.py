@@ -66,7 +66,8 @@ from sessions s
 left join (
     select session_id, max(created_at) as updated_at,
            max(case when kind='answer-audit' then sequence else -1 end) as audit_seq,
-           max(case when kind in ('context','audit','frame','slate','draft','team','diagnose','tune-result') then sequence else -1 end) as build_seq,
+           max(case when kind in ('context','audit','frame','slate','draft','team','diagnose','tune-result',
+                                  'review','trial','review-claims','slate-input') then sequence else -1 end) as build_seq,
            max(case when kind='checkpoint' then sequence else -1 end) as checkpoint_seq,
            max(case when kind='decision' then sequence else -1 end) as decision_seq,
            max(case when kind='intake' then sequence else -1 end) as intake_seq,

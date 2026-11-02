@@ -76,7 +76,7 @@ function memberOf(value: unknown, vocabulary?: TeamVocabulary): TeamMemberDoc | 
     nature: text(raw.nature),
     spread: spreadOf(raw),
     ...(raw.tera !== undefined ? { tera: raw.tera } : {}),
-    ...(raw.completeness !== undefined ? { completeness: raw.completeness } : {}),
+    ...(raw.completeness != null ? { completeness: raw.completeness } : {}),
   };
   if (vocabulary) {
     const entry = matchName(vocabulary.dex, species);

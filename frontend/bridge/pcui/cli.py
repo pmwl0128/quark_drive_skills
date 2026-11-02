@@ -570,6 +570,12 @@ def cmd_run(ns) -> int:
     daemon = _daemon()
     if daemon is None:
         raise SystemExit(i18n.t("run_need_daemon"))
+    if ns.out:
+        output_path = Path(ns.out).expanduser().resolve()
+        for field in _RUN_FILE_FIELDS:
+            source_path = getattr(ns, field)
+            if source_path and Path(source_path).expanduser().resolve() == output_path:
+                raise SystemExit(i18n.t("run_out_input"))
     body: dict = {}
     if ns.session is not None:
         body["session"] = _session_id(ns.session or None)

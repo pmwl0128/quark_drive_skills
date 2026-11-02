@@ -94,8 +94,8 @@ ASSUMPTION_TEXT = {
     "varied_from_seen": "teams already shown for the same brief were avoided where the constraints allow",
     "goal_read": "the free-text goal was read for the Pokemon it names and for high-level wording; "
                  "named Pokemon are an evaluation focus, never a hard constraint",
-    "owned_no_mega": "the owned pool holds no Mega-capable species, so the team registers no Mega",
-    "owned_one_mega": "the owned pool holds one Mega-capable species, so the team registers "
+    "owned_no_mega": "the owned pool and locked forms allow no Mega registration, so the team registers no Mega",
+    "owned_one_mega": "the owned pool and locked forms allow one Mega-capable species, so the team registers "
                       "exactly one Mega",
 }
 
@@ -263,11 +263,18 @@ def _detail_for_model(dto: dict) -> dict:
             out.append(row)
         return out
 
+    items = slim(panels.get("items"))
+    # Usage is species-level and includes Mega registrations. This detail is the ordinary
+    # form's input; its own stone changes the form and belongs only in mega_options.
+    ordinary_items = [item for item in items
+                      if _form_of({"species": dto.get("name"), "item": item.get("name")}) == dto.get("name")]
     return {
         "species": dto.get("name"),
         "rank": dto.get("rank"),
         "moves": slim(panels.get("moves"), ("type", "category", "power")),
-        "items": slim(panels.get("items")),
+        "items": ordinary_items,
+        **({"item_scope": "ordinary form only; original species-level percentages, not renormalized"}
+           if ordinary_items != items else {}),
         "abilities": slim(panels.get("abilities")),
         "natures": slim(panels.get("natures")),
         "spreads": (panels.get("spreads") or [])[:4],
@@ -280,6 +287,7 @@ def _mega_forms(bases: list[str], form: BuilderForm) -> list[str]:
     species — owning Garchomp is what makes Mega Garchomp available — so the pool filter reads
     the Mega's base as well as its own name."""
     conn = mappers._conn()
+    anchor_base = _base_of(form.anchor) if form.anchor else None
     out: list[str] = []
     for base in bases:
         rows = conn.execute(
@@ -289,6 +297,8 @@ def _mega_forms(bases: list[str], form: BuilderForm) -> list[str]:
         for name, root in rows:
             if name in out or name in form.avoid or root in form.avoid:
                 continue
+            if root == anchor_base and name != form.anchor:
+                continue       # Species Clause leaves no slot for another form of the locked anchor
             if form.owned and name not in form.owned and root not in form.owned:
                 continue
             out.append(name)
@@ -541,6 +551,9 @@ Rules:
   other species. Every "locked" species MUST be on the team IN THAT EXACT FORM — a locked
   "Mega X" means the Mega form itself (with its stone), never the base X in its place
   (skeleton cores may list the base species; the locked Mega still takes the slot).
+  A base species holding its OWN Mega stone counts as that Mega form even if "species"
+  still names the base. A locked ordinary form MUST use a non-Mega item; changing only
+  the species spelling does not fix a form mismatch.
 - Adding a Mega member: use its "mega_options" entry and copy that joint set
   (species/item/ability/nature/moves/spread) as the baseline — Mega forms are NOT in
   usage_details.
@@ -1600,7 +1613,7 @@ def _binding(cand: _Candidate, skeletons: list[dict], known_ids: set) -> dict:
                            for m in cand.members if m["species"] not in species]}
 
 
-def _candidate_problems(slate_out: dict, index: int) -> dict | None:
+def _candidate_problems(slate_out: dict, index: int, members: list[dict] | None = None) -> dict | None:
     """None when this candidate survived with a valid legality verdict; otherwise its clipped,
     model-facing problem document for the repair round."""
     cands = slate_out.get("candidates") or []
@@ -1613,6 +1626,10 @@ def _candidate_problems(slate_out: dict, index: int) -> dict | None:
     # and the grounded item/ability pair the repair must restore).
     return {"legality_errors": legality.get("errors") or [], "legality_status": legality.get("status"),
             "funnel_reasons": [str(r) for r in (eliminated.get("reasons") or []) if r],
+            **({"constraint_satisfaction": cand["constraint_satisfaction"],
+                "battle_forms": [{"species": m.get("species"), "item": m.get("item"),
+                                  "battle_form": _form_of(m)} for m in members or []]}
+               if cand.get("constraint_satisfaction") else {}),
             "mega_registration": cand.get("mega_registration_assessment")}
 
 
@@ -1978,7 +1995,8 @@ def build(pool: Any, provider: LlmProvider, form: BuilderForm,
         slate_out = _op_result(_team_session(pool, [
             {"op": "slate-evaluate", "file": slate_doc, "top_k": BUILDER_TOP_K, "frame_output": frame_out},
         ], deadline)[0])
-        failing = {i: problems for i in range(len(cands)) if (problems := _candidate_problems(slate_out, i))}
+        failing = {i: problems for i in range(len(cands))
+                   if (problems := _candidate_problems(slate_out, i, cands[i].members))}
         lane = _lane_candidate(slate_out, cands)
         if lane is not None:
             failing[lane] = {**(failing.get(lane) or {}),

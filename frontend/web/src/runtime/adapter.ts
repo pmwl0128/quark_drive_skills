@@ -235,12 +235,14 @@ export async function postNdjson(url: string, body: unknown,
   if (!response.ok) throw await responseError(response, url);
   // A deployment that answered plain JSON (an older origin, or a proxy that stripped the
   // stream) still carries the whole payload in the body.
-  if (!response.body) return await response.json();
+  const mediaType = response.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (!response.body || mediaType === "application/json" || mediaType?.endsWith("+json")) {
+    return await response.json();
+  }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let final: { value: unknown } | null = null;
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -257,12 +259,15 @@ export async function postNdjson(url: string, body: unknown,
             `${event.status ?? 500} ${url} — ${JSON.stringify(event.detail ?? "")}`, event.detail);
         }
         if (event.type === "report") onReport?.(event.report);
-        if (event.type === "done") final = { value: event.result };
+        if (event.type === "done") {
+          // Completion is an application event: a proxy may keep the connection open after it.
+          try { await reader.cancel(); } catch { /* the result is already complete */ }
+          return event.result;
+        }
       }
       if (done) break;
     }
-    if (!final) throw new HttpError(502, `502 ${url} — incomplete event stream`);
-    return final.value;
+    throw new HttpError(502, `502 ${url} — incomplete event stream`);
   } catch (error) {
     try { await reader.cancel(); } catch { /* transport may already be closed */ }
     if (error instanceof HttpError) throw error;

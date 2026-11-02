@@ -55,7 +55,7 @@ DEX_MAPPERS = {"pokemon": mappers.map_pokemon, "move": mappers.map_move,
                "item": mappers.map_item, "ability": mappers.map_ability,
                "nature": mappers.map_nature}
 # team ops the bridge accepts inside a session spec (deterministic operators only, P0).
-TEAM_OPS = {"parse", "validate", "diagnose", "matchup", "select", "repset", "observed",
+TEAM_OPS = {"parse", "validate", "suggest-fixes", "diagnose", "matchup", "select", "repset", "observed",
             "landscape", "search", "show", "oppmatrix", "intake", "context-audit", "frame",
             "slate-evaluate", "checkpoint", "draft-init", "fill", "answer-audit", "tune",
             "replace", "vocab", "review", "try", "review-claims", "slate-init", "localize",

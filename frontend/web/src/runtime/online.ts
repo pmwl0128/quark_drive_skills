@@ -40,6 +40,12 @@ const API_ONLY_CAPABILITIES = new Set([
   "llm.qa", "llm.builder", "team.validate", "team.tune", "team.code",
 ]);
 
+function invalidBuilderSnapshot(): HttpError {
+  return new HttpError(502, "invalid builder snapshot", {
+    error: { code: "invalid_response", message: "builder snapshot did not match the protocol" },
+  });
+}
+
 function staticCapabilities(raw: unknown): Capabilities {
   const parsed = CapabilitiesSchema.parse(raw);
   return { ...parsed,
@@ -277,11 +283,19 @@ export class OnlineAdapter implements RuntimeAdapter {
    * text in, disclosure-safe per-aspect report out. */
   async diagnose(req: DiagnoseRequestDto,
                  onReport?: (report: DiagnoseReportDto) => void): Promise<DiagnoseReportDto> {
-    return DiagnoseReportDtoSchema.parse(await postNdjson(
-      `${this.cfg.apiBase}/team/diagnose`, req,
-      // A thinking-mode reading streams the finished deterministic report first, so the visitor
-      // can read legality, structure and matchups while the model is still writing.
-      onReport ? (report) => onReport(DiagnoseReportDtoSchema.parse(report)) : undefined));
+    let delivered: DiagnoseReportDto | undefined;
+    try {
+      return DiagnoseReportDtoSchema.parse(await postNdjson(
+        `${this.cfg.apiBase}/team/diagnose`, req,
+        // Keep the completed deterministic report even if the optional reading loses its stream.
+        (report) => {
+          delivered = DiagnoseReportDtoSchema.parse(report);
+          onReport?.(delivered);
+        }));
+    } catch (error) {
+      if (!delivered || req.followup) throw error;
+      return { ...delivered, explanationError: "transport_failed" };
+    }
   }
 
   /** Builder wizard (llm.builder, design §7.3): same capability-gated backend surface as
@@ -294,26 +308,40 @@ export class OnlineAdapter implements RuntimeAdapter {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(req),
       })),
-    job: async (id: string): Promise<BuilderJobDto> =>
-      BuilderJobDtoSchema.parse(
-        await fetchJson(`${this.cfg.apiBase}/builder/jobs/${encodeURIComponent(id)}`,
-                        { cache: "no-store" })),
+    job: async (id: string): Promise<BuilderJobDto> => {
+      let raw: unknown;
+      try {
+        raw = await fetchJson(`${this.cfg.apiBase}/builder/jobs/${encodeURIComponent(id)}`,
+                              { cache: "no-store" });
+      } catch (error) {
+        if (error instanceof SyntaxError) throw invalidBuilderSnapshot();
+        throw error;
+      }
+      const parsed = BuilderJobDtoSchema.safeParse(raw);
+      if (!parsed.success) throw invalidBuilderSnapshot();
+      return parsed.data;
+    },
     subscribe: (id: string, onSnapshot: (j: BuilderJobDto) => void,
                 onError: () => void): (() => void) => {
       const source = new EventSource(
         `${this.cfg.apiBase}/builder/jobs/${encodeURIComponent(id)}/events`);
+      let closed = false;
+      const close = () => { closed = true; source.close(); };
+      const recover = () => { if (!closed) { close(); onError(); } };
       source.onmessage = (e) => {
+        if (closed) return;
+        let snapshot: BuilderJobDto;
         try {
-          onSnapshot(BuilderJobDtoSchema.parse(JSON.parse(e.data)));
+          snapshot = BuilderJobDtoSchema.parse(JSON.parse(e.data));
         } catch {
-          /* one malformed frame is not a dead stream */
+          // Re-read the authoritative snapshot instead of silently discarding a terminal result.
+          recover();
+          return;
         }
+        onSnapshot(snapshot);
       };
-      source.onerror = () => {
-        source.close();
-        onError();
-      };
-      return () => source.close();
+      source.onerror = recover;
+      return close;
     },
   };
 }
