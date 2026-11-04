@@ -5,48 +5,45 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-7",
-  "built_at": "2026-11-02T07:10:43Z"
+  "built_at": "2026-11-04T06:49:12Z"
  },
  "counts": {
-  "history": 3,
-  "partners": 11
+  "history": 2,
+  "partners": 10,
+  "stand_in": 1
  },
  "anchors": {
   "Aegislash-Shield|": {
    "source": "partners",
    "partners": [
     "Hippowdon",
-    "Dragonite",
-    "Meowscarada"
+    "Dragonite"
    ],
-   "teams": 4
+   "teams": 32
   },
   "Garbodor|": {
    "source": "partners",
    "partners": [
     "Basculegion",
-    "Glimmora",
-    "Meowscarada"
+    "Glimmora"
    ],
-   "teams": 3
+   "teams": 14
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
     "Basculegion",
-    "Archaludon",
     "Rillaboom"
    ],
-   "teams": 5
+   "teams": 27
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
     "Meowscarada",
-    "Hippowdon",
-    "Gyarados"
+    "Hippowdon"
    ],
-   "teams": 3
+   "teams": 93
   },
   "Hydrapple|": {
    "source": "partners",
@@ -74,22 +71,13 @@
    ],
    "teams": 4
   },
-  "Mega Hawlucha|": {
-   "source": "history",
-   "seasons": [
-    "M-1",
-    "M-4",
-    "M-5"
-   ],
-   "teams": 3
-  },
   "Mega Houndoom|": {
    "source": "partners",
    "partners": [
-    "Meowscarada",
-    "Metagross"
+    "Torkoal",
+    "Venusaur"
    ],
-   "teams": 23
+   "teams": 3
   },
   "Mega Manectric|": {
    "source": "partners",
@@ -111,26 +99,30 @@
    "source": "partners",
    "partners": [
     "Meowscarada",
-    "Sneasler",
-    "Indeedee"
+    "Indeedee",
+    "Sneasler"
    ],
    "teams": 5
   },
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
-    "Gholdengo",
-    "Cinderace"
+    "Cinderace",
+    "Gholdengo"
    ],
-   "teams": 23
+   "teams": 24
   },
   "Squawkabilly-Yellow|": {
-   "source": "partners",
-   "partners": [
-    "Salamence",
-    "Rillaboom"
-   ],
-   "teams": 45
+   "source": "stand_in",
+   "species": "Staraptor",
+   "hits": {
+    "types": 2,
+    "lean": 1,
+    "speed_band": 1,
+    "roles": 3,
+    "field": 0
+   },
+   "teams": 53
   }
  }
 }
