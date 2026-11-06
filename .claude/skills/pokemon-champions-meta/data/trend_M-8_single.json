@@ -1,0 +1,2227 @@
+{
+  "season": "M-8",
+  "rule": "M-C",
+  "format": "single",
+  "generated_at": "2026-11-06T04:00:57+00:00",
+  "top_n": 30,
+  "max_periods": 10,
+  "periods": [
+    {
+      "date": "2026-11-06",
+      "updated_at": "2026-11-06T04:00:57+00:00",
+      "ranked": 257
+    }
+  ],
+  "ranks": {
+    "garchomp": [
+      1
+    ],
+    "primarina": [
+      2
+    ],
+    "mimikyu": [
+      3
+    ],
+    "archaludon": [
+      4
+    ],
+    "lucario": [
+      5
+    ],
+    "hippowdon": [
+      6
+    ],
+    "charizard": [
+      7
+    ],
+    "basculegion": [
+      8
+    ],
+    "golisopod": [
+      9
+    ],
+    "dragonite": [
+      10
+    ],
+    "gholdengo": [
+      11
+    ],
+    "corviknight": [
+      12
+    ],
+    "rillaboom": [
+      13
+    ],
+    "glimmora": [
+      14
+    ],
+    "salamence": [
+      15
+    ],
+    "metagross": [
+      16
+    ],
+    "meowscarada": [
+      17
+    ],
+    "indeedee": [
+      18
+    ],
+    "gyarados": [
+      19
+    ],
+    "baxcalibur": [
+      20
+    ],
+    "umbreon": [
+      21
+    ],
+    "gengar": [
+      22
+    ],
+    "pawmot": [
+      23
+    ],
+    "cinderace": [
+      24
+    ],
+    "floette-eternal": [
+      25
+    ],
+    "greninja": [
+      26
+    ],
+    "clefable": [
+      27
+    ],
+    "samurott-hisui": [
+      28
+    ],
+    "aegislash": [
+      29
+    ],
+    "kingambit": [
+      30
+    ],
+    "rotom-heat": [
+      31
+    ],
+    "rotom-wash": [
+      32
+    ],
+    "volcarona": [
+      33
+    ],
+    "blaziken": [
+      34
+    ],
+    "raichu": [
+      35
+    ],
+    "ninetales-alola": [
+      36
+    ],
+    "staraptor": [
+      37
+    ],
+    "sneasler": [
+      38
+    ],
+    "swampert": [
+      39
+    ],
+    "tyranitar": [
+      40
+    ],
+    "scizor": [
+      41
+    ],
+    "hydreigon": [
+      42
+    ],
+    "delphox": [
+      43
+    ],
+    "starmie": [
+      44
+    ],
+    "blastoise": [
+      45
+    ],
+    "slowking-galar": [
+      46
+    ],
+    "toxapex": [
+      47
+    ],
+    "scovillain": [
+      48
+    ],
+    "hatterene": [
+      49
+    ],
+    "skeledirge": [
+      50
+    ],
+    "grimmsnarl": [
+      51
+    ],
+    "venusaur": [
+      52
+    ],
+    "meganium": [
+      53
+    ],
+    "goodra-hisui": [
+      54
+    ],
+    "mawile": [
+      55
+    ],
+    "ceruledge": [
+      56
+    ],
+    "pelipper": [
+      57
+    ],
+    "empoleon": [
+      58
+    ],
+    "ditto": [
+      59
+    ],
+    "gardevoir": [
+      60
+    ],
+    "excadrill": [
+      61
+    ],
+    "vanilluxe": [
+      62
+    ],
+    "banette": [
+      63
+    ],
+    "zoroark-hisui": [
+      64
+    ],
+    "espathra": [
+      65
+    ],
+    "snorlax": [
+      66
+    ],
+    "sylveon": [
+      67
+    ],
+    "bellibolt": [
+      68
+    ],
+    "mamoswine": [
+      69
+    ],
+    "dragapult": [
+      70
+    ],
+    "absol": [
+      71
+    ],
+    "lopunny": [
+      72
+    ],
+    "gallade": [
+      73
+    ],
+    "kleavor": [
+      74
+    ],
+    "victreebel": [
+      75
+    ],
+    "milotic": [
+      76
+    ],
+    "annihilape": [
+      77
+    ],
+    "skarmory": [
+      78
+    ],
+    "froslass": [
+      79
+    ],
+    "polteageist": [
+      80
+    ],
+    "kangaskhan": [
+      81
+    ],
+    "sableye": [
+      82
+    ],
+    "politoed": [
+      83
+    ],
+    "araquanid": [
+      84
+    ],
+    "scolipede": [
+      85
+    ],
+    "arcanine-hisui": [
+      86
+    ],
+    "vivillon": [
+      87
+    ],
+    "tinkaton": [
+      88
+    ],
+    "whimsicott": [
+      89
+    ],
+    "toucannon": [
+      90
+    ],
+    "overqwil": [
+      91
+    ],
+    "houndstone": [
+      92
+    ],
+    "heracross": [
+      93
+    ],
+    "armarouge": [
+      94
+    ],
+    "dragalge": [
+      95
+    ],
+    "vaporeon": [
+      96
+    ],
+    "azumarill": [
+      97
+    ],
+    "espeon": [
+      98
+    ],
+    "arboliva": [
+      99
+    ],
+    "basculegion-f": [
+      100
+    ],
+    "slurpuff": [
+      101
+    ],
+    "gliscor": [
+      102
+    ],
+    "reuniclus": [
+      103
+    ],
+    "diggersby": [
+      104
+    ],
+    "sceptile": [
+      105
+    ],
+    "altaria": [
+      106
+    ],
+    "pyroar": [
+      107
+    ],
+    "incineroar": [
+      108
+    ],
+    "toxtricity": [
+      109
+    ],
+    "inteleon": [
+      110
+    ],
+    "orthworm": [
+      111
+    ],
+    "slowbro-galar": [
+      112
+    ],
+    "sharpedo": [
+      113
+    ],
+    "maushold": [
+      114
+    ],
+    "infernape": [
+      115
+    ],
+    "slowbro": [
+      116
+    ],
+    "serperior": [
+      117
+    ],
+    "barbaracle": [
+      118
+    ],
+    "conkeldurr": [
+      119
+    ],
+    "aggron": [
+      120
+    ],
+    "heliolisk": [
+      121
+    ],
+    "sirfetchd": [
+      122
+    ],
+    "torkoal": [
+      123
+    ],
+    "chandelure": [
+      124
+    ],
+    "indeedee-f": [
+      125
+    ],
+    "grapploct": [
+      126
+    ],
+    "ampharos": [
+      127
+    ],
+    "arcanine": [
+      128
+    ],
+    "glalie": [
+      129
+    ],
+    "tauros-paldea-blaze": [
+      130
+    ],
+    "hawlucha": [
+      131
+    ],
+    "eelektross": [
+      132
+    ],
+    "alakazam": [
+      133
+    ],
+    "krookodile": [
+      134
+    ],
+    "chimecho": [
+      135
+    ],
+    "quaquaval": [
+      136
+    ],
+    "emolga": [
+      137
+    ],
+    "slowking": [
+      138
+    ],
+    "medicham": [
+      139
+    ],
+    "palafin": [
+      140
+    ],
+    "cofagrigus": [
+      141
+    ],
+    "klefki": [
+      142
+    ],
+    "scrafty": [
+      143
+    ],
+    "audino": [
+      144
+    ],
+    "sandaconda": [
+      145
+    ],
+    "decidueye-hisui": [
+      146
+    ],
+    "salazzle": [
+      147
+    ],
+    "malamar": [
+      148
+    ],
+    "persian-alola": [
+      149
+    ],
+    "pincurchin": [
+      150
+    ],
+    "crabominable": [
+      151
+    ],
+    "pinsir": [
+      152
+    ],
+    "kommo-o": [
+      153
+    ],
+    "typhlosion": [
+      154
+    ],
+    "meowstic": [
+      155
+    ],
+    "lycanroc-dusk": [
+      156
+    ],
+    "sinistcha": [
+      157
+    ],
+    "feraligatr": [
+      158
+    ],
+    "runerigus": [
+      159
+    ],
+    "torterra": [
+      160
+    ],
+    "weavile": [
+      161
+    ],
+    "vileplume": [
+      162
+    ],
+    "glaceon": [
+      163
+    ],
+    "forretress": [
+      164
+    ],
+    "chesnaught": [
+      165
+    ],
+    "hydrapple": [
+      166
+    ],
+    "drampa": [
+      167
+    ],
+    "morpeko": [
+      168
+    ],
+    "toxtricity-low-key": [
+      169
+    ],
+    "aerodactyl": [
+      170
+    ],
+    "roserade": [
+      171
+    ],
+    "ninetales": [
+      172
+    ],
+    "noivern": [
+      173
+    ],
+    "farigiraf": [
+      174
+    ],
+    "mudsdale": [
+      175
+    ],
+    "zoroark": [
+      176
+    ],
+    "talonflame": [
+      177
+    ],
+    "raichu-alola": [
+      178
+    ],
+    "golurk": [
+      179
+    ],
+    "pidgeot": [
+      180
+    ],
+    "goodra": [
+      181
+    ],
+    "houndoom": [
+      182
+    ],
+    "emboar": [
+      183
+    ],
+    "aurorus": [
+      184
+    ],
+    "rhyperior": [
+      185
+    ],
+    "pikachu": [
+      186
+    ],
+    "decidueye": [
+      187
+    ],
+    "tsareena": [
+      188
+    ],
+    "jolteon": [
+      189
+    ],
+    "beartic": [
+      190
+    ],
+    "spiritomb": [
+      191
+    ],
+    "florges": [
+      192
+    ],
+    "abomasnow": [
+      193
+    ],
+    "steelix": [
+      194
+    ],
+    "machamp": [
+      195
+    ],
+    "pangoro": [
+      196
+    ],
+    "alcremie": [
+      197
+    ],
+    "typhlosion-hisui": [
+      198
+    ],
+    "bastiodon": [
+      199
+    ],
+    "avalugg": [
+      200
+    ],
+    "trevenant": [
+      201
+    ],
+    "falinks": [
+      202
+    ],
+    "garganacl": [
+      203
+    ],
+    "mr-rime": [
+      204
+    ],
+    "flareon": [
+      205
+    ],
+    "beedrill": [
+      206
+    ],
+    "arbok": [
+      207
+    ],
+    "lycanroc-midday": [
+      208
+    ],
+    "rotom-mow": [
+      209
+    ],
+    "rotom-fan": [
+      210
+    ],
+    "qwilfish": [
+      211
+    ],
+    "stunfisk": [
+      212
+    ],
+    "clawitzer": [
+      213
+    ],
+    "tauros-paldea-aqua": [
+      214
+    ],
+    "manectric": [
+      215
+    ],
+    "tauros": [
+      216
+    ],
+    "wigglytuff": [
+      217
+    ],
+    "simisear": [
+      218
+    ],
+    "musharna": [
+      219
+    ],
+    "simipour": [
+      220
+    ],
+    "squawkabilly-yellow": [
+      221
+    ],
+    "leafeon": [
+      222
+    ],
+    "gourgeist-super": [
+      223
+    ],
+    "camerupt": [
+      224
+    ],
+    "garbodor": [
+      225
+    ],
+    "dedenne": [
+      226
+    ],
+    "swalot": [
+      227
+    ],
+    "rotom-frost": [
+      228
+    ],
+    "simisage": [
+      229
+    ],
+    "ariados": [
+      230
+    ],
+    "samurott": [
+      231
+    ],
+    "aromatisse": [
+      232
+    ],
+    "appletun": [
+      233
+    ],
+    "castform": [
+      234
+    ],
+    "mr-mime": [
+      235
+    ],
+    "avalugg-hisui": [
+      236
+    ],
+    "squawkabilly": [
+      237
+    ],
+    "toxicroak": [
+      238
+    ],
+    "meowstic-f": [
+      239
+    ],
+    "tyrantrum": [
+      240
+    ],
+    "liepard": [
+      241
+    ],
+    "gourgeist-small": [
+      242
+    ],
+    "rampardos": [
+      243
+    ],
+    "mabosstiff": [
+      244
+    ],
+    "furfrou": [
+      245
+    ],
+    "gourgeist-large": [
+      246
+    ],
+    "farfetchd": [
+      247
+    ],
+    "lycanroc-midnight": [
+      248
+    ],
+    "perrserker": [
+      249
+    ],
+    "wyrdeer": [
+      250
+    ],
+    "gogoat": [
+      251
+    ],
+    "thievul": [
+      252
+    ],
+    "luxray": [
+      253
+    ],
+    "stunfisk-galar": [
+      254
+    ],
+    "passimian": [
+      255
+    ],
+    "watchog": [
+      256
+    ],
+    "flapple": [
+      257
+    ]
+  },
+  "names": {
+    "garchomp": {
+      "zh": "烈咬陆鲨",
+      "ja": "ガブリアス",
+      "en": "Garchomp"
+    },
+    "primarina": {
+      "zh": "西狮海壬",
+      "ja": "アシレーヌ",
+      "en": "Primarina"
+    },
+    "mimikyu": {
+      "zh": "谜拟丘",
+      "ja": "ミミッキュ",
+      "en": "Mimikyu"
+    },
+    "archaludon": {
+      "zh": "铝钢桥龙",
+      "ja": "ブリジュラス",
+      "en": "Archaludon"
+    },
+    "lucario": {
+      "zh": "路卡利欧",
+      "ja": "ルカリオ",
+      "en": "Lucario"
+    },
+    "hippowdon": {
+      "zh": "河马兽",
+      "ja": "カバルドン",
+      "en": "Hippowdon"
+    },
+    "charizard": {
+      "zh": "喷火龙",
+      "ja": "リザードン",
+      "en": "Charizard"
+    },
+    "basculegion": {
+      "zh": "幽尾玄鱼",
+      "ja": "イダイトウ",
+      "en": "Basculegion"
+    },
+    "golisopod": {
+      "zh": "具甲武者",
+      "ja": "グソクムシャ",
+      "en": "Golisopod"
+    },
+    "dragonite": {
+      "zh": "快龙",
+      "ja": "カイリュー",
+      "en": "Dragonite"
+    },
+    "gholdengo": {
+      "zh": "赛富豪",
+      "ja": "サーフゴー",
+      "en": "Gholdengo"
+    },
+    "corviknight": {
+      "zh": "钢铠鸦",
+      "ja": "アーマーガア",
+      "en": "Corviknight"
+    },
+    "rillaboom": {
+      "zh": "轰擂金刚猩",
+      "ja": "ゴリランダー",
+      "en": "Rillaboom"
+    },
+    "glimmora": {
+      "zh": "晶光花",
+      "ja": "キラフロル",
+      "en": "Glimmora"
+    },
+    "salamence": {
+      "zh": "暴飞龙",
+      "ja": "ボーマンダ",
+      "en": "Salamence"
+    },
+    "metagross": {
+      "zh": "巨金怪",
+      "ja": "メタグロス",
+      "en": "Metagross"
+    },
+    "meowscarada": {
+      "zh": "魔幻假面喵",
+      "ja": "マスカーニャ",
+      "en": "Meowscarada"
+    },
+    "indeedee": {
+      "zh": "爱管侍",
+      "ja": "イエッサン",
+      "en": "Indeedee"
+    },
+    "gyarados": {
+      "zh": "暴鲤龙",
+      "ja": "ギャラドス",
+      "en": "Gyarados"
+    },
+    "baxcalibur": {
+      "zh": "戟脊龙",
+      "ja": "セグレイブ",
+      "en": "Baxcalibur"
+    },
+    "umbreon": {
+      "zh": "月亮伊布",
+      "ja": "ブラッキー",
+      "en": "Umbreon"
+    },
+    "gengar": {
+      "zh": "耿鬼",
+      "ja": "ゲンガー",
+      "en": "Gengar"
+    },
+    "pawmot": {
+      "zh": "巴布土拨",
+      "ja": "パーモット",
+      "en": "Pawmot"
+    },
+    "cinderace": {
+      "zh": "闪焰王牌",
+      "ja": "エースバーン",
+      "en": "Cinderace"
+    },
+    "floette-eternal": {
+      "zh": "花叶蒂（永恒之花）",
+      "ja": "フラエッテ（えいえんのはな）",
+      "en": "Floette-Eternal"
+    },
+    "greninja": {
+      "zh": "甲贺忍蛙",
+      "ja": "ゲッコウガ",
+      "en": "Greninja"
+    },
+    "clefable": {
+      "zh": "皮可西",
+      "ja": "ピクシー",
+      "en": "Clefable"
+    },
+    "samurott-hisui": {
+      "zh": "大剑鬼（洗翠的样子）",
+      "ja": "ダイケンキ（ヒスイのすがた）",
+      "en": "Samurott-Hisui"
+    },
+    "aegislash": {
+      "zh": "坚盾剑怪",
+      "ja": "ギルガルド",
+      "en": "Aegislash"
+    },
+    "kingambit": {
+      "zh": "仆刀将军",
+      "ja": "ドドゲザン",
+      "en": "Kingambit"
+    },
+    "rotom-heat": {
+      "zh": "加热洛托姆",
+      "ja": "ヒートロトム",
+      "en": "Rotom-Heat"
+    },
+    "rotom-wash": {
+      "zh": "清洗洛托姆",
+      "ja": "ウォッシュロトム",
+      "en": "Rotom-Wash"
+    },
+    "volcarona": {
+      "zh": "火神蛾",
+      "ja": "ウルガモス",
+      "en": "Volcarona"
+    },
+    "blaziken": {
+      "zh": "火焰鸡",
+      "ja": "バシャーモ",
+      "en": "Blaziken"
+    },
+    "raichu": {
+      "zh": "雷丘",
+      "ja": "ライチュウ",
+      "en": "Raichu"
+    },
+    "ninetales-alola": {
+      "zh": "九尾（阿罗拉的样子）",
+      "ja": "キュウコン（アローラのすがた）",
+      "en": "Ninetales-Alola"
+    },
+    "staraptor": {
+      "zh": "姆克鹰",
+      "ja": "ムクホーク",
+      "en": "Staraptor"
+    },
+    "sneasler": {
+      "zh": "大狃拉",
+      "ja": "オオニューラ",
+      "en": "Sneasler"
+    },
+    "swampert": {
+      "zh": "巨沼怪",
+      "ja": "ラグラージ",
+      "en": "Swampert"
+    },
+    "tyranitar": {
+      "zh": "班基拉斯",
+      "ja": "バンギラス",
+      "en": "Tyranitar"
+    },
+    "scizor": {
+      "zh": "巨钳螳螂",
+      "ja": "ハッサム",
+      "en": "Scizor"
+    },
+    "hydreigon": {
+      "zh": "三首恶龙",
+      "ja": "サザンドラ",
+      "en": "Hydreigon"
+    },
+    "delphox": {
+      "zh": "妖火红狐",
+      "ja": "マフォクシー",
+      "en": "Delphox"
+    },
+    "starmie": {
+      "zh": "宝石海星",
+      "ja": "スターミー",
+      "en": "Starmie"
+    },
+    "blastoise": {
+      "zh": "水箭龟",
+      "ja": "カメックス",
+      "en": "Blastoise"
+    },
+    "slowking-galar": {
+      "zh": "呆呆王（伽勒尔的样子）",
+      "ja": "ヤドキング（ガラルのすがた）",
+      "en": "Slowking-Galar"
+    },
+    "toxapex": {
+      "zh": "超坏星",
+      "ja": "ドヒドイデ",
+      "en": "Toxapex"
+    },
+    "scovillain": {
+      "zh": "狠辣椒",
+      "ja": "スコヴィラン",
+      "en": "Scovillain"
+    },
+    "hatterene": {
+      "zh": "布莉姆温",
+      "ja": "ブリムオン",
+      "en": "Hatterene"
+    },
+    "skeledirge": {
+      "zh": "骨纹巨声鳄",
+      "ja": "ラウドボーン",
+      "en": "Skeledirge"
+    },
+    "grimmsnarl": {
+      "zh": "长毛巨魔",
+      "ja": "オーロンゲ",
+      "en": "Grimmsnarl"
+    },
+    "venusaur": {
+      "zh": "妙蛙花",
+      "ja": "フシギバナ",
+      "en": "Venusaur"
+    },
+    "meganium": {
+      "zh": "大竺葵",
+      "ja": "メガニウム",
+      "en": "Meganium"
+    },
+    "goodra-hisui": {
+      "zh": "黏美龙（洗翠的样子）",
+      "ja": "ヌメルゴン（ヒスイのすがた）",
+      "en": "Goodra-Hisui"
+    },
+    "mawile": {
+      "zh": "大嘴娃",
+      "ja": "クチート",
+      "en": "Mawile"
+    },
+    "ceruledge": {
+      "zh": "苍炎刃鬼",
+      "ja": "ソウブレイズ",
+      "en": "Ceruledge"
+    },
+    "pelipper": {
+      "zh": "大嘴鸥",
+      "ja": "ペリッパー",
+      "en": "Pelipper"
+    },
+    "empoleon": {
+      "zh": "帝王拿波",
+      "ja": "エンペルト",
+      "en": "Empoleon"
+    },
+    "ditto": {
+      "zh": "百变怪",
+      "ja": "メタモン",
+      "en": "Ditto"
+    },
+    "gardevoir": {
+      "zh": "沙奈朵",
+      "ja": "サーナイト",
+      "en": "Gardevoir"
+    },
+    "excadrill": {
+      "zh": "龙头地鼠",
+      "ja": "ドリュウズ",
+      "en": "Excadrill"
+    },
+    "vanilluxe": {
+      "zh": "双倍多多冰",
+      "ja": "バイバニラ",
+      "en": "Vanilluxe"
+    },
+    "banette": {
+      "zh": "诅咒娃娃",
+      "ja": "ジュペッタ",
+      "en": "Banette"
+    },
+    "zoroark-hisui": {
+      "zh": "索罗亚克（洗翠的样子）",
+      "ja": "ゾロアーク（ヒスイのすがた）",
+      "en": "Zoroark-Hisui"
+    },
+    "espathra": {
+      "zh": "超能艳鸵",
+      "ja": "クエスパトラ",
+      "en": "Espathra"
+    },
+    "snorlax": {
+      "zh": "卡比兽",
+      "ja": "カビゴン",
+      "en": "Snorlax"
+    },
+    "sylveon": {
+      "zh": "仙子伊布",
+      "ja": "ニンフィア",
+      "en": "Sylveon"
+    },
+    "bellibolt": {
+      "zh": "电肚蛙",
+      "ja": "ハラバリー",
+      "en": "Bellibolt"
+    },
+    "mamoswine": {
+      "zh": "象牙猪",
+      "ja": "マンムー",
+      "en": "Mamoswine"
+    },
+    "dragapult": {
+      "zh": "多龙巴鲁托",
+      "ja": "ドラパルト",
+      "en": "Dragapult"
+    },
+    "absol": {
+      "zh": "阿勃梭鲁",
+      "ja": "アブソル",
+      "en": "Absol"
+    },
+    "lopunny": {
+      "zh": "长耳兔",
+      "ja": "ミミロップ",
+      "en": "Lopunny"
+    },
+    "gallade": {
+      "zh": "艾路雷朵",
+      "ja": "エルレイド",
+      "en": "Gallade"
+    },
+    "kleavor": {
+      "zh": "劈斧螳螂",
+      "ja": "バサギリ",
+      "en": "Kleavor"
+    },
+    "victreebel": {
+      "zh": "大食花",
+      "ja": "ウツボット",
+      "en": "Victreebel"
+    },
+    "milotic": {
+      "zh": "美纳斯",
+      "ja": "ミロカロス",
+      "en": "Milotic"
+    },
+    "annihilape": {
+      "zh": "弃世猴",
+      "ja": "コノヨザル",
+      "en": "Annihilape"
+    },
+    "skarmory": {
+      "zh": "盔甲鸟",
+      "ja": "エアームド",
+      "en": "Skarmory"
+    },
+    "froslass": {
+      "zh": "雪妖女",
+      "ja": "ユキメノコ",
+      "en": "Froslass"
+    },
+    "polteageist": {
+      "zh": "怖思壶",
+      "ja": "ポットデス",
+      "en": "Polteageist"
+    },
+    "kangaskhan": {
+      "zh": "袋兽",
+      "ja": "ガルーラ",
+      "en": "Kangaskhan"
+    },
+    "sableye": {
+      "zh": "勾魂眼",
+      "ja": "ヤミラミ",
+      "en": "Sableye"
+    },
+    "politoed": {
+      "zh": "蚊香蛙皇",
+      "ja": "ニョロトノ",
+      "en": "Politoed"
+    },
+    "araquanid": {
+      "zh": "滴蛛霸",
+      "ja": "オニシズクモ",
+      "en": "Araquanid"
+    },
+    "scolipede": {
+      "zh": "蜈蚣王",
+      "ja": "ペンドラー",
+      "en": "Scolipede"
+    },
+    "arcanine-hisui": {
+      "zh": "风速狗（洗翠的样子）",
+      "ja": "ウインディ（ヒスイのすがた）",
+      "en": "Arcanine-Hisui"
+    },
+    "vivillon": {
+      "zh": "彩粉蝶",
+      "ja": "ビビヨン",
+      "en": "Vivillon"
+    },
+    "tinkaton": {
+      "zh": "巨锻匠",
+      "ja": "デカヌチャン",
+      "en": "Tinkaton"
+    },
+    "whimsicott": {
+      "zh": "风妖精",
+      "ja": "エルフーン",
+      "en": "Whimsicott"
+    },
+    "toucannon": {
+      "zh": "铳嘴大鸟",
+      "ja": "ドデカバシ",
+      "en": "Toucannon"
+    },
+    "overqwil": {
+      "zh": "万针鱼",
+      "ja": "ハリーマン",
+      "en": "Overqwil"
+    },
+    "houndstone": {
+      "zh": "墓扬犬",
+      "ja": "ハカドッグ",
+      "en": "Houndstone"
+    },
+    "heracross": {
+      "zh": "赫拉克罗斯",
+      "ja": "ヘラクロス",
+      "en": "Heracross"
+    },
+    "armarouge": {
+      "zh": "红莲铠骑",
+      "ja": "グレンアルマ",
+      "en": "Armarouge"
+    },
+    "dragalge": {
+      "zh": "毒藻龙",
+      "ja": "ドラミドロ",
+      "en": "Dragalge"
+    },
+    "vaporeon": {
+      "zh": "水伊布",
+      "ja": "シャワーズ",
+      "en": "Vaporeon"
+    },
+    "azumarill": {
+      "zh": "玛力露丽",
+      "ja": "マリルリ",
+      "en": "Azumarill"
+    },
+    "espeon": {
+      "zh": "太阳伊布",
+      "ja": "エーフィ",
+      "en": "Espeon"
+    },
+    "arboliva": {
+      "zh": "奥利瓦",
+      "ja": "オリーヴァ",
+      "en": "Arboliva"
+    },
+    "basculegion-f": {
+      "zh": "幽尾玄鱼（雌性的样子）",
+      "ja": "イダイトウ（メスのすがた）",
+      "en": "Basculegion-F"
+    },
+    "slurpuff": {
+      "zh": "胖甜妮",
+      "ja": "ペロリーム",
+      "en": "Slurpuff"
+    },
+    "gliscor": {
+      "zh": "天蝎王",
+      "ja": "グライオン",
+      "en": "Gliscor"
+    },
+    "reuniclus": {
+      "zh": "人造细胞卵",
+      "ja": "ランクルス",
+      "en": "Reuniclus"
+    },
+    "diggersby": {
+      "zh": "掘地兔",
+      "ja": "ホルード",
+      "en": "Diggersby"
+    },
+    "sceptile": {
+      "zh": "蜥蜴王",
+      "ja": "ジュカイン",
+      "en": "Sceptile"
+    },
+    "altaria": {
+      "zh": "七夕青鸟",
+      "ja": "チルタリス",
+      "en": "Altaria"
+    },
+    "pyroar": {
+      "zh": "火炎狮",
+      "ja": "カエンジシ",
+      "en": "Pyroar"
+    },
+    "incineroar": {
+      "zh": "炽焰咆哮虎",
+      "ja": "ガオガエン",
+      "en": "Incineroar"
+    },
+    "toxtricity": {
+      "zh": "颤弦蝾螈",
+      "ja": "ストリンダー",
+      "en": "Toxtricity"
+    },
+    "inteleon": {
+      "zh": "千面避役",
+      "ja": "インテレオン",
+      "en": "Inteleon"
+    },
+    "orthworm": {
+      "zh": "拖拖蚓",
+      "ja": "ミミズズ",
+      "en": "Orthworm"
+    },
+    "slowbro-galar": {
+      "zh": "呆壳兽（伽勒尔的样子）",
+      "ja": "ヤドラン（ガラルのすがた）",
+      "en": "Slowbro-Galar"
+    },
+    "sharpedo": {
+      "zh": "巨牙鲨",
+      "ja": "サメハダー",
+      "en": "Sharpedo"
+    },
+    "maushold": {
+      "zh": "一家鼠",
+      "ja": "イッカネズミ",
+      "en": "Maushold"
+    },
+    "infernape": {
+      "zh": "烈焰猴",
+      "ja": "ゴウカザル",
+      "en": "Infernape"
+    },
+    "slowbro": {
+      "zh": "呆壳兽",
+      "ja": "ヤドラン",
+      "en": "Slowbro"
+    },
+    "serperior": {
+      "zh": "君主蛇",
+      "ja": "ジャローダ",
+      "en": "Serperior"
+    },
+    "barbaracle": {
+      "zh": "龟足巨铠",
+      "ja": "ガメノデス",
+      "en": "Barbaracle"
+    },
+    "conkeldurr": {
+      "zh": "修建老匠",
+      "ja": "ローブシン",
+      "en": "Conkeldurr"
+    },
+    "aggron": {
+      "zh": "波士可多拉",
+      "ja": "ボスゴドラ",
+      "en": "Aggron"
+    },
+    "heliolisk": {
+      "zh": "光电伞蜥",
+      "ja": "エレザード",
+      "en": "Heliolisk"
+    },
+    "sirfetchd": {
+      "zh": "葱游兵",
+      "ja": "ネギガナイト",
+      "en": "Sirfetch'd"
+    },
+    "torkoal": {
+      "zh": "煤炭龟",
+      "ja": "コータス",
+      "en": "Torkoal"
+    },
+    "chandelure": {
+      "zh": "水晶灯火灵",
+      "ja": "シャンデラ",
+      "en": "Chandelure"
+    },
+    "indeedee-f": {
+      "zh": "爱管侍（雌性的样子）",
+      "ja": "イエッサン（メスのすがた）",
+      "en": "Indeedee-F"
+    },
+    "grapploct": {
+      "zh": "八爪武师",
+      "ja": "オトスパス",
+      "en": "Grapploct"
+    },
+    "ampharos": {
+      "zh": "电龙",
+      "ja": "デンリュウ",
+      "en": "Ampharos"
+    },
+    "arcanine": {
+      "zh": "风速狗",
+      "ja": "ウインディ",
+      "en": "Arcanine"
+    },
+    "glalie": {
+      "zh": "冰鬼护",
+      "ja": "オニゴーリ",
+      "en": "Glalie"
+    },
+    "tauros-paldea-blaze": {
+      "zh": "肯泰罗（帕底亚的样子・火炽种）",
+      "ja": "ケンタロス（パルデアのすがた・ブレイズしゅ）",
+      "en": "Tauros-Paldea-Blaze"
+    },
+    "hawlucha": {
+      "zh": "摔角鹰人",
+      "ja": "ルチャブル",
+      "en": "Hawlucha"
+    },
+    "eelektross": {
+      "zh": "麻麻鳗鱼王",
+      "ja": "シビルドン",
+      "en": "Eelektross"
+    },
+    "alakazam": {
+      "zh": "胡地",
+      "ja": "フーディン",
+      "en": "Alakazam"
+    },
+    "krookodile": {
+      "zh": "流氓鳄",
+      "ja": "ワルビアル",
+      "en": "Krookodile"
+    },
+    "chimecho": {
+      "zh": "风铃铃",
+      "ja": "チリーン",
+      "en": "Chimecho"
+    },
+    "quaquaval": {
+      "zh": "狂欢浪舞鸭",
+      "ja": "ウェーニバル",
+      "en": "Quaquaval"
+    },
+    "emolga": {
+      "zh": "电飞鼠",
+      "ja": "エモンガ",
+      "en": "Emolga"
+    },
+    "slowking": {
+      "zh": "呆呆王",
+      "ja": "ヤドキング",
+      "en": "Slowking"
+    },
+    "medicham": {
+      "zh": "恰雷姆",
+      "ja": "チャーレム",
+      "en": "Medicham"
+    },
+    "palafin": {
+      "zh": "海豚侠",
+      "ja": "イルカマン",
+      "en": "Palafin"
+    },
+    "cofagrigus": {
+      "zh": "迭失棺",
+      "ja": "デスカーン",
+      "en": "Cofagrigus"
+    },
+    "klefki": {
+      "zh": "钥圈儿",
+      "ja": "クレッフィ",
+      "en": "Klefki"
+    },
+    "scrafty": {
+      "zh": "头巾混混",
+      "ja": "ズルズキン",
+      "en": "Scrafty"
+    },
+    "audino": {
+      "zh": "差不多娃娃",
+      "ja": "タブンネ",
+      "en": "Audino"
+    },
+    "sandaconda": {
+      "zh": "沙螺蟒",
+      "ja": "サダイジャ",
+      "en": "Sandaconda"
+    },
+    "decidueye-hisui": {
+      "zh": "狙射树枭（洗翠的样子）",
+      "ja": "ジュナイパー（ヒスイのすがた）",
+      "en": "Decidueye-Hisui"
+    },
+    "salazzle": {
+      "zh": "焰后蜥",
+      "ja": "エンニュート",
+      "en": "Salazzle"
+    },
+    "malamar": {
+      "zh": "乌贼王",
+      "ja": "カラマネロ",
+      "en": "Malamar"
+    },
+    "persian-alola": {
+      "zh": "猫老大（阿罗拉的样子）",
+      "ja": "ペルシアン（アローラのすがた）",
+      "en": "Persian-Alola"
+    },
+    "pincurchin": {
+      "zh": "啪嚓海胆",
+      "ja": "バチンウニ",
+      "en": "Pincurchin"
+    },
+    "crabominable": {
+      "zh": "好胜毛蟹",
+      "ja": "ケケンカニ",
+      "en": "Crabominable"
+    },
+    "pinsir": {
+      "zh": "凯罗斯",
+      "ja": "カイロス",
+      "en": "Pinsir"
+    },
+    "kommo-o": {
+      "zh": "杖尾鳞甲龙",
+      "ja": "ジャラランガ",
+      "en": "Kommo-o"
+    },
+    "typhlosion": {
+      "zh": "火暴兽",
+      "ja": "バクフーン",
+      "en": "Typhlosion"
+    },
+    "meowstic": {
+      "zh": "超能妙喵",
+      "ja": "ニャオニクス",
+      "en": "Meowstic"
+    },
+    "lycanroc-dusk": {
+      "zh": "鬃岩狼人（黄昏的样子）",
+      "ja": "ルガルガン（たそがれのすがた）",
+      "en": "Lycanroc-Dusk"
+    },
+    "sinistcha": {
+      "zh": "来悲粗茶",
+      "ja": "ヤバソチャ",
+      "en": "Sinistcha"
+    },
+    "feraligatr": {
+      "zh": "大力鳄",
+      "ja": "オーダイル",
+      "en": "Feraligatr"
+    },
+    "runerigus": {
+      "zh": "迭失板",
+      "ja": "デスバーン",
+      "en": "Runerigus"
+    },
+    "torterra": {
+      "zh": "土台龟",
+      "ja": "ドダイトス",
+      "en": "Torterra"
+    },
+    "weavile": {
+      "zh": "玛狃拉",
+      "ja": "マニューラ",
+      "en": "Weavile"
+    },
+    "vileplume": {
+      "zh": "霸王花",
+      "ja": "ラフレシア",
+      "en": "Vileplume"
+    },
+    "glaceon": {
+      "zh": "冰伊布",
+      "ja": "グレイシア",
+      "en": "Glaceon"
+    },
+    "forretress": {
+      "zh": "佛烈托斯",
+      "ja": "フォレトス",
+      "en": "Forretress"
+    },
+    "chesnaught": {
+      "zh": "布里卡隆",
+      "ja": "ブリガロン",
+      "en": "Chesnaught"
+    },
+    "hydrapple": {
+      "zh": "蜜集大蛇",
+      "ja": "カミツオロチ",
+      "en": "Hydrapple"
+    },
+    "drampa": {
+      "zh": "老翁龙",
+      "ja": "ジジーロン",
+      "en": "Drampa"
+    },
+    "morpeko": {
+      "zh": "莫鲁贝可",
+      "ja": "モルペコ",
+      "en": "Morpeko"
+    },
+    "toxtricity-low-key": {
+      "zh": "颤弦蝾螈（低调的样子）",
+      "ja": "ストリンダー（ローなすがた）",
+      "en": "Toxtricity-Low Key"
+    },
+    "aerodactyl": {
+      "zh": "化石翼龙",
+      "ja": "プテラ",
+      "en": "Aerodactyl"
+    },
+    "roserade": {
+      "zh": "罗丝雷朵",
+      "ja": "ロズレイド",
+      "en": "Roserade"
+    },
+    "ninetales": {
+      "zh": "九尾",
+      "ja": "キュウコン",
+      "en": "Ninetales"
+    },
+    "noivern": {
+      "zh": "音波龙",
+      "ja": "オンバーン",
+      "en": "Noivern"
+    },
+    "farigiraf": {
+      "zh": "奇麒麟",
+      "ja": "リキキリン",
+      "en": "Farigiraf"
+    },
+    "mudsdale": {
+      "zh": "重泥挽马",
+      "ja": "バンバドロ",
+      "en": "Mudsdale"
+    },
+    "zoroark": {
+      "zh": "索罗亚克",
+      "ja": "ゾロアーク",
+      "en": "Zoroark"
+    },
+    "talonflame": {
+      "zh": "烈箭鹰",
+      "ja": "ファイアロー",
+      "en": "Talonflame"
+    },
+    "raichu-alola": {
+      "zh": "雷丘（阿罗拉的样子）",
+      "ja": "ライチュウ（アローラのすがた）",
+      "en": "Raichu-Alola"
+    },
+    "golurk": {
+      "zh": "泥偶巨人",
+      "ja": "ゴルーグ",
+      "en": "Golurk"
+    },
+    "pidgeot": {
+      "zh": "大比鸟",
+      "ja": "ピジョット",
+      "en": "Pidgeot"
+    },
+    "goodra": {
+      "zh": "黏美龙",
+      "ja": "ヌメルゴン",
+      "en": "Goodra"
+    },
+    "houndoom": {
+      "zh": "黑鲁加",
+      "ja": "ヘルガー",
+      "en": "Houndoom"
+    },
+    "emboar": {
+      "zh": "炎武王",
+      "ja": "エンブオー",
+      "en": "Emboar"
+    },
+    "aurorus": {
+      "zh": "冰雪巨龙",
+      "ja": "アマルルガ",
+      "en": "Aurorus"
+    },
+    "rhyperior": {
+      "zh": "超甲狂犀",
+      "ja": "ドサイドン",
+      "en": "Rhyperior"
+    },
+    "pikachu": {
+      "zh": "皮卡丘",
+      "ja": "ピカチュウ",
+      "en": "Pikachu"
+    },
+    "decidueye": {
+      "zh": "狙射树枭",
+      "ja": "ジュナイパー",
+      "en": "Decidueye"
+    },
+    "tsareena": {
+      "zh": "甜冷美后",
+      "ja": "アマージョ",
+      "en": "Tsareena"
+    },
+    "jolteon": {
+      "zh": "雷伊布",
+      "ja": "サンダース",
+      "en": "Jolteon"
+    },
+    "beartic": {
+      "zh": "冻原熊",
+      "ja": "ツンベアー",
+      "en": "Beartic"
+    },
+    "spiritomb": {
+      "zh": "花岩怪",
+      "ja": "ミカルゲ",
+      "en": "Spiritomb"
+    },
+    "florges": {
+      "zh": "花洁夫人",
+      "ja": "フラージェス",
+      "en": "Florges"
+    },
+    "abomasnow": {
+      "zh": "暴雪王",
+      "ja": "ユキノオー",
+      "en": "Abomasnow"
+    },
+    "steelix": {
+      "zh": "大钢蛇",
+      "ja": "ハガネール",
+      "en": "Steelix"
+    },
+    "machamp": {
+      "zh": "怪力",
+      "ja": "カイリキー",
+      "en": "Machamp"
+    },
+    "pangoro": {
+      "zh": "霸道熊猫",
+      "ja": "ゴロンダ",
+      "en": "Pangoro"
+    },
+    "alcremie": {
+      "zh": "霜奶仙",
+      "ja": "マホイップ",
+      "en": "Alcremie"
+    },
+    "typhlosion-hisui": {
+      "zh": "火暴兽（洗翠的样子）",
+      "ja": "バクフーン（ヒスイのすがた）",
+      "en": "Typhlosion-Hisui"
+    },
+    "bastiodon": {
+      "zh": "护城龙",
+      "ja": "トリデプス",
+      "en": "Bastiodon"
+    },
+    "avalugg": {
+      "zh": "冰岩怪",
+      "ja": "クレベース",
+      "en": "Avalugg"
+    },
+    "trevenant": {
+      "zh": "朽木妖",
+      "ja": "オーロット",
+      "en": "Trevenant"
+    },
+    "falinks": {
+      "zh": "列阵兵",
+      "ja": "タイレーツ",
+      "en": "Falinks"
+    },
+    "garganacl": {
+      "zh": "盐石巨灵",
+      "ja": "キョジオーン",
+      "en": "Garganacl"
+    },
+    "mr-rime": {
+      "zh": "踏冰人偶",
+      "ja": "バリコオル",
+      "en": "Mr. Rime"
+    },
+    "flareon": {
+      "zh": "火伊布",
+      "ja": "ブースター",
+      "en": "Flareon"
+    },
+    "beedrill": {
+      "zh": "大针蜂",
+      "ja": "スピアー",
+      "en": "Beedrill"
+    },
+    "arbok": {
+      "zh": "阿柏怪",
+      "ja": "アーボック",
+      "en": "Arbok"
+    },
+    "lycanroc-midday": {
+      "zh": "鬃岩狼人（白昼的样子）",
+      "ja": "ルガルガン（まひるのすがた）",
+      "en": "Lycanroc-Midday"
+    },
+    "rotom-mow": {
+      "zh": "切割洛托姆",
+      "ja": "カットロトム",
+      "en": "Rotom-Mow"
+    },
+    "rotom-fan": {
+      "zh": "旋转洛托姆",
+      "ja": "スピンロトム",
+      "en": "Rotom-Fan"
+    },
+    "qwilfish": {
+      "zh": "千针鱼",
+      "ja": "ハリーセン",
+      "en": "Qwilfish"
+    },
+    "stunfisk": {
+      "zh": "泥巴鱼",
+      "ja": "マッギョ",
+      "en": "Stunfisk"
+    },
+    "clawitzer": {
+      "zh": "钢炮臂虾",
+      "ja": "ブロスター",
+      "en": "Clawitzer"
+    },
+    "tauros-paldea-aqua": {
+      "zh": "肯泰罗（帕底亚的样子・水澜种）",
+      "ja": "ケンタロス（パルデアのすがた・ウォーターしゅ）",
+      "en": "Tauros-Paldea-Aqua"
+    },
+    "manectric": {
+      "zh": "雷电兽",
+      "ja": "ライボルト",
+      "en": "Manectric"
+    },
+    "tauros": {
+      "zh": "肯泰罗",
+      "ja": "ケンタロス",
+      "en": "Tauros"
+    },
+    "wigglytuff": {
+      "zh": "胖可丁",
+      "ja": "プクリン",
+      "en": "Wigglytuff"
+    },
+    "simisear": {
+      "zh": "爆香猿",
+      "ja": "バオッキー",
+      "en": "Simisear"
+    },
+    "musharna": {
+      "zh": "梦梦蚀",
+      "ja": "ムシャーナ",
+      "en": "Musharna"
+    },
+    "simipour": {
+      "zh": "冷水猿",
+      "ja": "ヒヤッキー",
+      "en": "Simipour"
+    },
+    "squawkabilly-yellow": {
+      "zh": "怒鹦哥（黄羽毛）",
+      "ja": "イキリンコ（イエローフェザー）",
+      "en": "Squawkabilly-Yellow"
+    },
+    "leafeon": {
+      "zh": "叶伊布",
+      "ja": "リーフィア",
+      "en": "Leafeon"
+    },
+    "gourgeist-super": {
+      "zh": "南瓜怪人（巨颗种）",
+      "ja": "パンプジン（ギガだましゅ）",
+      "en": "Gourgeist-Super"
+    },
+    "camerupt": {
+      "zh": "喷火驼",
+      "ja": "バクーダ",
+      "en": "Camerupt"
+    },
+    "garbodor": {
+      "zh": "灰尘山",
+      "ja": "ダストダス",
+      "en": "Garbodor"
+    },
+    "dedenne": {
+      "zh": "咚咚鼠",
+      "ja": "デデンネ",
+      "en": "Dedenne"
+    },
+    "swalot": {
+      "zh": "吞食兽",
+      "ja": "マルノーム",
+      "en": "Swalot"
+    },
+    "rotom-frost": {
+      "zh": "结冰洛托姆",
+      "ja": "フロストロトム",
+      "en": "Rotom-Frost"
+    },
+    "simisage": {
+      "zh": "花椰猿",
+      "ja": "ヤナッキー",
+      "en": "Simisage"
+    },
+    "ariados": {
+      "zh": "阿利多斯",
+      "ja": "アリアドス",
+      "en": "Ariados"
+    },
+    "samurott": {
+      "zh": "大剑鬼",
+      "ja": "ダイケンキ",
+      "en": "Samurott"
+    },
+    "aromatisse": {
+      "zh": "芳香精",
+      "ja": "フレフワン",
+      "en": "Aromatisse"
+    },
+    "appletun": {
+      "zh": "丰蜜龙",
+      "ja": "タルップル",
+      "en": "Appletun"
+    },
+    "castform": {
+      "zh": "飘浮泡泡",
+      "ja": "ポワルン",
+      "en": "Castform"
+    },
+    "mr-mime": {
+      "zh": "魔墙人偶",
+      "ja": "バリヤード",
+      "en": "Mr. Mime"
+    },
+    "avalugg-hisui": {
+      "zh": "冰岩怪（洗翠的样子）",
+      "ja": "クレベース（ヒスイのすがた）",
+      "en": "Avalugg-Hisui"
+    },
+    "squawkabilly": {
+      "zh": "怒鹦哥",
+      "ja": "イキリンコ",
+      "en": "Squawkabilly"
+    },
+    "toxicroak": {
+      "zh": "毒骷蛙",
+      "ja": "ドクロッグ",
+      "en": "Toxicroak"
+    },
+    "meowstic-f": {
+      "zh": "超能妙喵（雌性的样子）",
+      "ja": "ニャオニクス（メスのすがた）",
+      "en": "Meowstic-F"
+    },
+    "tyrantrum": {
+      "zh": "怪颚龙",
+      "ja": "ガチゴラス",
+      "en": "Tyrantrum"
+    },
+    "liepard": {
+      "zh": "酷豹",
+      "ja": "レパルダス",
+      "en": "Liepard"
+    },
+    "gourgeist-small": {
+      "zh": "南瓜怪人（小颗种）",
+      "ja": "パンプジン（こだましゅ）",
+      "en": "Gourgeist-Small"
+    },
+    "rampardos": {
+      "zh": "战槌龙",
+      "ja": "ラムパルド",
+      "en": "Rampardos"
+    },
+    "mabosstiff": {
+      "zh": "獒教父",
+      "ja": "マフィティフ",
+      "en": "Mabosstiff"
+    },
+    "furfrou": {
+      "zh": "多丽米亚",
+      "ja": "トリミアン",
+      "en": "Furfrou"
+    },
+    "gourgeist-large": {
+      "zh": "南瓜怪人（大颗种）",
+      "ja": "パンプジン（おおだましゅ）",
+      "en": "Gourgeist-Large"
+    },
+    "farfetchd": {
+      "zh": "大葱鸭",
+      "ja": "カモネギ",
+      "en": "Farfetch'd"
+    },
+    "lycanroc-midnight": {
+      "zh": "鬃岩狼人（黑夜的样子）",
+      "ja": "ルガルガン（まよなかのすがた）",
+      "en": "Lycanroc-Midnight"
+    },
+    "perrserker": {
+      "zh": "喵头目",
+      "ja": "ニャイキング",
+      "en": "Perrserker"
+    },
+    "wyrdeer": {
+      "zh": "诡角鹿",
+      "ja": "アヤシシ",
+      "en": "Wyrdeer"
+    },
+    "gogoat": {
+      "zh": "坐骑山羊",
+      "ja": "ゴーゴート",
+      "en": "Gogoat"
+    },
+    "thievul": {
+      "zh": "猾大狐",
+      "ja": "フォクスライ",
+      "en": "Thievul"
+    },
+    "luxray": {
+      "zh": "伦琴猫",
+      "ja": "レントラー",
+      "en": "Luxray"
+    },
+    "stunfisk-galar": {
+      "zh": "泥巴鱼（伽勒尔的样子）",
+      "ja": "マッギョ（ガラルのすがた）",
+      "en": "Stunfisk-Galar"
+    },
+    "passimian": {
+      "zh": "投掷猴",
+      "ja": "ナゲツケサル",
+      "en": "Passimian"
+    },
+    "watchog": {
+      "zh": "步哨鼠",
+      "ja": "ミルホッグ",
+      "en": "Watchog"
+    },
+    "flapple": {
+      "zh": "苹裹龙",
+      "ja": "アップリュー",
+      "en": "Flapple"
+    }
+  },
+  "series": [
+    {
+      "slug": "garchomp",
+      "reason": "top30",
+      "latest_rank": 1
+    },
+    {
+      "slug": "primarina",
+      "reason": "top30",
+      "latest_rank": 2
+    },
+    {
+      "slug": "mimikyu",
+      "reason": "top30",
+      "latest_rank": 3
+    },
+    {
+      "slug": "archaludon",
+      "reason": "top30",
+      "latest_rank": 4
+    },
+    {
+      "slug": "lucario",
+      "reason": "top30",
+      "latest_rank": 5
+    },
+    {
+      "slug": "hippowdon",
+      "reason": "top30",
+      "latest_rank": 6
+    },
+    {
+      "slug": "charizard",
+      "reason": "top30",
+      "latest_rank": 7
+    },
+    {
+      "slug": "basculegion",
+      "reason": "top30",
+      "latest_rank": 8
+    },
+    {
+      "slug": "golisopod",
+      "reason": "top30",
+      "latest_rank": 9
+    },
+    {
+      "slug": "dragonite",
+      "reason": "top30",
+      "latest_rank": 10
+    },
+    {
+      "slug": "gholdengo",
+      "reason": "top30",
+      "latest_rank": 11
+    },
+    {
+      "slug": "corviknight",
+      "reason": "top30",
+      "latest_rank": 12
+    },
+    {
+      "slug": "rillaboom",
+      "reason": "top30",
+      "latest_rank": 13
+    },
+    {
+      "slug": "glimmora",
+      "reason": "top30",
+      "latest_rank": 14
+    },
+    {
+      "slug": "salamence",
+      "reason": "top30",
+      "latest_rank": 15
+    },
+    {
+      "slug": "metagross",
+      "reason": "top30",
+      "latest_rank": 16
+    },
+    {
+      "slug": "meowscarada",
+      "reason": "top30",
+      "latest_rank": 17
+    },
+    {
+      "slug": "indeedee",
+      "reason": "top30",
+      "latest_rank": 18
+    },
+    {
+      "slug": "gyarados",
+      "reason": "top30",
+      "latest_rank": 19
+    },
+    {
+      "slug": "baxcalibur",
+      "reason": "top30",
+      "latest_rank": 20
+    },
+    {
+      "slug": "umbreon",
+      "reason": "top30",
+      "latest_rank": 21
+    },
+    {
+      "slug": "gengar",
+      "reason": "top30",
+      "latest_rank": 22
+    },
+    {
+      "slug": "pawmot",
+      "reason": "top30",
+      "latest_rank": 23
+    },
+    {
+      "slug": "cinderace",
+      "reason": "top30",
+      "latest_rank": 24
+    },
+    {
+      "slug": "floette-eternal",
+      "reason": "top30",
+      "latest_rank": 25
+    },
+    {
+      "slug": "greninja",
+      "reason": "top30",
+      "latest_rank": 26
+    },
+    {
+      "slug": "clefable",
+      "reason": "top30",
+      "latest_rank": 27
+    },
+    {
+      "slug": "samurott-hisui",
+      "reason": "top30",
+      "latest_rank": 28
+    },
+    {
+      "slug": "aegislash",
+      "reason": "top30",
+      "latest_rank": 29
+    },
+    {
+      "slug": "kingambit",
+      "reason": "top30",
+      "latest_rank": 30
+    }
+  ]
+}

@@ -50,15 +50,19 @@ function pct(value: number) {
   return `${value.toFixed(1)}%`;
 }
 
+function topValueText(t: ReturnType<typeof useMetaT>, lens: CompareLens, panel: ValuePanel, rec: ValueRecord) {
+  const { n, tier } = lens.scope.panels[panel];
+  return t(tier === "count" ? "cmp.topCount" : "cmp.topValue")
+    .replace("{v}", rec.share != null ? pct(rec.share) : "—")
+    .replace("{k}", String(rec.count)).replace("{n}", String(n));
+}
+
 /** What the OTHER side says about one record, as plain text (tooltip and hover line). */
 function useOtherText() {
   const t = useMetaT();
   return (lens: CompareLens, panel: ValuePanel, rec: ValueRecord): string => {
-    const n = lens.scope.panels[panel].n;
     if (lens.source === "ingame") {
-      const share = rec.share != null ? pct(rec.share) : "—";
-      return t("cmp.topValue").replace("{v}", share).replace("{k}", String(rec.count))
-        .replace("{n}", String(n));
+      return topValueText(t, lens, panel, rec);
     }
     const ingame = rec.ingame;
     if (!ingame || ingame.kind === "absent") return t("cmp.ingameAbsent");
@@ -119,11 +123,9 @@ export function CompareAddon({ lens, panel, entry }: {
   const otherText = useOtherText();
   const rec = lens.record(panel, entryKey(entry));
   if (!rec) return null;
-  const n = lens.scope.panels[panel].n;
   return (
     <span className="mc-cmp-pop">
-      <b>{t("cmp.topValue").replace("{v}", rec.share != null ? pct(rec.share) : "—")
-        .replace("{k}", String(rec.count)).replace("{n}", String(n))}</b>
+      <b>{topValueText(t, lens, panel, rec)}</b>
       {lens.scope.comparedWith && <span className="muted">{otherText({ ...lens, source: "top" }, panel, rec)}</span>}
     </span>
   );

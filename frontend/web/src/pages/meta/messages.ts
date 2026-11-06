@@ -73,6 +73,7 @@ const META_MESSAGES = {
     en: "Corner: partner rank · below: Top Meta rank",
     ja: "左上：相方順位 · 下：上位環境の順位" },
   "cmp.topValue": { zh: "竞技环境 {v}（{k}/{n}）", en: "Top Meta {v} ({k}/{n})", ja: "上位環境 {v}（{k}/{n}）" },
+  "cmp.topCount": { zh: "竞技环境 {k}/{n}", en: "Top Meta {k}/{n}", ja: "上位環境 {k}/{n}" },
   "cmp.ingameValue": { zh: "官方数据 {v}", en: "Official {v}", ja: "公式データ {v}" },
   "cmp.ingameBelow": { zh: "官方数据前十外（低于 {v}）", en: "Outside the official top 10 (below {v})", ja: "公式データ上位10位圏外（{v}未満）" },
   "cmp.ingameAbsent": { zh: "官方数据无此项", en: "No official data", ja: "公式データなし" },

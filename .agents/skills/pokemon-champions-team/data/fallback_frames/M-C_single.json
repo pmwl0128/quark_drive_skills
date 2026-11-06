@@ -4,54 +4,56 @@
  "built_for": {
   "format": "single",
   "rule": "M-C",
-  "season": "M-7",
-  "built_at": "2026-11-04T06:49:12Z"
+  "season": "M-8",
+  "built_at": "2026-11-06T05:33:42Z"
  },
  "counts": {
   "history": 2,
-  "partners": 10,
-  "stand_in": 1
+  "partners": 10
  },
  "anchors": {
   "Aegislash-Shield|": {
    "source": "partners",
    "partners": [
     "Hippowdon",
-    "Dragonite"
+    "Salamence",
+    "Meowscarada"
    ],
-   "teams": 32
+   "teams": 30
   },
   "Garbodor|": {
    "source": "partners",
    "partners": [
-    "Basculegion",
-    "Glimmora"
+    "Delphox",
+    "Salamence",
+    "Rillaboom"
    ],
-   "teams": 14
+   "teams": 4
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
-    "Basculegion",
-    "Rillaboom"
+    "Volcarona",
+    "Pawmot"
    ],
-   "teams": 27
+   "teams": 13
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Meowscarada",
-    "Hippowdon"
+    "Clefable",
+    "Raichu"
    ],
-   "teams": 93
+   "teams": 10
   },
   "Hydrapple|": {
    "source": "partners",
    "partners": [
-    "Toxapex",
-    "Corviknight"
+    "Charizard",
+    "Gardevoir",
+    "Gyarados"
    ],
-   "teams": 36
+   "teams": 3
   },
   "Mega Excadrill|": {
    "source": "history",
@@ -74,55 +76,43 @@
   "Mega Houndoom|": {
    "source": "partners",
    "partners": [
-    "Torkoal",
-    "Venusaur"
+    "Victreebel",
+    "Blastoise"
    ],
-   "teams": 3
+   "teams": 4
   },
   "Mega Manectric|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
-    "Cinderace"
+    "Dragonite",
+    "Metagross"
    ],
-   "teams": 23
-  },
-  "Mega Medicham|": {
-   "source": "partners",
-   "partners": [
-    "Glimmora",
-    "Corviknight"
-   ],
-   "teams": 17
+   "teams": 29
   },
   "Meowstic-F|": {
    "source": "partners",
    "partners": [
-    "Meowscarada",
-    "Indeedee",
-    "Sneasler"
+    "Salamence",
+    "Rillaboom",
+    "Corviknight"
    ],
-   "teams": 5
+   "teams": 3
   },
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
-    "Cinderace",
-    "Gholdengo"
+    "Metagross",
+    "Meowscarada"
    ],
-   "teams": 24
+   "teams": 27
   },
   "Squawkabilly-Yellow|": {
-   "source": "stand_in",
-   "species": "Staraptor",
-   "hits": {
-    "types": 2,
-    "lean": 1,
-    "speed_band": 1,
-    "roles": 3,
-    "field": 0
-   },
-   "teams": 53
+   "source": "partners",
+   "partners": [
+    "Corviknight",
+    "Bellibolt"
+   ],
+   "teams": 18
   }
  }
 }
