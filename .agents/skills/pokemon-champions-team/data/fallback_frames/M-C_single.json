@@ -5,7 +5,7 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-8",
-  "built_at": "2026-11-08T13:36:32Z"
+  "built_at": "2026-11-10T02:13:59Z"
  },
  "counts": {
   "history": 1,
@@ -15,36 +15,36 @@
   "Aegislash-Shield|": {
    "source": "partners",
    "partners": [
-    "Salamence",
+    "Dragonite",
     "Meowscarada"
    ],
-   "teams": 76
+   "teams": 21
   },
   "Garbodor|": {
    "source": "partners",
    "partners": [
     "Basculegion",
-    "Dragonite",
-    "Kingambit"
+    "Meowscarada",
+    "Corviknight"
    ],
-   "teams": 5
+   "teams": 3
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
-    "Rotom",
-    "Tyranitar"
+    "Lucario",
+    "Greninja"
    ],
-   "teams": 6
+   "teams": 21
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Salamence",
-    "Pawmot",
-    "Banette"
+    "Tyranitar",
+    "Clefable",
+    "Excadrill"
    ],
-   "teams": 8
+   "teams": 3
   },
   "Hydrapple|": {
    "source": "partners",
@@ -67,43 +67,42 @@
    "source": "partners",
    "partners": [
     "Venusaur",
-    "Corviknight"
+    "Victreebel"
    ],
-   "teams": 13
+   "teams": 5
   },
   "Mega Manectric|": {
    "source": "partners",
    "partners": [
-    "Raichu",
     "Gyarados",
-    "Dragonite"
+    "Aegislash"
    ],
-   "teams": 4
+   "teams": 14
   },
   "Meowstic-F|": {
    "source": "partners",
    "partners": [
-    "Indeedee",
-    "Toxapex"
+    "Toxapex",
+    "Indeedee"
    ],
-   "teams": 15
+   "teams": 16
   },
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
-    "Cinderace",
-    "Metagross"
+    "Corviknight",
+    "Indeedee"
    ],
-   "teams": 15
+   "teams": 65
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
     "Golisopod",
-    "Meowscarada",
-    "Salamence"
+    "Basculegion",
+    "Greninja"
    ],
-   "teams": 11
+   "teams": 3
   }
  }
 }

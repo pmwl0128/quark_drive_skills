@@ -2,7 +2,7 @@
   "season": "M-8",
   "rule": "M-C",
   "format": "single",
-  "generated_at": "2026-11-08T12:30:53+00:00",
+  "generated_at": "2026-11-10T01:30:51+00:00",
   "thresholds": {
     "tiers": [
       {
@@ -50,61 +50,41 @@
   },
   "baseline": {
     "kind": "git-HEAD",
-    "ranking_updated_at": "2026-11-06T04:00:57+00:00",
-    "details_updated_at": "2026-11-06T04:00:57+00:00"
-  },
-  "current": {
     "ranking_updated_at": "2026-11-08T12:30:53+00:00",
     "details_updated_at": "2026-11-08T12:30:53+00:00"
   },
-  "rank_moves": [
-    {
-      "slug": "blaziken",
-      "name": "火焰鸡",
-      "old": 34,
-      "new": 29,
-      "delta": 5,
-      "tier": "A"
-    },
-    {
-      "slug": "swampert",
-      "name": "巨沼怪",
-      "old": 39,
-      "new": 30,
-      "delta": 9,
-      "tier": "A"
-    },
-    {
-      "slug": "clefable",
-      "name": "皮可西",
-      "old": 27,
-      "new": 33,
-      "delta": -6,
-      "tier": "A"
-    },
-    {
-      "slug": "samurott-hisui",
-      "name": "大剑鬼（洗翠的样子）",
-      "old": 28,
-      "new": 34,
-      "delta": -6,
-      "tier": "A"
-    }
-  ],
+  "current": {
+    "ranking_updated_at": "2026-11-10T01:30:51+00:00",
+    "details_updated_at": "2026-11-10T01:30:51+00:00"
+  },
+  "rank_moves": [],
   "new_entries": [],
   "dropped": [],
   "config_changes": [
     {
-      "slug": "gholdengo",
-      "name": "赛富豪",
-      "rank": 10,
+      "slug": "archaludon",
+      "name": "铝钢桥龙",
+      "rank": 4,
       "tier": "S",
       "panel": "moves",
-      "item": "诡计",
-      "old_pct": 72.0,
-      "new_pct": 61.2,
-      "delta": -10.8,
-      "kind": "下降",
+      "item": "吼叫",
+      "old_pct": 0.0,
+      "new_pct": 15.6,
+      "delta": 15.6,
+      "kind": "新增",
+      "rank_triggered": false
+    },
+    {
+      "slug": "archaludon",
+      "name": "铝钢桥龙",
+      "rank": 4,
+      "tier": "S",
+      "panel": "moves",
+      "item": "波导弹",
+      "old_pct": 14.7,
+      "new_pct": 0.0,
+      "delta": -14.7,
+      "kind": "消失",
       "rank_triggered": false
     }
   ]
