@@ -2,7 +2,7 @@
   "season": "M-8",
   "rule": "M-C",
   "format": "single",
-  "generated_at": "2026-11-10T01:30:51+00:00",
+  "generated_at": "2026-11-12T08:30:54+00:00",
   "thresholds": {
     "tiers": [
       {
@@ -50,40 +50,49 @@
   },
   "baseline": {
     "kind": "git-HEAD",
-    "ranking_updated_at": "2026-11-08T12:30:53+00:00",
-    "details_updated_at": "2026-11-08T12:30:53+00:00"
-  },
-  "current": {
     "ranking_updated_at": "2026-11-10T01:30:51+00:00",
     "details_updated_at": "2026-11-10T01:30:51+00:00"
   },
-  "rank_moves": [],
+  "current": {
+    "ranking_updated_at": "2026-11-12T08:30:54+00:00",
+    "details_updated_at": "2026-11-12T08:30:54+00:00"
+  },
+  "rank_moves": [
+    {
+      "slug": "pawmot",
+      "name": "巴布土拨",
+      "old": 27,
+      "new": 32,
+      "delta": -5,
+      "tier": "A"
+    }
+  ],
   "new_entries": [],
   "dropped": [],
   "config_changes": [
     {
-      "slug": "archaludon",
-      "name": "铝钢桥龙",
-      "rank": 4,
+      "slug": "charizard",
+      "name": "喷火龙",
+      "rank": 8,
       "tier": "S",
       "panel": "moves",
-      "item": "吼叫",
+      "item": "空气之刃",
       "old_pct": 0.0,
-      "new_pct": 15.6,
-      "delta": 15.6,
+      "new_pct": 21.2,
+      "delta": 21.2,
       "kind": "新增",
       "rank_triggered": false
     },
     {
-      "slug": "archaludon",
-      "name": "铝钢桥龙",
-      "rank": 4,
+      "slug": "charizard",
+      "name": "喷火龙",
+      "rank": 8,
       "tier": "S",
       "panel": "moves",
-      "item": "波导弹",
-      "old_pct": 14.7,
+      "item": "蓄能焰袭",
+      "old_pct": 20.8,
       "new_pct": 0.0,
-      "delta": -14.7,
+      "delta": -20.8,
       "kind": "消失",
       "rank_triggered": false
     }
