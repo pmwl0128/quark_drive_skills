@@ -5,37 +5,41 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-8",
-  "built_at": "2026-11-12T09:14:12Z"
+  "built_at": "2026-11-14T06:07:43Z"
  },
  "counts": {
   "history": 1,
-  "partners": 10
+  "partners": 9,
+  "stand_in": 1
  },
  "anchors": {
   "Aegislash-Shield|": {
-   "source": "partners",
-   "partners": [
-    "Dragonite",
-    "Meowscarada"
-   ],
-   "teams": 22
+   "source": "stand_in",
+   "species": "Aegislash",
+   "hits": {
+    "types": 2,
+    "lean": 1,
+    "speed_band": 1,
+    "roles": 3,
+    "field": 0
+   },
+   "teams": 291
   },
   "Garbodor|": {
    "source": "partners",
    "partners": [
-    "Basculegion",
     "Corviknight",
-    "Meowscarada"
+    "Swampert"
    ],
-   "teams": 3
+   "teams": 18
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
     "Tyranitar",
-    "Greninja"
+    "Metagross"
    ],
-   "teams": 4
+   "teams": 6
   },
   "Gourgeist-Small|": {
    "source": "partners",
@@ -43,7 +47,7 @@
     "Tyranitar",
     "Excadrill"
    ],
-   "teams": 20
+   "teams": 21
   },
   "Hydrapple|": {
    "source": "partners",
@@ -51,7 +55,7 @@
     "Golisopod",
     "Glimmora"
    ],
-   "teams": 34
+   "teams": 35
   },
   "Mega Excadrill|": {
    "source": "history",
@@ -68,7 +72,7 @@
     "Mimikyu",
     "Greninja"
    ],
-   "teams": 52
+   "teams": 53
   },
   "Mega Manectric|": {
    "source": "partners",
@@ -99,10 +103,9 @@
    "source": "partners",
    "partners": [
     "Basculegion",
-    "Corviknight",
-    "Volcarona"
+    "Rillaboom"
    ],
-   "teams": 3
+   "teams": 37
   }
  }
 }

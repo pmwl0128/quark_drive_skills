@@ -4,7 +4,7 @@
     "rule": "M-C",
     "season": "M-8",
     "format": "single",
-    "built_at": "2026-11-12T09:12:33Z",
+    "built_at": "2026-11-14T06:05:59Z",
     "top_k": 60,
     "variant_count": 203,
     "data_rule": "M-C",
@@ -21,8 +21,8 @@
     ],
     "cache_schema_version": 2,
     "source_fingerprints": {
-      "meta": "e87fe1b6aa8508a83761c907f5e7aa3a6c27997685079520458becff824375fd",
-      "team_library": "95691208d0b1e63eadc257e94c0096a5a3c49b164ba44339f153704cffc08031"
+      "meta": "0d7021e2000b800e8ca01c134df4ac1ec21542113ff771cf9ce95a6e603a12dd",
+      "team_library": "48a20f8053c1028fd7e971af08e17cbe755110548bf96df91890e176bccdbad2"
     },
     "handover_receipt": false,
     "calculation_authority": {
@@ -61,7 +61,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Aegislash|item=Air%20Balloon|ability=Stance%20Change",
       "is_modal": false,
-      "coverage": 0.0493
+      "coverage": 0.0486
     },
     {
       "rank": 35,
@@ -71,7 +71,7 @@
       "set_confidence": "high",
       "variant_id": "variant:Aegislash|item=Focus%20Sash|ability=Stance%20Change",
       "is_modal": false,
-      "coverage": 0.169
+      "coverage": 0.1736
     },
     {
       "rank": 35,
@@ -81,7 +81,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Aegislash|item=Leftovers|ability=Stance%20Change",
       "is_modal": true,
-      "coverage": 0.3944
+      "coverage": 0.3889
     },
     {
       "rank": 35,
@@ -91,7 +91,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Aegislash|item=Life%20Orb|ability=Stance%20Change",
       "is_modal": false,
-      "coverage": 0.0986
+      "coverage": 0.0972
     },
     {
       "rank": 35,
@@ -101,7 +101,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Aegislash|item=Spell%20Tag|ability=Stance%20Change",
       "is_modal": false,
-      "coverage": 0.2465
+      "coverage": 0.25
     },
     {
       "rank": 4,
@@ -111,7 +111,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Archaludon|item=Air%20Balloon|ability=Stamina",
       "is_modal": false,
-      "coverage": 0.0415
+      "coverage": 0.0414
     },
     {
       "rank": 4,
@@ -121,7 +121,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Archaludon|item=Choice%20Scarf|ability=Sturdy",
       "is_modal": false,
-      "coverage": 0.0639
+      "coverage": 0.0637
     },
     {
       "rank": 4,
@@ -131,7 +131,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Archaludon|item=Leftovers|ability=Stamina",
       "is_modal": false,
-      "coverage": 0.1917
+      "coverage": 0.1911
     },
     {
       "rank": 4,
@@ -141,7 +141,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Archaludon|item=Sitrus%20Berry|ability=Stamina",
       "is_modal": true,
-      "coverage": 0.3514
+      "coverage": 0.3503
     },
     {
       "rank": 4,
@@ -151,7 +151,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Archaludon|item=White%20Herb|ability=Sturdy",
       "is_modal": false,
-      "coverage": 0.0958
+      "coverage": 0.0955
     },
     {
       "rank": 9,
@@ -161,7 +161,7 @@
       "set_confidence": "high",
       "variant_id": "variant:Basculegion|item=Choice%20Scarf|ability=Adaptability",
       "is_modal": true,
-      "coverage": 0.4645
+      "coverage": 0.4623
     },
     {
       "rank": 9,
@@ -171,7 +171,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Basculegion|item=Focus%20Sash|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.0427
+      "coverage": 0.0425
     },
     {
       "rank": 9,
@@ -181,7 +181,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Basculegion|item=Life%20Orb|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.0758
+      "coverage": 0.0755
     },
     {
       "rank": 9,
@@ -191,7 +191,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Basculegion|item=Mystic%20Water|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.1327
+      "coverage": 0.1368
     },
     {
       "rank": 9,
@@ -201,10 +201,10 @@
       "set_confidence": "low",
       "variant_id": "variant:Basculegion|item=Spell%20Tag|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.2085
+      "coverage": 0.2075
     },
     {
-      "rank": 18,
+      "rank": 17,
       "species": "Baxcalibur",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -215,7 +215,7 @@
       "run_form": "Mega Baxcalibur"
     },
     {
-      "rank": 18,
+      "rank": 17,
       "species": "Baxcalibur",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -225,7 +225,7 @@
       "coverage": 0.3118
     },
     {
-      "rank": 18,
+      "rank": 17,
       "species": "Baxcalibur",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -235,7 +235,7 @@
       "coverage": 0.1417
     },
     {
-      "rank": 18,
+      "rank": 17,
       "species": "Baxcalibur",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -245,7 +245,7 @@
       "coverage": 0.0324
     },
     {
-      "rank": 42,
+      "rank": 43,
       "species": "Blastoise",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -287,7 +287,7 @@
       "coverage": 0.2222
     },
     {
-      "rank": 48,
+      "rank": 49,
       "species": "Ceruledge",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -297,7 +297,7 @@
       "coverage": 0.1489
     },
     {
-      "rank": 48,
+      "rank": 49,
       "species": "Ceruledge",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -307,7 +307,7 @@
       "coverage": 0.5532
     },
     {
-      "rank": 48,
+      "rank": 49,
       "species": "Ceruledge",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -324,7 +324,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Charizard|item=Charizardite%20X|ability=Tough%20Claws",
       "is_modal": false,
-      "coverage": 0.287,
+      "coverage": 0.2844,
       "run_form": "Mega Charizard X"
     },
     {
@@ -335,7 +335,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Charizard|item=Charizardite%20Y|ability=Drought",
       "is_modal": true,
-      "coverage": 0.713,
+      "coverage": 0.7156,
       "run_form": "Mega Charizard Y"
     },
     {
@@ -346,7 +346,7 @@
       "set_confidence": "high",
       "variant_id": "variant:Cinderace|item=Choice%20Scarf|ability=Libero",
       "is_modal": false,
-      "coverage": 0.2157
+      "coverage": 0.2136
     },
     {
       "rank": 21,
@@ -356,7 +356,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Cinderace|item=Focus%20Sash|ability=Libero",
       "is_modal": false,
-      "coverage": 0.2745
+      "coverage": 0.2718
     },
     {
       "rank": 21,
@@ -366,7 +366,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Cinderace|item=Life%20Orb|ability=Libero",
       "is_modal": false,
-      "coverage": 0.1471
+      "coverage": 0.1456
     },
     {
       "rank": 21,
@@ -376,7 +376,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Cinderace|item=Wide%20Lens|ability=Libero",
       "is_modal": true,
-      "coverage": 0.3039
+      "coverage": 0.3107
     },
     {
       "rank": 38,
@@ -450,7 +450,7 @@
       "coverage": 0.0305
     },
     {
-      "rank": 51,
+      "rank": 48,
       "species": "Delphox",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -468,7 +468,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Dragonite|item=Dragoninite|ability=Multiscale",
       "is_modal": true,
-      "coverage": 0.7143,
+      "coverage": 0.7118,
       "run_form": "Mega Dragonite"
     },
     {
@@ -479,7 +479,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Dragonite|item=Expert%20Belt|ability=Multiscale",
       "is_modal": false,
-      "coverage": 0.0774
+      "coverage": 0.0765
     },
     {
       "rank": 14,
@@ -489,7 +489,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Dragonite|item=Rocky%20Helmet|ability=Multiscale",
       "is_modal": false,
-      "coverage": 0.1548
+      "coverage": 0.1529
     },
     {
       "rank": 59,
@@ -582,7 +582,7 @@
       "coverage": 0.4412
     },
     {
-      "rank": 29,
+      "rank": 32,
       "species": "Floette-Eternal",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -592,7 +592,7 @@
       "coverage": 0.7
     },
     {
-      "rank": 29,
+      "rank": 32,
       "species": "Floette-Eternal",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -609,7 +609,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Garchomp|item=Choice%20Scarf|ability=Rough%20Skin",
       "is_modal": false,
-      "coverage": 0.2315
+      "coverage": 0.2319
     },
     {
       "rank": 1,
@@ -619,7 +619,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Garchomp|item=Focus%20Sash|ability=Rough%20Skin",
       "is_modal": false,
-      "coverage": 0.1805
+      "coverage": 0.1797
     },
     {
       "rank": 1,
@@ -629,7 +629,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Garchomp|item=Garchompite%20Z|ability=Levitate",
       "is_modal": true,
-      "coverage": 0.2591,
+      "coverage": 0.258,
       "run_form": "Mega Garchomp Z"
     },
     {
@@ -640,7 +640,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Garchomp|item=Rocky%20Helmet|ability=Rough%20Skin",
       "is_modal": false,
-      "coverage": 0.0772
+      "coverage": 0.0768
     },
     {
       "rank": 1,
@@ -650,10 +650,10 @@
       "set_confidence": "low",
       "variant_id": "variant:Garchomp|item=Sitrus%20Berry|ability=Rough%20Skin",
       "is_modal": false,
-      "coverage": 0.1048
+      "coverage": 0.1073
     },
     {
-      "rank": 55,
+      "rank": 56,
       "species": "Gardevoir",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -663,7 +663,7 @@
       "coverage": 0.1613
     },
     {
-      "rank": 55,
+      "rank": 56,
       "species": "Gardevoir",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -742,7 +742,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Glimmora|item=Air%20Balloon|ability=Toxic%20Debris",
       "is_modal": false,
-      "coverage": 0.1156
+      "coverage": 0.1216
     },
     {
       "rank": 19,
@@ -752,7 +752,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Glimmora|item=Choice%20Scarf|ability=Toxic%20Debris",
       "is_modal": false,
-      "coverage": 0.0817
+      "coverage": 0.081
     },
     {
       "rank": 19,
@@ -762,7 +762,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Glimmora|item=Focus%20Sash|ability=Toxic%20Debris",
       "is_modal": true,
-      "coverage": 0.4626
+      "coverage": 0.4595
     },
     {
       "rank": 19,
@@ -772,7 +772,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Glimmora|item=Glimmoranite|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.2245,
+      "coverage": 0.223,
       "run_form": "Mega Glimmora"
     },
     {
@@ -783,7 +783,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Glimmora|item=Red%20Card|ability=Toxic%20Debris",
       "is_modal": false,
-      "coverage": 0.0544
+      "coverage": 0.0541
     },
     {
       "rank": 7,
@@ -797,7 +797,7 @@
       "run_form": "Mega Golisopod"
     },
     {
-      "rank": 57,
+      "rank": 55,
       "species": "Goodra-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -807,7 +807,7 @@
       "coverage": 0.0976
     },
     {
-      "rank": 57,
+      "rank": 55,
       "species": "Goodra-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -817,7 +817,7 @@
       "coverage": 0.0976
     },
     {
-      "rank": 57,
+      "rank": 55,
       "species": "Goodra-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -827,7 +827,7 @@
       "coverage": 0.0976
     },
     {
-      "rank": 57,
+      "rank": 55,
       "species": "Goodra-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -837,7 +837,7 @@
       "coverage": 0.2439
     },
     {
-      "rank": 57,
+      "rank": 55,
       "species": "Goodra-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -847,37 +847,37 @@
       "coverage": 0.0976
     },
     {
-      "rank": 26,
+      "rank": 24,
       "species": "Greninja",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Greninja|item=Choice%20Scarf|ability=Protean",
       "is_modal": false,
-      "coverage": 0.1442
+      "coverage": 0.1415
     },
     {
-      "rank": 26,
+      "rank": 24,
       "species": "Greninja",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Greninja|item=Focus%20Sash|ability=Protean",
       "is_modal": false,
-      "coverage": 0.1538
+      "coverage": 0.1509
     },
     {
-      "rank": 26,
+      "rank": 24,
       "species": "Greninja",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "medium",
       "variant_id": "variant:Greninja|item=Focus%20Sash|ability=Torrent",
       "is_modal": false,
-      "coverage": 0.1057
+      "coverage": 0.1037
     },
     {
-      "rank": 26,
+      "rank": 24,
       "species": "Greninja",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -888,14 +888,14 @@
       "run_form": "Mega Greninja"
     },
     {
-      "rank": 26,
+      "rank": 24,
       "species": "Greninja",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Greninja|item=Life%20Orb|ability=Protean",
       "is_modal": false,
-      "coverage": 0.0769
+      "coverage": 0.0849
     },
     {
       "rank": 52,
@@ -969,7 +969,7 @@
       "coverage": 0.037
     },
     {
-      "rank": 56,
+      "rank": 57,
       "species": "Hatterene",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -979,7 +979,7 @@
       "coverage": 0.1364
     },
     {
-      "rank": 56,
+      "rank": 57,
       "species": "Hatterene",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -989,7 +989,7 @@
       "coverage": 0.1818
     },
     {
-      "rank": 56,
+      "rank": 57,
       "species": "Hatterene",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1006,7 +1006,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Hippowdon|item=Leftovers|ability=Sand%20Stream",
       "is_modal": false,
-      "coverage": 0.2291
+      "coverage": 0.2278
     },
     {
       "rank": 3,
@@ -1016,7 +1016,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Hippowdon|item=Rocky%20Helmet|ability=Sand%20Stream",
       "is_modal": false,
-      "coverage": 0.2514
+      "coverage": 0.2528
     },
     {
       "rank": 3,
@@ -1029,7 +1029,7 @@
       "coverage": 0.5
     },
     {
-      "rank": 40,
+      "rank": 39,
       "species": "Hydreigon",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1039,7 +1039,7 @@
       "coverage": 0.7595
     },
     {
-      "rank": 40,
+      "rank": 39,
       "species": "Hydreigon",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1049,7 +1049,7 @@
       "coverage": 0.0506
     },
     {
-      "rank": 40,
+      "rank": 39,
       "species": "Hydreigon",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1059,7 +1059,7 @@
       "coverage": 0.0633
     },
     {
-      "rank": 40,
+      "rank": 39,
       "species": "Hydreigon",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1069,34 +1069,34 @@
       "coverage": 0.0506
     },
     {
-      "rank": 17,
+      "rank": 18,
       "species": "Indeedee",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Indeedee|item=Choice%20Scarf|ability=Psychic%20Surge",
       "is_modal": false,
-      "coverage": 0.3466
+      "coverage": 0.3427
     },
     {
-      "rank": 17,
+      "rank": 18,
       "species": "Indeedee",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Indeedee|item=Focus%20Sash|ability=Psychic%20Surge",
       "is_modal": false,
-      "coverage": 0.2102
+      "coverage": 0.2191
     },
     {
-      "rank": 17,
+      "rank": 18,
       "species": "Indeedee",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Indeedee|item=Terrain%20Extender|ability=Psychic%20Surge",
       "is_modal": true,
-      "coverage": 0.4148
+      "coverage": 0.4101
     },
     {
       "rank": 27,
@@ -1167,7 +1167,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Lucario|item=Lucarionite%20Z|ability=Inner%20Focus",
       "is_modal": false,
-      "coverage": 0.0632,
+      "coverage": 0.0623,
       "run_form": "Mega Lucario Z"
     },
     {
@@ -1178,7 +1178,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Lucario|item=Lucarionite|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.1825,
+      "coverage": 0.1834,
       "run_form": "Mega Lucario"
     },
     {
@@ -1271,7 +1271,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Metagross|item=Metagrossite|ability=Tough%20Claws",
       "is_modal": true,
-      "coverage": 0.976,
+      "coverage": 0.9762,
       "run_form": "Mega Metagross"
     },
     {
@@ -1282,7 +1282,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Mimikyu|item=Life%20Orb|ability=Disguise",
       "is_modal": true,
-      "coverage": 0.8107
+      "coverage": 0.8119
     },
     {
       "rank": 6,
@@ -1292,7 +1292,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Mimikyu|item=Lum%20Berry|ability=Disguise",
       "is_modal": false,
-      "coverage": 0.0315
+      "coverage": 0.0313
     },
     {
       "rank": 6,
@@ -1302,7 +1302,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Mimikyu|item=Rocky%20Helmet|ability=Disguise",
       "is_modal": false,
-      "coverage": 0.0473
+      "coverage": 0.047
     },
     {
       "rank": 37,
@@ -1315,7 +1315,7 @@
       "coverage": 0.9268
     },
     {
-      "rank": 32,
+      "rank": 33,
       "species": "Pawmot",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1325,7 +1325,7 @@
       "coverage": 0.73
     },
     {
-      "rank": 32,
+      "rank": 33,
       "species": "Pawmot",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1335,7 +1335,7 @@
       "coverage": 0.07
     },
     {
-      "rank": 32,
+      "rank": 33,
       "species": "Pawmot",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1345,7 +1345,7 @@
       "coverage": 0.17
     },
     {
-      "rank": 50,
+      "rank": 51,
       "species": "Pelipper",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1355,7 +1355,7 @@
       "coverage": 0.1207
     },
     {
-      "rank": 50,
+      "rank": 51,
       "species": "Pelipper",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1365,7 +1365,7 @@
       "coverage": 0.6897
     },
     {
-      "rank": 50,
+      "rank": 51,
       "species": "Pelipper",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1375,7 +1375,7 @@
       "coverage": 0.1034
     },
     {
-      "rank": 50,
+      "rank": 51,
       "species": "Pelipper",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1435,7 +1435,7 @@
       "coverage": 0.409
     },
     {
-      "rank": 30,
+      "rank": 29,
       "species": "Raichu",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1446,7 +1446,7 @@
       "run_form": "Mega Raichu X"
     },
     {
-      "rank": 30,
+      "rank": 29,
       "species": "Raichu",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1464,7 +1464,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Rillaboom|item=Life%20Orb|ability=Grassy%20Surge",
       "is_modal": false,
-      "coverage": 0.2527
+      "coverage": 0.2514
     },
     {
       "rank": 15,
@@ -1474,7 +1474,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Rillaboom|item=Lum%20Berry|ability=Grassy%20Surge",
       "is_modal": false,
-      "coverage": 0.0604
+      "coverage": 0.0601
     },
     {
       "rank": 15,
@@ -1484,7 +1484,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Rillaboom|item=Miracle%20Seed|ability=Grassy%20Surge",
       "is_modal": true,
-      "coverage": 0.3077
+      "coverage": 0.306
     },
     {
       "rank": 15,
@@ -1494,7 +1494,7 @@
       "set_confidence": "low",
       "variant_id": "variant:Rillaboom|item=Sitrus%20Berry|ability=Grassy%20Surge",
       "is_modal": false,
-      "coverage": 0.0659
+      "coverage": 0.071
     },
     {
       "rank": 15,
@@ -1504,10 +1504,10 @@
       "set_confidence": "low",
       "variant_id": "variant:Rillaboom|item=Terrain%20Extender|ability=Grassy%20Surge",
       "is_modal": false,
-      "coverage": 0.1429
+      "coverage": 0.1421
     },
     {
-      "rank": 24,
+      "rank": 25,
       "species": "Rotom-Heat",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1517,7 +1517,7 @@
       "coverage": 0.0672
     },
     {
-      "rank": 24,
+      "rank": 25,
       "species": "Rotom-Heat",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1527,7 +1527,7 @@
       "coverage": 0.1597
     },
     {
-      "rank": 24,
+      "rank": 25,
       "species": "Rotom-Heat",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1537,7 +1537,7 @@
       "coverage": 0.2017
     },
     {
-      "rank": 24,
+      "rank": 25,
       "species": "Rotom-Heat",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1547,7 +1547,7 @@
       "coverage": 0.2437
     },
     {
-      "rank": 24,
+      "rank": 25,
       "species": "Rotom-Heat",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1557,54 +1557,54 @@
       "coverage": 0.2353
     },
     {
-      "rank": 25,
+      "rank": 26,
       "species": "Rotom-Wash",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "medium",
       "variant_id": "variant:Rotom-Wash|item=Choice%20Scarf|ability=Levitate",
       "is_modal": false,
-      "coverage": 0.1183
+      "coverage": 0.1277
     },
     {
-      "rank": 25,
+      "rank": 26,
       "species": "Rotom-Wash",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Rotom-Wash|item=Leftovers|ability=Levitate",
       "is_modal": true,
-      "coverage": 0.3763
+      "coverage": 0.3723
     },
     {
-      "rank": 25,
+      "rank": 26,
       "species": "Rotom-Wash",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "medium",
       "variant_id": "variant:Rotom-Wash|item=Rocky%20Helmet|ability=Levitate",
       "is_modal": false,
-      "coverage": 0.0753
+      "coverage": 0.0745
     },
     {
-      "rank": 25,
+      "rank": 26,
       "species": "Rotom-Wash",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Rotom-Wash|item=Sitrus%20Berry|ability=Levitate",
       "is_modal": false,
-      "coverage": 0.3226
+      "coverage": 0.3191
     },
     {
-      "rank": 25,
+      "rank": 26,
       "species": "Rotom-Wash",
       "real_team_backed": true,
       "set_source": "real-team",
       "set_confidence": "low",
       "variant_id": "variant:Rotom-Wash|item=Wide%20Lens|ability=Levitate",
       "is_modal": false,
-      "coverage": 0.0323
+      "coverage": 0.0319
     },
     {
       "rank": 10,
@@ -1614,11 +1614,11 @@
       "set_confidence": "low",
       "variant_id": "variant:Salamence|item=Salamencite|ability=Aerilate",
       "is_modal": true,
-      "coverage": 0.9362,
+      "coverage": 0.9364,
       "run_form": "Mega Salamence"
     },
     {
-      "rank": 39,
+      "rank": 40,
       "species": "Samurott-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1628,7 +1628,7 @@
       "coverage": 0.3143
     },
     {
-      "rank": 39,
+      "rank": 40,
       "species": "Samurott-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1638,7 +1638,7 @@
       "coverage": 0.1857
     },
     {
-      "rank": 39,
+      "rank": 40,
       "species": "Samurott-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1648,7 +1648,7 @@
       "coverage": 0.2
     },
     {
-      "rank": 39,
+      "rank": 40,
       "species": "Samurott-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1658,7 +1658,7 @@
       "coverage": 0.1286
     },
     {
-      "rank": 39,
+      "rank": 40,
       "species": "Samurott-Hisui",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1668,7 +1668,7 @@
       "coverage": 0.0714
     },
     {
-      "rank": 43,
+      "rank": 42,
       "species": "Scizor",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1678,7 +1678,7 @@
       "coverage": 0.1029
     },
     {
-      "rank": 43,
+      "rank": 42,
       "species": "Scizor",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1688,7 +1688,7 @@
       "coverage": 0.0588
     },
     {
-      "rank": 43,
+      "rank": 42,
       "species": "Scizor",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1698,7 +1698,7 @@
       "coverage": 0.4117
     },
     {
-      "rank": 43,
+      "rank": 42,
       "species": "Scizor",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1709,7 +1709,7 @@
       "run_form": "Mega Scizor"
     },
     {
-      "rank": 43,
+      "rank": 42,
       "species": "Scizor",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1719,7 +1719,7 @@
       "coverage": 0.0882
     },
     {
-      "rank": 49,
+      "rank": 50,
       "species": "Scovillain",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1729,7 +1729,7 @@
       "coverage": 0.4375
     },
     {
-      "rank": 49,
+      "rank": 50,
       "species": "Scovillain",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1888,11 +1888,11 @@
       "set_confidence": "low",
       "variant_id": "variant:Starmie|item=Starminite|ability=Huge%20Power",
       "is_modal": true,
-      "coverage": 0.8974,
+      "coverage": 0.9,
       "run_form": "Mega Starmie"
     },
     {
-      "rank": 31,
+      "rank": 30,
       "species": "Swampert",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1902,7 +1902,7 @@
       "coverage": 0.0482
     },
     {
-      "rank": 31,
+      "rank": 30,
       "species": "Swampert",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1912,7 +1912,7 @@
       "coverage": 0.3132
     },
     {
-      "rank": 31,
+      "rank": 30,
       "species": "Swampert",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1973,7 +1973,7 @@
       "coverage": 0.1059
     },
     {
-      "rank": 33,
+      "rank": 31,
       "species": "Tyranitar",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1983,7 +1983,7 @@
       "coverage": 0.05
     },
     {
-      "rank": 33,
+      "rank": 31,
       "species": "Tyranitar",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -1993,7 +1993,7 @@
       "coverage": 0.0875
     },
     {
-      "rank": 33,
+      "rank": 31,
       "species": "Tyranitar",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -2003,7 +2003,7 @@
       "coverage": 0.175
     },
     {
-      "rank": 33,
+      "rank": 31,
       "species": "Tyranitar",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -2013,7 +2013,7 @@
       "coverage": 0.15
     },
     {
-      "rank": 33,
+      "rank": 31,
       "species": "Tyranitar",
       "real_team_backed": true,
       "set_source": "real-team",
@@ -2031,7 +2031,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Umbreon|item=Leftovers|ability=Inner%20Focus",
       "is_modal": true,
-      "coverage": 0.6737
+      "coverage": 0.6771
     },
     {
       "rank": 22,
@@ -2041,7 +2041,7 @@
       "set_confidence": "medium",
       "variant_id": "variant:Umbreon|item=Leftovers|ability=Synchronize",
       "is_modal": false,
-      "coverage": 0.2105
+      "coverage": 0.2083
     },
     {
       "rank": 53,
@@ -2140,7 +2140,7 @@
       "note": "real-team archetype Air Balloon/Stance Change: 3/7 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Aegislash|item=Air%20Balloon|ability=Stance%20Change",
       "is_modal": false,
-      "coverage": 0.0493,
+      "coverage": 0.0486,
       "variant_sample": 7,
       "variant_count": 3,
       "cluster": {
@@ -2148,8 +2148,8 @@
         "ability": "Stance Change"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9578,
-      "unrepresented_coverage": 0.0422,
+      "represented_coverage": 0.9583,
+      "unrepresented_coverage": 0.0417,
       "speed_profile": {
         "sample": 2,
         "min_spe_sp": 0,
@@ -2182,21 +2182,21 @@
       "source": "real-team",
       "confidence": "high",
       "real_team_backed": true,
-      "note": "real-team archetype Focus Sash/Stance Change: 14/24 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Focus Sash/Stance Change: 15/25 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Aegislash|item=Focus%20Sash|ability=Stance%20Change",
       "is_modal": false,
-      "coverage": 0.169,
-      "variant_sample": 24,
-      "variant_count": 14,
+      "coverage": 0.1736,
+      "variant_sample": 25,
+      "variant_count": 15,
       "cluster": {
         "item": "Focus Sash",
         "ability": "Stance Change"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9578,
-      "unrepresented_coverage": 0.0422,
+      "represented_coverage": 0.9583,
+      "unrepresented_coverage": 0.0417,
       "speed_profile": {
-        "sample": 24,
+        "sample": 25,
         "min_spe_sp": 32,
         "max_spe_sp": 32,
         "natures": [
@@ -2230,7 +2230,7 @@
       "note": "real-team archetype Leftovers/Stance Change: 12/56 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Aegislash|item=Leftovers|ability=Stance%20Change",
       "is_modal": true,
-      "coverage": 0.3944,
+      "coverage": 0.3889,
       "variant_sample": 56,
       "variant_count": 12,
       "cluster": {
@@ -2238,8 +2238,8 @@
         "ability": "Stance Change"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9578,
-      "unrepresented_coverage": 0.0422,
+      "represented_coverage": 0.9583,
+      "unrepresented_coverage": 0.0417,
       "speed_profile": {
         "sample": 24,
         "min_spe_sp": 0,
@@ -2279,7 +2279,7 @@
       "note": "real-team archetype Life Orb/Stance Change: 7/14 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Aegislash|item=Life%20Orb|ability=Stance%20Change",
       "is_modal": false,
-      "coverage": 0.0986,
+      "coverage": 0.0972,
       "variant_sample": 14,
       "variant_count": 7,
       "cluster": {
@@ -2287,8 +2287,8 @@
         "ability": "Stance Change"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9578,
-      "unrepresented_coverage": 0.0422,
+      "represented_coverage": 0.9583,
+      "unrepresented_coverage": 0.0417,
       "speed_profile": {
         "sample": 13,
         "min_spe_sp": 1,
@@ -2321,21 +2321,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Spell Tag/Stance Change: 8/35 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Spell Tag/Stance Change: 8/36 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Aegislash|item=Spell%20Tag|ability=Stance%20Change",
       "is_modal": false,
-      "coverage": 0.2465,
-      "variant_sample": 35,
+      "coverage": 0.25,
+      "variant_sample": 36,
       "variant_count": 8,
       "cluster": {
         "item": "Spell Tag",
         "ability": "Stance Change"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9578,
-      "unrepresented_coverage": 0.0422,
+      "represented_coverage": 0.9583,
+      "unrepresented_coverage": 0.0417,
       "speed_profile": {
-        "sample": 20,
+        "sample": 21,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -2369,7 +2369,7 @@
       "note": "real-team archetype Air Balloon/Stamina: 3/13 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Archaludon|item=Air%20Balloon|ability=Stamina",
       "is_modal": false,
-      "coverage": 0.0415,
+      "coverage": 0.0414,
       "variant_sample": 13,
       "variant_count": 3,
       "cluster": {
@@ -2377,8 +2377,8 @@
         "ability": "Stamina"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.7443,
-      "unrepresented_coverage": 0.2557,
+      "represented_coverage": 0.742,
+      "unrepresented_coverage": 0.258,
       "speed_profile": {
         "sample": 10,
         "min_spe_sp": 0,
@@ -2418,7 +2418,7 @@
       "note": "real-team archetype Choice Scarf/Sturdy: 4/20 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Archaludon|item=Choice%20Scarf|ability=Sturdy",
       "is_modal": false,
-      "coverage": 0.0639,
+      "coverage": 0.0637,
       "variant_sample": 20,
       "variant_count": 4,
       "cluster": {
@@ -2426,8 +2426,8 @@
         "ability": "Sturdy"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.7443,
-      "unrepresented_coverage": 0.2557,
+      "represented_coverage": 0.742,
+      "unrepresented_coverage": 0.258,
       "speed_profile": {
         "sample": 20,
         "min_spe_sp": 32,
@@ -2463,7 +2463,7 @@
       "note": "real-team archetype Leftovers/Stamina: 4/60 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Archaludon|item=Leftovers|ability=Stamina",
       "is_modal": false,
-      "coverage": 0.1917,
+      "coverage": 0.1911,
       "variant_sample": 60,
       "variant_count": 4,
       "cluster": {
@@ -2471,8 +2471,8 @@
         "ability": "Stamina"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.7443,
-      "unrepresented_coverage": 0.2557,
+      "represented_coverage": 0.742,
+      "unrepresented_coverage": 0.258,
       "speed_profile": {
         "sample": 38,
         "min_spe_sp": 0,
@@ -2511,7 +2511,7 @@
       "note": "real-team archetype Sitrus Berry/Stamina: 18/110 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Archaludon|item=Sitrus%20Berry|ability=Stamina",
       "is_modal": true,
-      "coverage": 0.3514,
+      "coverage": 0.3503,
       "variant_sample": 110,
       "variant_count": 18,
       "cluster": {
@@ -2519,8 +2519,8 @@
         "ability": "Stamina"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.7443,
-      "unrepresented_coverage": 0.2557,
+      "represented_coverage": 0.742,
+      "unrepresented_coverage": 0.258,
       "speed_profile": {
         "sample": 88,
         "min_spe_sp": 0,
@@ -2561,7 +2561,7 @@
       "note": "real-team archetype White Herb/Sturdy: 8/30 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Archaludon|item=White%20Herb|ability=Sturdy",
       "is_modal": false,
-      "coverage": 0.0958,
+      "coverage": 0.0955,
       "variant_sample": 30,
       "variant_count": 8,
       "cluster": {
@@ -2569,8 +2569,8 @@
         "ability": "Sturdy"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.7443,
-      "unrepresented_coverage": 0.2557,
+      "represented_coverage": 0.742,
+      "unrepresented_coverage": 0.258,
       "speed_profile": {
         "sample": 30,
         "min_spe_sp": 2,
@@ -2608,7 +2608,7 @@
       "note": "real-team archetype Choice Scarf/Adaptability: 75/98 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Basculegion|item=Choice%20Scarf|ability=Adaptability",
       "is_modal": true,
-      "coverage": 0.4645,
+      "coverage": 0.4623,
       "variant_sample": 98,
       "variant_count": 75,
       "cluster": {
@@ -2616,8 +2616,8 @@
         "ability": "Adaptability"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9242,
-      "unrepresented_coverage": 0.0758,
+      "represented_coverage": 0.9246,
+      "unrepresented_coverage": 0.0754,
       "speed_profile": {
         "sample": 98,
         "min_spe_sp": 9,
@@ -2652,7 +2652,7 @@
       "note": "real-team archetype Focus Sash/Adaptability: 5/9 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Basculegion|item=Focus%20Sash|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.0427,
+      "coverage": 0.0425,
       "variant_sample": 9,
       "variant_count": 5,
       "cluster": {
@@ -2660,8 +2660,8 @@
         "ability": "Adaptability"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9242,
-      "unrepresented_coverage": 0.0758,
+      "represented_coverage": 0.9246,
+      "unrepresented_coverage": 0.0754,
       "speed_profile": {
         "sample": 9,
         "min_spe_sp": 14,
@@ -2697,7 +2697,7 @@
       "note": "real-team archetype Life Orb/Adaptability: 5/16 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Basculegion|item=Life%20Orb|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.0758,
+      "coverage": 0.0755,
       "variant_sample": 16,
       "variant_count": 5,
       "cluster": {
@@ -2705,8 +2705,8 @@
         "ability": "Adaptability"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9242,
-      "unrepresented_coverage": 0.0758,
+      "represented_coverage": 0.9246,
+      "unrepresented_coverage": 0.0754,
       "speed_profile": {
         "sample": 11,
         "min_spe_sp": 10,
@@ -2739,21 +2739,21 @@
       "source": "real-team",
       "confidence": "medium",
       "real_team_backed": true,
-      "note": "real-team archetype Mystic Water/Adaptability: 18/28 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Mystic Water/Adaptability: 18/29 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Basculegion|item=Mystic%20Water|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.1327,
-      "variant_sample": 28,
+      "coverage": 0.1368,
+      "variant_sample": 29,
       "variant_count": 18,
       "cluster": {
         "item": "Mystic Water",
         "ability": "Adaptability"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9242,
-      "unrepresented_coverage": 0.0758,
+      "represented_coverage": 0.9246,
+      "unrepresented_coverage": 0.0754,
       "speed_profile": {
-        "sample": 16,
+        "sample": 17,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -2788,7 +2788,7 @@
       "note": "real-team archetype Spell Tag/Adaptability: 13/44 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Basculegion|item=Spell%20Tag|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.2085,
+      "coverage": 0.2075,
       "variant_sample": 44,
       "variant_count": 13,
       "cluster": {
@@ -2796,8 +2796,8 @@
         "ability": "Adaptability"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9242,
-      "unrepresented_coverage": 0.0758,
+      "represented_coverage": 0.9246,
+      "unrepresented_coverage": 0.0754,
       "speed_profile": {
         "sample": 36,
         "min_spe_sp": 0,
@@ -3332,7 +3332,7 @@
       "note": "real-team archetype Charizardite X/Tough Claws: 11/62 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Charizard|item=Charizardite%20X|ability=Tough%20Claws",
       "is_modal": false,
-      "coverage": 0.287,
+      "coverage": 0.2844,
       "variant_sample": 62,
       "variant_count": 11,
       "cluster": {
@@ -3377,11 +3377,11 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Charizardite Y/Drought: 38/154 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Charizardite Y/Drought: 38/156 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Charizard|item=Charizardite%20Y|ability=Drought",
       "is_modal": true,
-      "coverage": 0.713,
-      "variant_sample": 154,
+      "coverage": 0.7156,
+      "variant_sample": 156,
       "variant_count": 38,
       "cluster": {
         "item": "Charizardite Y",
@@ -3391,7 +3391,7 @@
       "represented_coverage": 1.0,
       "unrepresented_coverage": 0.0,
       "speed_profile": {
-        "sample": 138,
+        "sample": 139,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -3426,7 +3426,7 @@
       "note": "real-team archetype Choice Scarf/Libero: 15/22 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Cinderace|item=Choice%20Scarf|ability=Libero",
       "is_modal": false,
-      "coverage": 0.2157,
+      "coverage": 0.2136,
       "variant_sample": 22,
       "variant_count": 15,
       "cluster": {
@@ -3434,8 +3434,8 @@
         "ability": "Libero"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9412,
-      "unrepresented_coverage": 0.0588,
+      "represented_coverage": 0.9417,
+      "unrepresented_coverage": 0.0583,
       "speed_profile": {
         "sample": 22,
         "min_spe_sp": 12,
@@ -3470,7 +3470,7 @@
       "note": "real-team archetype Focus Sash/Libero: 7/28 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Cinderace|item=Focus%20Sash|ability=Libero",
       "is_modal": false,
-      "coverage": 0.2745,
+      "coverage": 0.2718,
       "variant_sample": 28,
       "variant_count": 7,
       "cluster": {
@@ -3478,8 +3478,8 @@
         "ability": "Libero"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9412,
-      "unrepresented_coverage": 0.0588,
+      "represented_coverage": 0.9417,
+      "unrepresented_coverage": 0.0583,
       "speed_profile": {
         "sample": 28,
         "min_spe_sp": 24,
@@ -3514,7 +3514,7 @@
       "note": "real-team archetype Life Orb/Libero: 6/15 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Cinderace|item=Life%20Orb|ability=Libero",
       "is_modal": false,
-      "coverage": 0.1471,
+      "coverage": 0.1456,
       "variant_sample": 15,
       "variant_count": 6,
       "cluster": {
@@ -3522,8 +3522,8 @@
         "ability": "Libero"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9412,
-      "unrepresented_coverage": 0.0588,
+      "represented_coverage": 0.9417,
+      "unrepresented_coverage": 0.0583,
       "speed_profile": {
         "sample": 15,
         "min_spe_sp": 31,
@@ -3555,21 +3555,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Wide Lens/Libero: 9/31 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Wide Lens/Libero: 9/32 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Cinderace|item=Wide%20Lens|ability=Libero",
       "is_modal": true,
-      "coverage": 0.3039,
-      "variant_sample": 31,
+      "coverage": 0.3107,
+      "variant_sample": 32,
       "variant_count": 9,
       "cluster": {
         "item": "Wide Lens",
         "ability": "Libero"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9412,
-      "unrepresented_coverage": 0.0588,
+      "represented_coverage": 0.9417,
+      "unrepresented_coverage": 0.0583,
       "speed_profile": {
-        "sample": 31,
+        "sample": 32,
         "min_spe_sp": 2,
         "max_spe_sp": 32,
         "natures": [
@@ -3969,21 +3969,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Dragoninite/Multiscale: 21/120 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Dragoninite/Multiscale: 21/121 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Dragonite|item=Dragoninite|ability=Multiscale",
       "is_modal": true,
-      "coverage": 0.7143,
-      "variant_sample": 120,
+      "coverage": 0.7118,
+      "variant_sample": 121,
       "variant_count": 21,
       "cluster": {
         "item": "Dragoninite",
         "ability": "Multiscale"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9465,
-      "unrepresented_coverage": 0.0535,
+      "represented_coverage": 0.9412,
+      "unrepresented_coverage": 0.0588,
       "speed_profile": {
-        "sample": 113,
+        "sample": 114,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -4023,7 +4023,7 @@
       "note": "real-team archetype Expert Belt/Multiscale: 4/13 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Dragonite|item=Expert%20Belt|ability=Multiscale",
       "is_modal": false,
-      "coverage": 0.0774,
+      "coverage": 0.0765,
       "variant_sample": 13,
       "variant_count": 4,
       "cluster": {
@@ -4031,8 +4031,8 @@
         "ability": "Multiscale"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9465,
-      "unrepresented_coverage": 0.0535,
+      "represented_coverage": 0.9412,
+      "unrepresented_coverage": 0.0588,
       "speed_profile": {
         "sample": 13,
         "min_spe_sp": 0,
@@ -4071,7 +4071,7 @@
       "note": "real-team archetype Rocky Helmet/Multiscale: 5/26 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Dragonite|item=Rocky%20Helmet|ability=Multiscale",
       "is_modal": false,
-      "coverage": 0.1548,
+      "coverage": 0.1529,
       "variant_sample": 26,
       "variant_count": 5,
       "cluster": {
@@ -4079,8 +4079,8 @@
         "ability": "Multiscale"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9465,
-      "unrepresented_coverage": 0.0535,
+      "represented_coverage": 0.9412,
+      "unrepresented_coverage": 0.0588,
       "speed_profile": {
         "sample": 19,
         "min_spe_sp": 2,
@@ -4609,21 +4609,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Choice Scarf/Rough Skin: 13/159 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Choice Scarf/Rough Skin: 13/160 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Garchomp|item=Choice%20Scarf|ability=Rough%20Skin",
       "is_modal": false,
-      "coverage": 0.2315,
-      "variant_sample": 159,
+      "coverage": 0.2319,
+      "variant_sample": 160,
       "variant_count": 13,
       "cluster": {
         "item": "Choice Scarf",
         "ability": "Rough Skin"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8531,
-      "unrepresented_coverage": 0.1469,
+      "represented_coverage": 0.8537,
+      "unrepresented_coverage": 0.1463,
       "speed_profile": {
-        "sample": 159,
+        "sample": 160,
         "min_spe_sp": 14,
         "max_spe_sp": 32,
         "natures": [
@@ -4658,7 +4658,7 @@
       "note": "real-team archetype Focus Sash/Rough Skin: 17/124 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Garchomp|item=Focus%20Sash|ability=Rough%20Skin",
       "is_modal": false,
-      "coverage": 0.1805,
+      "coverage": 0.1797,
       "variant_sample": 124,
       "variant_count": 17,
       "cluster": {
@@ -4666,8 +4666,8 @@
         "ability": "Rough Skin"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8531,
-      "unrepresented_coverage": 0.1469,
+      "represented_coverage": 0.8537,
+      "unrepresented_coverage": 0.1463,
       "speed_profile": {
         "sample": 124,
         "min_spe_sp": 0,
@@ -4702,7 +4702,7 @@
       "note": "real-team archetype Garchompite Z/Levitate: 24/178 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Garchomp|item=Garchompite%20Z|ability=Levitate",
       "is_modal": true,
-      "coverage": 0.2591,
+      "coverage": 0.258,
       "variant_sample": 178,
       "variant_count": 24,
       "cluster": {
@@ -4710,8 +4710,8 @@
         "ability": "Levitate"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8531,
-      "unrepresented_coverage": 0.1469,
+      "represented_coverage": 0.8537,
+      "unrepresented_coverage": 0.1463,
       "speed_profile": {
         "sample": 169,
         "min_spe_sp": 0,
@@ -4757,7 +4757,7 @@
       "note": "real-team archetype Rocky Helmet/Rough Skin: 9/53 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Garchomp|item=Rocky%20Helmet|ability=Rough%20Skin",
       "is_modal": false,
-      "coverage": 0.0772,
+      "coverage": 0.0768,
       "variant_sample": 53,
       "variant_count": 9,
       "cluster": {
@@ -4765,8 +4765,8 @@
         "ability": "Rough Skin"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8531,
-      "unrepresented_coverage": 0.1469,
+      "represented_coverage": 0.8537,
+      "unrepresented_coverage": 0.1463,
       "speed_profile": {
         "sample": 33,
         "min_spe_sp": 0,
@@ -4803,21 +4803,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Sitrus Berry/Rough Skin: 22/72 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Sitrus Berry/Rough Skin: 23/74 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Garchomp|item=Sitrus%20Berry|ability=Rough%20Skin",
       "is_modal": false,
-      "coverage": 0.1048,
-      "variant_sample": 72,
-      "variant_count": 22,
+      "coverage": 0.1073,
+      "variant_sample": 74,
+      "variant_count": 23,
       "cluster": {
         "item": "Sitrus Berry",
         "ability": "Rough Skin"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8531,
-      "unrepresented_coverage": 0.1469,
+      "represented_coverage": 0.8537,
+      "unrepresented_coverage": 0.1463,
       "speed_profile": {
-        "sample": 54,
+        "sample": 56,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -5215,21 +5215,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Air Balloon/Toxic Debris: 4/17 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Air Balloon/Toxic Debris: 4/18 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Glimmora|item=Air%20Balloon|ability=Toxic%20Debris",
       "is_modal": false,
-      "coverage": 0.1156,
-      "variant_sample": 17,
+      "coverage": 0.1216,
+      "variant_sample": 18,
       "variant_count": 4,
       "cluster": {
         "item": "Air Balloon",
         "ability": "Toxic Debris"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9388,
-      "unrepresented_coverage": 0.0612,
+      "represented_coverage": 0.9392,
+      "unrepresented_coverage": 0.0608,
       "speed_profile": {
-        "sample": 17,
+        "sample": 18,
         "min_spe_sp": 5,
         "max_spe_sp": 32,
         "natures": [
@@ -5264,7 +5264,7 @@
       "note": "real-team archetype Choice Scarf/Toxic Debris: 4/12 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Glimmora|item=Choice%20Scarf|ability=Toxic%20Debris",
       "is_modal": false,
-      "coverage": 0.0817,
+      "coverage": 0.081,
       "variant_sample": 12,
       "variant_count": 4,
       "cluster": {
@@ -5272,8 +5272,8 @@
         "ability": "Toxic Debris"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9388,
-      "unrepresented_coverage": 0.0612,
+      "represented_coverage": 0.9392,
+      "unrepresented_coverage": 0.0608,
       "speed_profile": {
         "sample": 12,
         "min_spe_sp": 32,
@@ -5309,7 +5309,7 @@
       "note": "real-team archetype Focus Sash/Toxic Debris: 8/68 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Glimmora|item=Focus%20Sash|ability=Toxic%20Debris",
       "is_modal": true,
-      "coverage": 0.4626,
+      "coverage": 0.4595,
       "variant_sample": 68,
       "variant_count": 8,
       "cluster": {
@@ -5317,8 +5317,8 @@
         "ability": "Toxic Debris"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9388,
-      "unrepresented_coverage": 0.0612,
+      "represented_coverage": 0.9392,
+      "unrepresented_coverage": 0.0608,
       "speed_profile": {
         "sample": 67,
         "min_spe_sp": 32,
@@ -5354,7 +5354,7 @@
       "note": "real-team archetype Glimmoranite/Adaptability: 9/33 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Glimmora|item=Glimmoranite|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.2245,
+      "coverage": 0.223,
       "variant_sample": 33,
       "variant_count": 9,
       "cluster": {
@@ -5362,8 +5362,8 @@
         "ability": "Adaptability"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9388,
-      "unrepresented_coverage": 0.0612,
+      "represented_coverage": 0.9392,
+      "unrepresented_coverage": 0.0608,
       "speed_profile": {
         "sample": 33,
         "min_spe_sp": 23,
@@ -5399,7 +5399,7 @@
       "note": "real-team archetype Red Card/Toxic Debris: 2/8 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Glimmora|item=Red%20Card|ability=Toxic%20Debris",
       "is_modal": false,
-      "coverage": 0.0544,
+      "coverage": 0.0541,
       "variant_sample": 8,
       "variant_count": 2,
       "cluster": {
@@ -5407,8 +5407,8 @@
         "ability": "Toxic Debris"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9388,
-      "unrepresented_coverage": 0.0612,
+      "represented_coverage": 0.9392,
+      "unrepresented_coverage": 0.0608,
       "speed_profile": {
         "sample": 7,
         "min_spe_sp": 1,
@@ -5717,7 +5717,7 @@
       "note": "real-team archetype Choice Scarf/Protean: 2/15 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Greninja|item=Choice%20Scarf|ability=Protean",
       "is_modal": false,
-      "coverage": 0.1442,
+      "coverage": 0.1415,
       "variant_sample": 15,
       "variant_count": 2,
       "cluster": {
@@ -5725,8 +5725,8 @@
         "ability": "Protean"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9806,
-      "unrepresented_coverage": 0.0194,
+      "represented_coverage": 0.981,
+      "unrepresented_coverage": 0.019,
       "speed_profile": {
         "sample": 15,
         "min_spe_sp": 28,
@@ -5764,7 +5764,7 @@
       "note": "real-team archetype Focus Sash/Protean: 2/16 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Greninja|item=Focus%20Sash|ability=Protean",
       "is_modal": false,
-      "coverage": 0.1538,
+      "coverage": 0.1509,
       "variant_sample": 16,
       "variant_count": 2,
       "cluster": {
@@ -5772,8 +5772,8 @@
         "ability": "Protean"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9806,
-      "unrepresented_coverage": 0.0194,
+      "represented_coverage": 0.981,
+      "unrepresented_coverage": 0.019,
       "speed_profile": {
         "sample": 16,
         "min_spe_sp": 26,
@@ -5809,7 +5809,7 @@
       "note": "real-team archetype Focus Sash/Torrent: 6/11 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Greninja|item=Focus%20Sash|ability=Torrent",
       "is_modal": false,
-      "coverage": 0.1057,
+      "coverage": 0.1037,
       "variant_sample": 11,
       "variant_count": 6,
       "cluster": {
@@ -5817,8 +5817,8 @@
         "ability": "Torrent"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9806,
-      "unrepresented_coverage": 0.0194,
+      "represented_coverage": 0.981,
+      "unrepresented_coverage": 0.019,
       "speed_profile": {
         "sample": 11,
         "min_spe_sp": 32,
@@ -5849,19 +5849,19 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Greninjite/Protean: 8/52 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Greninjite/Protean: 8/53 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Greninja|item=Greninjite|ability=Protean",
       "is_modal": true,
       "coverage": 0.5,
-      "variant_sample": 52,
+      "variant_sample": 53,
       "variant_count": 8,
       "cluster": {
         "item": "Greninjite",
         "ability": "Protean"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9806,
-      "unrepresented_coverage": 0.0194,
+      "represented_coverage": 0.981,
+      "unrepresented_coverage": 0.019,
       "speed_profile": {
         "sample": 51,
         "min_spe_sp": 21,
@@ -5897,21 +5897,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Life Orb/Protean: 4/8 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Life Orb/Protean: 4/9 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Greninja|item=Life%20Orb|ability=Protean",
       "is_modal": false,
-      "coverage": 0.0769,
-      "variant_sample": 8,
+      "coverage": 0.0849,
+      "variant_sample": 9,
       "variant_count": 4,
       "cluster": {
         "item": "Life Orb",
         "ability": "Protean"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9806,
-      "unrepresented_coverage": 0.0194,
+      "represented_coverage": 0.981,
+      "unrepresented_coverage": 0.019,
       "speed_profile": {
-        "sample": 8,
+        "sample": 9,
         "min_spe_sp": 32,
         "max_spe_sp": 32,
         "natures": [
@@ -6391,7 +6391,7 @@
       "note": "real-team archetype Leftovers/Sand Stream: 25/82 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Hippowdon|item=Leftovers|ability=Sand%20Stream",
       "is_modal": false,
-      "coverage": 0.2291,
+      "coverage": 0.2278,
       "variant_sample": 82,
       "variant_count": 25,
       "cluster": {
@@ -6399,8 +6399,8 @@
         "ability": "Sand Stream"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9805,
-      "unrepresented_coverage": 0.0195,
+      "represented_coverage": 0.9806,
+      "unrepresented_coverage": 0.0194,
       "speed_profile": {
         "sample": 16,
         "min_spe_sp": 0,
@@ -6435,21 +6435,21 @@
       "source": "real-team",
       "confidence": "medium",
       "real_team_backed": true,
-      "note": "real-team archetype Rocky Helmet/Sand Stream: 36/90 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Rocky Helmet/Sand Stream: 36/91 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Hippowdon|item=Rocky%20Helmet|ability=Sand%20Stream",
       "is_modal": false,
-      "coverage": 0.2514,
-      "variant_sample": 90,
+      "coverage": 0.2528,
+      "variant_sample": 91,
       "variant_count": 36,
       "cluster": {
         "item": "Rocky Helmet",
         "ability": "Sand Stream"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9805,
-      "unrepresented_coverage": 0.0195,
+      "represented_coverage": 0.9806,
+      "unrepresented_coverage": 0.0194,
       "speed_profile": {
-        "sample": 22,
+        "sample": 23,
         "min_spe_sp": 0,
         "max_spe_sp": 7,
         "natures": [
@@ -6481,21 +6481,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Sitrus Berry/Sand Stream: 57/179 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Sitrus Berry/Sand Stream: 57/180 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Hippowdon|item=Sitrus%20Berry|ability=Sand%20Stream",
       "is_modal": true,
       "coverage": 0.5,
-      "variant_sample": 179,
+      "variant_sample": 180,
       "variant_count": 57,
       "cluster": {
         "item": "Sitrus Berry",
         "ability": "Sand Stream"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9805,
-      "unrepresented_coverage": 0.0195,
+      "represented_coverage": 0.9806,
+      "unrepresented_coverage": 0.0194,
       "speed_profile": {
-        "sample": 47,
+        "sample": 48,
         "min_spe_sp": 0,
         "max_spe_sp": 4,
         "natures": [
@@ -6708,7 +6708,7 @@
       "note": "real-team archetype Choice Scarf/Psychic Surge: 16/61 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Indeedee|item=Choice%20Scarf|ability=Psychic%20Surge",
       "is_modal": false,
-      "coverage": 0.3466,
+      "coverage": 0.3427,
       "variant_sample": 61,
       "variant_count": 16,
       "cluster": {
@@ -6716,8 +6716,8 @@
         "ability": "Psychic Surge"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9716,
-      "unrepresented_coverage": 0.0284,
+      "represented_coverage": 0.9719,
+      "unrepresented_coverage": 0.0281,
       "speed_profile": {
         "sample": 61,
         "min_spe_sp": 22,
@@ -6749,21 +6749,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Focus Sash/Psychic Surge: 5/37 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Focus Sash/Psychic Surge: 5/39 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Indeedee|item=Focus%20Sash|ability=Psychic%20Surge",
       "is_modal": false,
-      "coverage": 0.2102,
-      "variant_sample": 37,
+      "coverage": 0.2191,
+      "variant_sample": 39,
       "variant_count": 5,
       "cluster": {
         "item": "Focus Sash",
         "ability": "Psychic Surge"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9716,
-      "unrepresented_coverage": 0.0284,
+      "represented_coverage": 0.9719,
+      "unrepresented_coverage": 0.0281,
       "speed_profile": {
-        "sample": 26,
+        "sample": 28,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -6798,7 +6798,7 @@
       "note": "real-team archetype Terrain Extender/Psychic Surge: 15/73 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Indeedee|item=Terrain%20Extender|ability=Psychic%20Surge",
       "is_modal": true,
-      "coverage": 0.4148,
+      "coverage": 0.4101,
       "variant_sample": 73,
       "variant_count": 15,
       "cluster": {
@@ -6806,8 +6806,8 @@
         "ability": "Psychic Surge"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9716,
-      "unrepresented_coverage": 0.0284,
+      "represented_coverage": 0.9719,
+      "unrepresented_coverage": 0.0281,
       "speed_profile": {
         "sample": 67,
         "min_spe_sp": 13,
@@ -7064,11 +7064,11 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Lucarionite Z/Aura Guard: 52/212 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Lucarionite Z/Aura Guard: 52/215 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Lucario|item=Lucarionite%20Z|ability=Aura%20Guard",
       "is_modal": true,
       "coverage": 0.7439,
-      "variant_sample": 212,
+      "variant_sample": 215,
       "variant_count": 52,
       "cluster": {
         "item": "Lucarionite Z",
@@ -7078,7 +7078,7 @@
       "represented_coverage": 0.9896,
       "unrepresented_coverage": 0.0104,
       "speed_profile": {
-        "sample": 211,
+        "sample": 214,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -7115,7 +7115,7 @@
       "note": "real-team archetype Lucarionite Z/Inner Focus: 7/18 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Lucario|item=Lucarionite%20Z|ability=Inner%20Focus",
       "is_modal": false,
-      "coverage": 0.0632,
+      "coverage": 0.0623,
       "variant_sample": 18,
       "variant_count": 7,
       "cluster": {
@@ -7158,11 +7158,11 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Lucarionite/Adaptability: 7/52 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Lucarionite/Adaptability: 7/53 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Lucario|item=Lucarionite|ability=Adaptability",
       "is_modal": false,
-      "coverage": 0.1825,
-      "variant_sample": 52,
+      "coverage": 0.1834,
+      "variant_sample": 53,
       "variant_count": 7,
       "cluster": {
         "item": "Lucarionite",
@@ -7172,7 +7172,7 @@
       "represented_coverage": 0.9896,
       "unrepresented_coverage": 0.0104,
       "speed_profile": {
-        "sample": 50,
+        "sample": 51,
         "min_spe_sp": 9,
         "max_spe_sp": 32,
         "natures": [
@@ -7534,8 +7534,8 @@
       "variant_count": 1,
       "cluster": null,
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.976,
-      "unrepresented_coverage": 0.024,
+      "represented_coverage": 0.9762,
+      "unrepresented_coverage": 0.0238,
       "speed_profile": null
     },
     "variant:Metagross|item=Metagrossite|ability=Tough%20Claws": {
@@ -7558,21 +7558,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Metagrossite/Tough Claws: 26/163 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Metagrossite/Tough Claws: 26/164 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Metagross|item=Metagrossite|ability=Tough%20Claws",
       "is_modal": true,
-      "coverage": 0.976,
-      "variant_sample": 163,
+      "coverage": 0.9762,
+      "variant_sample": 164,
       "variant_count": 26,
       "cluster": {
         "item": "Metagrossite",
         "ability": "Tough Claws"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.976,
-      "unrepresented_coverage": 0.024,
+      "represented_coverage": 0.9762,
+      "unrepresented_coverage": 0.0238,
       "speed_profile": {
-        "sample": 159,
+        "sample": 160,
         "min_spe_sp": 1,
         "max_spe_sp": 32,
         "natures": [
@@ -7605,21 +7605,21 @@
       "source": "real-team",
       "confidence": "medium",
       "real_team_backed": true,
-      "note": "real-team archetype Life Orb/Disguise: 102/257 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Life Orb/Disguise: 103/259 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Mimikyu|item=Life%20Orb|ability=Disguise",
       "is_modal": true,
-      "coverage": 0.8107,
-      "variant_sample": 257,
-      "variant_count": 102,
+      "coverage": 0.8119,
+      "variant_sample": 259,
+      "variant_count": 103,
       "cluster": {
         "item": "Life Orb",
         "ability": "Disguise"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8895,
-      "unrepresented_coverage": 0.1105,
+      "represented_coverage": 0.8902,
+      "unrepresented_coverage": 0.1098,
       "speed_profile": {
-        "sample": 208,
+        "sample": 210,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -7657,7 +7657,7 @@
       "note": "real-team archetype Lum Berry/Disguise: 6/10 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Mimikyu|item=Lum%20Berry|ability=Disguise",
       "is_modal": false,
-      "coverage": 0.0315,
+      "coverage": 0.0313,
       "variant_sample": 10,
       "variant_count": 6,
       "cluster": {
@@ -7665,8 +7665,8 @@
         "ability": "Disguise"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8895,
-      "unrepresented_coverage": 0.1105,
+      "represented_coverage": 0.8902,
+      "unrepresented_coverage": 0.1098,
       "speed_profile": {
         "sample": 3,
         "min_spe_sp": 1,
@@ -7702,7 +7702,7 @@
       "note": "real-team archetype Rocky Helmet/Disguise: 5/15 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Mimikyu|item=Rocky%20Helmet|ability=Disguise",
       "is_modal": false,
-      "coverage": 0.0473,
+      "coverage": 0.047,
       "variant_sample": 15,
       "variant_count": 5,
       "cluster": {
@@ -7710,8 +7710,8 @@
         "ability": "Disguise"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8895,
-      "unrepresented_coverage": 0.1105,
+      "represented_coverage": 0.8902,
+      "unrepresented_coverage": 0.1098,
       "speed_profile": {
         "sample": 2,
         "min_spe_sp": 0,
@@ -8442,7 +8442,7 @@
       "note": "real-team archetype Life Orb/Grassy Surge: 8/46 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rillaboom|item=Life%20Orb|ability=Grassy%20Surge",
       "is_modal": false,
-      "coverage": 0.2527,
+      "coverage": 0.2514,
       "variant_sample": 46,
       "variant_count": 8,
       "cluster": {
@@ -8450,8 +8450,8 @@
         "ability": "Grassy Surge"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8296,
-      "unrepresented_coverage": 0.1704,
+      "represented_coverage": 0.8306,
+      "unrepresented_coverage": 0.1694,
       "speed_profile": {
         "sample": 33,
         "min_spe_sp": 0,
@@ -8487,7 +8487,7 @@
       "note": "real-team archetype Lum Berry/Grassy Surge: 6/11 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rillaboom|item=Lum%20Berry|ability=Grassy%20Surge",
       "is_modal": false,
-      "coverage": 0.0604,
+      "coverage": 0.0601,
       "variant_sample": 11,
       "variant_count": 6,
       "cluster": {
@@ -8495,8 +8495,8 @@
         "ability": "Grassy Surge"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8296,
-      "unrepresented_coverage": 0.1704,
+      "represented_coverage": 0.8306,
+      "unrepresented_coverage": 0.1694,
       "speed_profile": {
         "sample": 11,
         "min_spe_sp": 0,
@@ -8530,7 +8530,7 @@
       "note": "real-team archetype Miracle Seed/Grassy Surge: 10/56 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rillaboom|item=Miracle%20Seed|ability=Grassy%20Surge",
       "is_modal": true,
-      "coverage": 0.3077,
+      "coverage": 0.306,
       "variant_sample": 56,
       "variant_count": 10,
       "cluster": {
@@ -8538,8 +8538,8 @@
         "ability": "Grassy Surge"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8296,
-      "unrepresented_coverage": 0.1704,
+      "represented_coverage": 0.8306,
+      "unrepresented_coverage": 0.1694,
       "speed_profile": {
         "sample": 44,
         "min_spe_sp": 0,
@@ -8572,21 +8572,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Sitrus Berry/Grassy Surge: 2/12 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Sitrus Berry/Grassy Surge: 2/13 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rillaboom|item=Sitrus%20Berry|ability=Grassy%20Surge",
       "is_modal": false,
-      "coverage": 0.0659,
-      "variant_sample": 12,
+      "coverage": 0.071,
+      "variant_sample": 13,
       "variant_count": 2,
       "cluster": {
         "item": "Sitrus Berry",
         "ability": "Grassy Surge"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8296,
-      "unrepresented_coverage": 0.1704,
+      "represented_coverage": 0.8306,
+      "unrepresented_coverage": 0.1694,
       "speed_profile": {
-        "sample": 8,
+        "sample": 9,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -8621,7 +8621,7 @@
       "note": "real-team archetype Terrain Extender/Grassy Surge: 4/26 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rillaboom|item=Terrain%20Extender|ability=Grassy%20Surge",
       "is_modal": false,
-      "coverage": 0.1429,
+      "coverage": 0.1421,
       "variant_sample": 26,
       "variant_count": 4,
       "cluster": {
@@ -8629,8 +8629,8 @@
         "ability": "Grassy Surge"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8296,
-      "unrepresented_coverage": 0.1704,
+      "represented_coverage": 0.8306,
+      "unrepresented_coverage": 0.1694,
       "speed_profile": {
         "sample": 14,
         "min_spe_sp": 0,
@@ -8890,21 +8890,21 @@
       "source": "real-team",
       "confidence": "medium",
       "real_team_backed": true,
-      "note": "real-team archetype Choice Scarf/Levitate: 9/11 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Choice Scarf/Levitate: 9/12 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rotom-Wash|item=Choice%20Scarf|ability=Levitate",
       "is_modal": false,
-      "coverage": 0.1183,
-      "variant_sample": 11,
+      "coverage": 0.1277,
+      "variant_sample": 12,
       "variant_count": 9,
       "cluster": {
         "item": "Choice Scarf",
         "ability": "Levitate"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9248,
-      "unrepresented_coverage": 0.0752,
+      "represented_coverage": 0.9255,
+      "unrepresented_coverage": 0.0745,
       "speed_profile": {
-        "sample": 11,
+        "sample": 12,
         "min_spe_sp": 25,
         "max_spe_sp": 32,
         "natures": [
@@ -8937,7 +8937,7 @@
       "note": "real-team archetype Leftovers/Levitate: 7/35 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rotom-Wash|item=Leftovers|ability=Levitate",
       "is_modal": true,
-      "coverage": 0.3763,
+      "coverage": 0.3723,
       "variant_sample": 35,
       "variant_count": 7,
       "cluster": {
@@ -8945,8 +8945,8 @@
         "ability": "Levitate"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9248,
-      "unrepresented_coverage": 0.0752,
+      "represented_coverage": 0.9255,
+      "unrepresented_coverage": 0.0745,
       "speed_profile": {
         "sample": 14,
         "min_spe_sp": 0,
@@ -8984,7 +8984,7 @@
       "note": "real-team archetype Rocky Helmet/Levitate: 5/7 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rotom-Wash|item=Rocky%20Helmet|ability=Levitate",
       "is_modal": false,
-      "coverage": 0.0753,
+      "coverage": 0.0745,
       "variant_sample": 7,
       "variant_count": 5,
       "cluster": {
@@ -8992,8 +8992,8 @@
         "ability": "Levitate"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9248,
-      "unrepresented_coverage": 0.0752,
+      "represented_coverage": 0.9255,
+      "unrepresented_coverage": 0.0745,
       "speed_profile": {
         "sample": 3,
         "min_spe_sp": 0,
@@ -9028,7 +9028,7 @@
       "note": "real-team archetype Sitrus Berry/Levitate: 9/30 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rotom-Wash|item=Sitrus%20Berry|ability=Levitate",
       "is_modal": false,
-      "coverage": 0.3226,
+      "coverage": 0.3191,
       "variant_sample": 30,
       "variant_count": 9,
       "cluster": {
@@ -9036,8 +9036,8 @@
         "ability": "Levitate"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9248,
-      "unrepresented_coverage": 0.0752,
+      "represented_coverage": 0.9255,
+      "unrepresented_coverage": 0.0745,
       "speed_profile": {
         "sample": 11,
         "min_spe_sp": 0,
@@ -9074,7 +9074,7 @@
       "note": "real-team archetype Wide Lens/Levitate: 2/3 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Rotom-Wash|item=Wide%20Lens|ability=Levitate",
       "is_modal": false,
-      "coverage": 0.0323,
+      "coverage": 0.0319,
       "variant_sample": 3,
       "variant_count": 2,
       "cluster": {
@@ -9082,8 +9082,8 @@
         "ability": "Levitate"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9248,
-      "unrepresented_coverage": 0.0752,
+      "represented_coverage": 0.9255,
+      "unrepresented_coverage": 0.0745,
       "speed_profile": {
         "sample": 0,
         "min_spe_sp": null,
@@ -9116,21 +9116,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Salamencite/Aerilate: 109/367 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Salamencite/Aerilate: 109/368 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Salamence|item=Salamencite|ability=Aerilate",
       "is_modal": true,
-      "coverage": 0.9362,
-      "variant_sample": 367,
+      "coverage": 0.9364,
+      "variant_sample": 368,
       "variant_count": 109,
       "cluster": {
         "item": "Salamencite",
         "ability": "Aerilate"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.9362,
-      "unrepresented_coverage": 0.0638,
+      "represented_coverage": 0.9364,
+      "unrepresented_coverage": 0.0636,
       "speed_profile": {
-        "sample": 365,
+        "sample": 366,
         "min_spe_sp": 1,
         "max_spe_sp": 32,
         "natures": [
@@ -10295,8 +10295,8 @@
       "variant_count": 1,
       "cluster": null,
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8974,
-      "unrepresented_coverage": 0.1026,
+      "represented_coverage": 0.9,
+      "unrepresented_coverage": 0.1,
       "speed_profile": null
     },
     "variant:Starmie|item=Starminite|ability=Huge%20Power": {
@@ -10319,21 +10319,21 @@
       "source": "real-team",
       "confidence": "low",
       "real_team_backed": true,
-      "note": "real-team archetype Starminite/Huge Power: 7/35 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Starminite/Huge Power: 7/36 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Starmie|item=Starminite|ability=Huge%20Power",
       "is_modal": true,
-      "coverage": 0.8974,
-      "variant_sample": 35,
+      "coverage": 0.9,
+      "variant_sample": 36,
       "variant_count": 7,
       "cluster": {
         "item": "Starminite",
         "ability": "Huge Power"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8974,
-      "unrepresented_coverage": 0.1026,
+      "represented_coverage": 0.9,
+      "unrepresented_coverage": 0.1,
       "speed_profile": {
-        "sample": 31,
+        "sample": 32,
         "min_spe_sp": 0,
         "max_spe_sp": 32,
         "natures": [
@@ -10960,21 +10960,21 @@
       "source": "real-team",
       "confidence": "medium",
       "real_team_backed": true,
-      "note": "real-team archetype Leftovers/Inner Focus: 31/64 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
+      "note": "real-team archetype Leftovers/Inner Focus: 32/65 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Umbreon|item=Leftovers|ability=Inner%20Focus",
       "is_modal": true,
-      "coverage": 0.6737,
-      "variant_sample": 64,
-      "variant_count": 31,
+      "coverage": 0.6771,
+      "variant_sample": 65,
+      "variant_count": 32,
       "cluster": {
         "item": "Leftovers",
         "ability": "Inner Focus"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8842,
-      "unrepresented_coverage": 0.1158,
+      "represented_coverage": 0.8854,
+      "unrepresented_coverage": 0.1146,
       "speed_profile": {
-        "sample": 22,
+        "sample": 23,
         "min_spe_sp": 0,
         "max_spe_sp": 18,
         "natures": [
@@ -11010,7 +11010,7 @@
       "note": "real-team archetype Leftovers/Synchronize: 9/20 teams | spread from the same real-team joint set (co-occurs; confidence folds the spread's own shape sample)",
       "variant_id": "variant:Umbreon|item=Leftovers|ability=Synchronize",
       "is_modal": false,
-      "coverage": 0.2105,
+      "coverage": 0.2083,
       "variant_sample": 20,
       "variant_count": 9,
       "cluster": {
@@ -11018,8 +11018,8 @@
         "ability": "Synchronize"
       },
       "cluster_basis": "item_ability",
-      "represented_coverage": 0.8842,
-      "unrepresented_coverage": 0.1158,
+      "represented_coverage": 0.8854,
+      "unrepresented_coverage": 0.1146,
       "speed_profile": {
         "sample": 4,
         "min_spe_sp": 0,

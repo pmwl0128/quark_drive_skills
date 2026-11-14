@@ -2,7 +2,7 @@
   "season": "M-8",
   "rule": "M-C",
   "format": "single",
-  "generated_at": "2026-11-12T08:30:54+00:00",
+  "generated_at": "2026-11-14T05:30:59+00:00",
   "thresholds": {
     "tiers": [
       {
@@ -50,50 +50,41 @@
   },
   "baseline": {
     "kind": "git-HEAD",
-    "ranking_updated_at": "2026-11-10T01:30:51+00:00",
-    "details_updated_at": "2026-11-10T01:30:51+00:00"
-  },
-  "current": {
     "ranking_updated_at": "2026-11-12T08:30:54+00:00",
     "details_updated_at": "2026-11-12T08:30:54+00:00"
   },
-  "rank_moves": [
-    {
-      "slug": "pawmot",
-      "name": "巴布土拨",
-      "old": 27,
-      "new": 32,
-      "delta": -5,
-      "tier": "A"
-    }
-  ],
+  "current": {
+    "ranking_updated_at": "2026-11-14T05:30:59+00:00",
+    "details_updated_at": "2026-11-14T05:30:59+00:00"
+  },
+  "rank_moves": [],
   "new_entries": [],
   "dropped": [],
   "config_changes": [
     {
-      "slug": "charizard",
-      "name": "喷火龙",
-      "rank": 8,
+      "slug": "garchomp",
+      "name": "烈咬陆鲨",
+      "rank": 1,
       "tier": "S",
       "panel": "moves",
-      "item": "空气之刃",
-      "old_pct": 0.0,
-      "new_pct": 21.2,
-      "delta": 21.2,
-      "kind": "新增",
+      "item": "毒击",
+      "old_pct": 16.4,
+      "new_pct": 0.0,
+      "delta": -16.4,
+      "kind": "消失",
       "rank_triggered": false
     },
     {
-      "slug": "charizard",
-      "name": "喷火龙",
-      "rank": 8,
+      "slug": "garchomp",
+      "name": "烈咬陆鲨",
+      "rank": 1,
       "tier": "S",
       "panel": "moves",
-      "item": "蓄能焰袭",
-      "old_pct": 20.8,
-      "new_pct": 0.0,
-      "delta": -20.8,
-      "kind": "消失",
+      "item": "大地之力",
+      "old_pct": 0.0,
+      "new_pct": 16.3,
+      "delta": 16.3,
+      "kind": "新增",
       "rank_triggered": false
     }
   ]
