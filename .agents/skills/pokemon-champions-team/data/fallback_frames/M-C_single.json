@@ -5,57 +5,54 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-8",
-  "built_at": "2026-11-14T06:07:43Z"
+  "built_at": "2026-11-16T09:19:55Z"
  },
  "counts": {
   "history": 1,
-  "partners": 9,
-  "stand_in": 1
+  "partners": 10
  },
  "anchors": {
   "Aegislash-Shield|": {
-   "source": "stand_in",
-   "species": "Aegislash",
-   "hits": {
-    "types": 2,
-    "lean": 1,
-    "speed_band": 1,
-    "roles": 3,
-    "field": 0
-   },
-   "teams": 291
+   "source": "partners",
+   "partners": [
+    "Hippowdon",
+    "Dragonite"
+   ],
+   "teams": 52
   },
   "Garbodor|": {
    "source": "partners",
    "partners": [
     "Corviknight",
-    "Swampert"
+    "Swampert",
+    "Volcarona"
    ],
-   "teams": 18
+   "teams": 3
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
-    "Tyranitar",
-    "Metagross"
+    "Pawmot",
+    "Ninetales"
    ],
-   "teams": 6
+   "teams": 5
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
     "Tyranitar",
-    "Excadrill"
+    "Rotom"
    ],
-   "teams": 21
+   "teams": 6
   },
   "Hydrapple|": {
    "source": "partners",
    "partners": [
     "Golisopod",
-    "Glimmora"
+    "Rotom",
+    "Gholdengo"
    ],
-   "teams": 35
+   "teams": 3
   },
   "Mega Excadrill|": {
    "source": "history",
@@ -69,16 +66,16 @@
   "Mega Houndoom|": {
    "source": "partners",
    "partners": [
-    "Mimikyu",
+    "Basculegion",
     "Greninja"
    ],
-   "teams": 53
+   "teams": 12
   },
   "Mega Manectric|": {
    "source": "partners",
    "partners": [
-    "Corviknight",
-    "Rillaboom"
+    "Gyarados",
+    "Hydreigon"
    ],
    "teams": 24
   },
@@ -86,26 +83,26 @@
    "source": "partners",
    "partners": [
     "Meowscarada",
-    "Indeedee",
-    "Sneasler"
+    "Sneasler",
+    "Indeedee"
    ],
    "teams": 6
   },
   "Morpeko-Hangry|": {
    "source": "partners",
    "partners": [
-    "Charizard",
-    "Corviknight"
+    "Corviknight",
+    "Raichu"
    ],
-   "teams": 32
+   "teams": 20
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
     "Basculegion",
-    "Rillaboom"
+    "Corviknight"
    ],
-   "teams": 37
+   "teams": 33
   }
  }
 }

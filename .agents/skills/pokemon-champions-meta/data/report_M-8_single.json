@@ -2,7 +2,7 @@
   "season": "M-8",
   "rule": "M-C",
   "format": "single",
-  "generated_at": "2026-11-14T05:30:59+00:00",
+  "generated_at": "2026-11-16T08:15:54+00:00",
   "thresholds": {
     "tiers": [
       {
@@ -50,42 +50,15 @@
   },
   "baseline": {
     "kind": "git-HEAD",
-    "ranking_updated_at": "2026-11-12T08:30:54+00:00",
-    "details_updated_at": "2026-11-12T08:30:54+00:00"
-  },
-  "current": {
     "ranking_updated_at": "2026-11-14T05:30:59+00:00",
     "details_updated_at": "2026-11-14T05:30:59+00:00"
+  },
+  "current": {
+    "ranking_updated_at": "2026-11-16T08:15:54+00:00",
+    "details_updated_at": "2026-11-16T08:15:54+00:00"
   },
   "rank_moves": [],
   "new_entries": [],
   "dropped": [],
-  "config_changes": [
-    {
-      "slug": "garchomp",
-      "name": "烈咬陆鲨",
-      "rank": 1,
-      "tier": "S",
-      "panel": "moves",
-      "item": "毒击",
-      "old_pct": 16.4,
-      "new_pct": 0.0,
-      "delta": -16.4,
-      "kind": "消失",
-      "rank_triggered": false
-    },
-    {
-      "slug": "garchomp",
-      "name": "烈咬陆鲨",
-      "rank": 1,
-      "tier": "S",
-      "panel": "moves",
-      "item": "大地之力",
-      "old_pct": 0.0,
-      "new_pct": 16.3,
-      "delta": 16.3,
-      "kind": "新增",
-      "rank_triggered": false
-    }
-  ]
+  "config_changes": []
 }

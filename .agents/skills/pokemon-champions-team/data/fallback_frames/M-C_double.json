@@ -5,7 +5,7 @@
   "format": "double",
   "rule": "M-C",
   "season": "M-8",
-  "built_at": "2026-11-14T06:08:11Z"
+  "built_at": "2026-11-16T09:20:36Z"
  },
  "counts": {
   "history": 3,
@@ -16,37 +16,38 @@
   "Aegislash-Shield|": {
    "source": "partners",
    "partners": [
+    "Garchomp",
     "Indeedee",
     "Tyranitar"
    ],
-   "teams": 407
+   "teams": 43
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
     "Archaludon",
-    "Golisopod",
-    "Swampert"
+    "Swampert",
+    "Golisopod"
    ],
-   "teams": 172
+   "teams": 173
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Whimsicott",
-    "Indeedee",
-    "Gardevoir"
+    "Tyranitar",
+    "Excadrill",
+    "Milotic"
    ],
-   "teams": 14
+   "teams": 517
   },
   "Mega Abomasnow|": {
    "source": "partners",
    "partners": [
+    "Garchomp",
     "Farigiraf",
-    "Armarouge",
-    "Camerupt"
+    "Aerodactyl"
    ],
-   "teams": 14
+   "teams": 189
   },
   "Mega Absol Z|": {
    "source": "partners",
@@ -55,7 +56,7 @@
     "Gardevoir",
     "Torkoal"
    ],
-   "teams": 45
+   "teams": 50
   },
   "Mega Absol|": {
    "source": "partners",
@@ -64,16 +65,16 @@
     "Gardevoir",
     "Torkoal"
    ],
-   "teams": 45
+   "teams": 50
   },
   "Mega Aerodactyl|": {
    "source": "partners",
    "partners": [
+    "Garchomp",
     "Charizard",
-    "Sylveon",
-    "Basculegion"
+    "Sylveon"
    ],
-   "teams": 27
+   "teams": 680
   },
   "Mega Aggron|": {
    "source": "partners",
@@ -82,7 +83,7 @@
     "Tyranitar",
     "Milotic"
    ],
-   "teams": 206
+   "teams": 233
   },
   "Mega Alakazam|": {
    "source": "partners",
@@ -100,7 +101,7 @@
     "Milotic",
     "Metagross"
    ],
-   "teams": 69
+   "teams": 70
   },
   "Mega Ampharos|": {
    "source": "partners",
@@ -109,7 +110,7 @@
     "Farigiraf",
     "Camerupt"
    ],
-   "teams": 228
+   "teams": 247
   },
   "Mega Audino|": {
    "source": "partners",
@@ -126,25 +127,24 @@
     "Archaludon",
     "Politoed"
    ],
-   "teams": 24
+   "teams": 25
   },
   "Mega Barbaracle|": {
    "source": "partners",
    "partners": [
-    "Indeedee",
-    "Sinistcha",
-    "Tyranitar"
+    "Farigiraf",
+    "Torkoal",
+    "Vivillon"
    ],
-   "teams": 20
+   "teams": 29
   },
   "Mega Baxcalibur|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
     "Volcarona",
     "Gholdengo"
    ],
-   "teams": 561
+   "teams": 623
   },
   "Mega Beedrill|": {
    "source": "partners",
@@ -153,7 +153,7 @@
     "Archaludon",
     "Swampert"
    ],
-   "teams": 517
+   "teams": 530
   },
   "Mega Blastoise|": {
    "source": "partners",
@@ -167,11 +167,11 @@
   "Mega Blaziken|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
+    "Indeedee",
     "Salamence",
-    "Basculegion"
+    "Metagross"
    ],
-   "teams": 409
+   "teams": 61
   },
   "Mega Camerupt|": {
    "source": "partners",
@@ -180,7 +180,7 @@
     "Sylveon",
     "Torkoal"
    ],
-   "teams": 168
+   "teams": 171
   },
   "Mega Chandelure|": {
    "source": "partners",
@@ -189,34 +189,34 @@
     "Indeedee",
     "Staraptor"
    ],
-   "teams": 50
+   "teams": 54
   },
   "Mega Charizard X|": {
    "source": "partners",
    "partners": [
-    "Basculegion",
+    "Garchomp",
     "Venusaur",
     "Archaludon"
    ],
-   "teams": 15
+   "teams": 405
   },
   "Mega Charizard Y|": {
    "source": "partners",
    "partners": [
-    "Basculegion",
+    "Garchomp",
     "Venusaur",
     "Archaludon"
    ],
-   "teams": 15
+   "teams": 405
   },
   "Mega Chesnaught|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
+    "Indeedee",
     "Pelipper",
     "Archaludon"
    ],
-   "teams": 314
+   "teams": 37
   },
   "Mega Chimecho|": {
    "source": "partners",
@@ -225,7 +225,7 @@
     "Tyranitar",
     "Sinistcha"
    ],
-   "teams": 206
+   "teams": 233
   },
   "Mega Clefable|": {
    "source": "partners",
@@ -234,16 +234,16 @@
     "Staraptor",
     "Sinistcha"
    ],
-   "teams": 192
+   "teams": 219
   },
   "Mega Crabominable|": {
    "source": "partners",
    "partners": [
     "Farigiraf",
-    "Camerupt",
-    "Hatterene"
+    "Hatterene",
+    "Camerupt"
    ],
-   "teams": 55
+   "teams": 58
   },
   "Mega Delphox|": {
    "source": "partners",
@@ -257,18 +257,18 @@
   "Mega Dragalge|": {
    "source": "partners",
    "partners": [
-    "Farigiraf",
-    "Grimmsnarl",
-    "Archaludon"
+    "Sinistcha",
+    "Indeedee",
+    "Tyranitar"
    ],
-   "teams": 168
+   "teams": 20
   },
   "Mega Dragonite|": {
    "source": "partners",
    "partners": [
     "Basculegion",
-    "Floette-Eternal",
-    "Gholdengo"
+    "Gholdengo",
+    "Floette-Eternal"
    ],
    "teams": 24
   },
@@ -284,20 +284,20 @@
   "Mega Eelektross|": {
    "source": "partners",
    "partners": [
+    "Garchomp",
     "Farigiraf",
-    "Whimsicott",
     "Golisopod"
    ],
-   "teams": 15
+   "teams": 200
   },
   "Mega Emboar|": {
    "source": "partners",
    "partners": [
     "Farigiraf",
     "Torkoal",
-    "Blastoise"
+    "Gardevoir"
    ],
-   "teams": 20
+   "teams": 3
   },
   "Mega Excadrill|": {
    "source": "partners",
@@ -306,25 +306,25 @@
     "Gholdengo",
     "Staraptor"
    ],
-   "teams": 369
+   "teams": 397
   },
   "Mega Falinks|": {
    "source": "partners",
    "partners": [
     "Incineroar",
-    "Sinistcha",
-    "Grimmsnarl"
+    "Gholdengo",
+    "Basculegion"
    ],
-   "teams": 12
+   "teams": 72
   },
   "Mega Feraligatr|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
     "Pelipper",
+    "Volcarona",
     "Archaludon"
    ],
-   "teams": 314
+   "teams": 40
   },
   "Mega Floette|": {
    "source": "stand_in",
@@ -336,7 +336,7 @@
     "roles": 3,
     "field": 0
    },
-   "teams": 2430
+   "teams": 2505
   },
   "Mega Froslass|": {
    "source": "partners",
@@ -344,34 +344,34 @@
     "Basculegion",
     "Volcarona"
    ],
-   "teams": 516
+   "teams": 533
   },
   "Mega Gallade|": {
    "source": "partners",
    "partners": [
-    "Farigiraf",
+    "Indeedee",
     "Milotic",
-    "Camerupt"
+    "Torkoal"
    ],
-   "teams": 8
+   "teams": 3
   },
   "Mega Garchomp Z|": {
    "source": "partners",
    "partners": [
     "Charizard",
     "Basculegion",
-    "Floette-Eternal"
+    "Archaludon"
    ],
-   "teams": 167
+   "teams": 38
   },
   "Mega Garchomp|": {
    "source": "partners",
    "partners": [
     "Charizard",
     "Basculegion",
-    "Floette-Eternal"
+    "Archaludon"
    ],
-   "teams": 167
+   "teams": 38
   },
   "Mega Gardevoir|": {
    "source": "partners",
@@ -380,16 +380,16 @@
     "Kommo-o",
     "Absol"
    ],
-   "teams": 29
+   "teams": 32
   },
   "Mega Gengar|": {
    "source": "partners",
    "partners": [
-    "Incineroar",
     "Politoed",
-    "Archaludon"
+    "Archaludon",
+    "Vivillon"
    ],
-   "teams": 373
+   "teams": 125
   },
   "Mega Glalie|": {
    "source": "partners",
@@ -407,7 +407,7 @@
     "Staraptor",
     "Indeedee"
    ],
-   "teams": 50
+   "teams": 54
   },
   "Mega Golisopod|": {
    "source": "partners",
@@ -416,7 +416,7 @@
     "Pelipper",
     "Basculegion"
    ],
-   "teams": 222
+   "teams": 228
   },
   "Mega Golurk|": {
    "source": "partners",
@@ -425,7 +425,7 @@
     "Torkoal",
     "Sylveon"
    ],
-   "teams": 168
+   "teams": 171
   },
   "Mega Greninja|": {
    "source": "partners",
@@ -434,24 +434,25 @@
     "Archaludon",
     "Swampert"
    ],
-   "teams": 517
+   "teams": 530
   },
   "Mega Gyarados|": {
    "source": "partners",
    "partners": [
-    "Indeedee",
-    "Gardevoir",
-    "Gholdengo"
+    "Garchomp",
+    "Gholdengo",
+    "Volcarona"
    ],
-   "teams": 5
+   "teams": 480
   },
   "Mega Hawlucha|": {
    "source": "partners",
    "partners": [
     "Indeedee",
-    "Glimmora"
+    "Sinistcha",
+    "Excadrill"
    ],
-   "teams": 108
+   "teams": 15
   },
   "Mega Heracross|": {
    "source": "partners",
@@ -460,14 +461,14 @@
     "Farigiraf",
     "Glimmora"
    ],
-   "teams": 31
+   "teams": 33
   },
   "Mega Houndoom|": {
    "source": "partners",
    "partners": [
     "Indeedee",
-    "Venusaur",
-    "Annihilape"
+    "Annihilape",
+    "Venusaur"
    ],
    "teams": 9
   },
@@ -475,10 +476,10 @@
    "source": "partners",
    "partners": [
     "Farigiraf",
-    "Torkoal",
+    "Camerupt",
     "Sylveon"
    ],
-   "teams": 168
+   "teams": 181
   },
   "Mega Lopunny|": {
    "source": "partners",
@@ -486,25 +487,25 @@
     "Indeedee",
     "Gardevoir"
    ],
-   "teams": 59
+   "teams": 61
   },
   "Mega Lucario Z|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
-    "Basculegion",
-    "Salamence"
+    "Indeedee",
+    "Salamence",
+    "Milotic"
    ],
-   "teams": 409
+   "teams": 121
   },
   "Mega Lucario|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
-    "Basculegion",
-    "Salamence"
+    "Indeedee",
+    "Salamence",
+    "Milotic"
    ],
-   "teams": 409
+   "teams": 121
   },
   "Mega Malamar|": {
    "source": "partners",
@@ -513,16 +514,16 @@
     "Indeedee",
     "Staraptor"
    ],
-   "teams": 50
+   "teams": 54
   },
   "Mega Manectric|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
+    "Pelipper",
     "Archaludon",
-    "Pelipper"
+    "Staraptor"
    ],
-   "teams": 314
+   "teams": 75
   },
   "Mega Mawile|": {
    "source": "partners",
@@ -538,9 +539,9 @@
    "partners": [
     "Farigiraf",
     "Sylveon",
-    "Torkoal"
+    "Camerupt"
    ],
-   "teams": 168
+   "teams": 181
   },
   "Mega Meganium|": {
    "source": "partners",
@@ -549,7 +550,7 @@
     "Archaludon",
     "Basculegion"
    ],
-   "teams": 222
+   "teams": 228
   },
   "Mega Meowstic|": {
    "source": "partners",
@@ -558,16 +559,16 @@
     "Pelipper",
     "Golisopod"
    ],
-   "teams": 975
+   "teams": 1001
   },
   "Mega Metagross|": {
    "source": "partners",
    "partners": [
+    "Garchomp",
     "Indeedee",
-    "Armarouge",
     "Milotic"
    ],
-   "teams": 8
+   "teams": 38
   },
   "Mega Pidgeot|": {
    "source": "partners",
@@ -576,16 +577,15 @@
     "Tyranitar",
     "Indeedee"
    ],
-   "teams": 362
+   "teams": 364
   },
   "Mega Pinsir|": {
    "source": "partners",
    "partners": [
-    "Whimsicott",
-    "Basculegion",
-    "Gholdengo"
+    "Metagross",
+    "Archaludon"
    ],
-   "teams": 19
+   "teams": 111
   },
   "Mega Pyroar|": {
    "source": "partners",
@@ -599,20 +599,20 @@
   "Mega Raichu X|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
-    "Gholdengo",
-    "Staraptor"
+    "Archaludon",
+    "Golisopod",
+    "Basculegion"
    ],
-   "teams": 813
+   "teams": 127
   },
   "Mega Raichu Y|": {
    "source": "partners",
    "partners": [
-    "Rillaboom",
-    "Gholdengo",
-    "Staraptor"
+    "Archaludon",
+    "Golisopod",
+    "Basculegion"
    ],
-   "teams": 813
+   "teams": 127
   },
   "Mega Sableye|": {
    "source": "partners",
@@ -621,16 +621,16 @@
     "Pelipper",
     "Golisopod"
    ],
-   "teams": 975
+   "teams": 1001
   },
   "Mega Salamence|": {
    "source": "partners",
    "partners": [
-    "Basculegion",
     "Tyranitar",
-    "Excadrill"
+    "Excadrill",
+    "Gholdengo"
    ],
-   "teams": 20
+   "teams": 511
   },
   "Mega Sceptile|": {
    "source": "partners",
@@ -639,7 +639,7 @@
     "Indeedee",
     "Excadrill"
    ],
-   "teams": 362
+   "teams": 364
   },
   "Mega Scizor|": {
    "source": "partners",
@@ -648,7 +648,7 @@
     "Milotic",
     "Staraptor"
    ],
-   "teams": 205
+   "teams": 233
   },
   "Mega Scolipede|": {
    "source": "partners",
@@ -657,7 +657,7 @@
     "Milotic",
     "Volcarona"
    ],
-   "teams": 23
+   "teams": 25
   },
   "Mega Scovillain|": {
    "source": "partners",
@@ -671,28 +671,29 @@
   "Mega Scrafty|": {
    "source": "partners",
    "partners": [
-    "Primarina",
     "Farigiraf",
+    "Primarina",
     "Torkoal"
    ],
-   "teams": 33
+   "teams": 34
   },
   "Mega Sharpedo|": {
    "source": "partners",
    "partners": [
     "Whimsicott",
-    "Indeedee"
+    "Indeedee",
+    "Gardevoir"
    ],
-   "teams": 171
+   "teams": 14
   },
   "Mega Skarmory|": {
    "source": "partners",
    "partners": [
-    "Whimsicott",
+    "Tyranitar",
     "Milotic",
-    "Annihilape"
+    "Indeedee"
    ],
-   "teams": 5
+   "teams": 79
   },
   "Mega Slowbro|": {
    "source": "partners",
@@ -710,7 +711,7 @@
     "Tyranitar",
     "Excadrill"
    ],
-   "teams": 488
+   "teams": 517
   },
   "Mega Starmie|": {
    "source": "partners",
@@ -719,7 +720,7 @@
     "Archaludon",
     "Gengar"
    ],
-   "teams": 42
+   "teams": 43
   },
   "Mega Steelix|": {
    "source": "partners",
@@ -728,7 +729,7 @@
     "Sinistcha",
     "Milotic"
    ],
-   "teams": 206
+   "teams": 233
   },
   "Mega Swampert|": {
    "source": "partners",
@@ -737,7 +738,7 @@
     "Archaludon",
     "Golisopod"
    ],
-   "teams": 975
+   "teams": 1001
   },
   "Mega Tyranitar|": {
    "source": "partners",
@@ -746,7 +747,7 @@
     "Gholdengo",
     "Staraptor"
    ],
-   "teams": 369
+   "teams": 397
   },
   "Mega Venusaur|": {
    "source": "partners",
@@ -755,16 +756,15 @@
     "Pelipper",
     "Grimmsnarl"
    ],
-   "teams": 790
+   "teams": 806
   },
   "Mega Victreebel|": {
    "source": "partners",
    "partners": [
     "Sylveon",
-    "Torkoal",
     "Basculegion"
    ],
-   "teams": 5
+   "teams": 190
   },
   "Morpeko-Hangry|": {
    "source": "partners",
@@ -805,11 +805,11 @@
   "Tauros-Paldea-Combat|": {
    "source": "partners",
    "partners": [
-    "Farigiraf",
-    "Basculegion",
+    "Garchomp",
+    "Metagross",
     "Staraptor"
    ],
-   "teams": 25
+   "teams": 5
   }
  }
 }
