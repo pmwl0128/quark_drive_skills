@@ -5,11 +5,11 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-8",
-  "built_at": "2026-11-16T09:19:55Z"
+  "built_at": "2026-11-18T02:31:34Z"
  },
  "counts": {
   "history": 1,
-  "partners": 10
+  "partners": 9
  },
  "anchors": {
   "Aegislash-Shield|": {
@@ -18,24 +18,23 @@
     "Hippowdon",
     "Dragonite"
    ],
-   "teams": 52
+   "teams": 53
   },
   "Garbodor|": {
    "source": "partners",
    "partners": [
-    "Corviknight",
-    "Swampert",
-    "Volcarona"
+    "Meowscarada",
+    "Corviknight"
    ],
-   "teams": 3
+   "teams": 29
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
     "Pawmot",
-    "Ninetales"
+    "Glimmora"
    ],
-   "teams": 5
+   "teams": 7
   },
   "Gourgeist-Small|": {
    "source": "partners",
@@ -49,8 +48,8 @@
    "source": "partners",
    "partners": [
     "Golisopod",
-    "Rotom",
-    "Gholdengo"
+    "Gholdengo",
+    "Rotom"
    ],
    "teams": 3
   },
@@ -63,21 +62,13 @@
    ],
    "teams": 4
   },
-  "Mega Houndoom|": {
-   "source": "partners",
-   "partners": [
-    "Basculegion",
-    "Greninja"
-   ],
-   "teams": 12
-  },
   "Mega Manectric|": {
    "source": "partners",
    "partners": [
     "Gyarados",
     "Hydreigon"
    ],
-   "teams": 24
+   "teams": 26
   },
   "Meowstic-F|": {
    "source": "partners",
@@ -94,15 +85,15 @@
     "Corviknight",
     "Raichu"
    ],
-   "teams": 20
+   "teams": 21
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
-    "Basculegion",
+    "Charizard",
     "Corviknight"
    ],
-   "teams": 33
+   "teams": 32
   }
  }
 }

@@ -81,19 +81,19 @@
     "season": "M-7",
     "rule": "M-C",
     "format": "single",
-    "count": 1432
+    "count": 1433
   },
   "M-8_double": {
     "season": "M-8",
     "rule": "M-C",
     "format": "double",
-    "count": 2808
+    "count": 3200
   },
   "M-8_single": {
     "season": "M-8",
     "rule": "M-C",
     "format": "single",
-    "count": 190
+    "count": 222
   },
   "M-A-events_double": {
     "partition": "M-A-events",
@@ -133,7 +133,7 @@
     "season": null,
     "rule": "M-C",
     "format": "double",
-    "count": 2190
+    "count": 2191
   },
   "M-C-events_single": {
     "partition": "M-C-events",
