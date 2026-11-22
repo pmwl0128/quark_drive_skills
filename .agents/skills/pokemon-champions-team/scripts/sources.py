@@ -215,7 +215,8 @@ def _merge_set(species: str, rep: dict | None, meta: dict | None,
 
 
 def _rep_for(species: str, fmt: str, season: str | None, rule: str | None,
-             repset_fn: Callable[..., dict | None] | None) -> tuple[dict | None, str]:
+             repset_fn: Callable[..., dict | None] | None,
+             teams: list[dict[str, Any]] | None = None) -> tuple[dict | None, str]:
     """(representative set, run_form). On the real path the meta name is first resolved to the form it is
     actually run as (`repset.dominant_form`) — a singles Mega is ranked under the base name but stored as
     'Mega X', so a base name like 'Staraptor' must query 'Mega Staraptor' or it falsely reads as having
@@ -229,7 +230,8 @@ def _rep_for(species: str, fmt: str, season: str | None, rule: str | None,
                              "unless a rule pool is supplied (season=None would read every season -> "
                              "cross-regulation pollution)")
         try:
-            teams = repset.cached_teams_for_rule(fmt, rule) if rule else repset.cached_teams(fmt, season)
+            if teams is None:
+                teams = repset.cached_teams_for_rule(fmt, rule) if rule else repset.cached_teams(fmt, season)
             # The LIBRARY KEY and the BATTLE FORM are different questions and must not be conflated:
             # the set is fetched under the name the partition actually stores, then the stone the
             # fetched set holds decides the form it runs as. Remapping before the fetch (the obvious
@@ -295,7 +297,8 @@ def resolve_opponent_variants(species: str, fmt: str, *, season: str | None = No
                               rule: str | None = None,
                               repset_fn: Callable[..., list | None] | None = None,
                               meta: dict[str, Any] | None = None,
-                              meta_fn: Callable[..., dict | None] = canonical_attacker_set
+                              meta_fn: Callable[..., dict | None] = canonical_attacker_set,
+                              teams: list[dict[str, Any]] | None = None,
                               ) -> list[dict[str, Any]]:
     """Every real-team (item,ability) archetype of `species`, each merged into a FULL opponent set.
 
@@ -321,7 +324,8 @@ def resolve_opponent_variants(species: str, fmt: str, *, season: str | None = No
         if not (season or rule):
             raise ValueError("an explicit season or rule is required for the real-team library")
         try:
-            teams = repset.cached_teams_for_rule(fmt, rule) if rule else repset.cached_teams(fmt, season)
+            if teams is None:
+                teams = repset.cached_teams_for_rule(fmt, rule) if rule else repset.cached_teams(fmt, season)
             # Collect across EVERY library form of the species, not just its dominant one.
             # Clustering is per species-NAME, and the singles partition files a registered Mega under
             # its own name ('Mega Greninja'), so querying only the dominant form made the other half
@@ -412,7 +416,8 @@ def resolve_opponent_variants(species: str, fmt: str, *, season: str | None = No
 def resolve_opponent_sets(species_list: list[str], fmt: str | None, *, season: str | None = None,
                           rule: str | None = None,
                           repset_fn: Callable[..., dict | None] | None = None,
-                          meta_batch_fn: Callable[..., dict] = canonical_attacker_sets
+                          meta_batch_fn: Callable[..., dict] = canonical_attacker_sets,
+                          teams_for_species: Callable[[str], list[dict[str, Any]]] | None = None,
                           ) -> dict[str, dict | None]:
     """BATCH resolver (matchup's injection point): one batched meta call for ALL species + a per-species
     real-team read, merged per field. Same result as calling resolve_opponent_set per species, but the
@@ -427,6 +432,7 @@ def resolve_opponent_sets(species_list: list[str], fmt: str | None, *, season: s
     except Exception:
         metas = {}
     def _resolve(sp: str) -> dict | None:
-        rep, run_form = _rep_for(sp, fmt, season, rule, repset_fn)
+        teams = teams_for_species(sp) if teams_for_species is not None else None
+        rep, run_form = _rep_for(sp, fmt, season, rule, repset_fn, teams)
         return _merge_set(sp, rep, metas.get(sp), run_form=run_form)
     return {sp: _resolve(sp) for sp in names}

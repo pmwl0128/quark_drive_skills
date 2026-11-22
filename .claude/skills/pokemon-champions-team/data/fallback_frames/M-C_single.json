@@ -5,28 +5,34 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-8",
-  "built_at": "2026-11-18T02:31:34Z"
+  "built_at": "2026-11-22T06:49:17Z"
  },
  "counts": {
   "history": 1,
-  "partners": 9
+  "partners": 7,
+  "stand_in": 2
  },
  "anchors": {
   "Aegislash-Shield|": {
-   "source": "partners",
-   "partners": [
-    "Hippowdon",
-    "Dragonite"
-   ],
-   "teams": 53
+   "source": "stand_in",
+   "species": "Aegislash",
+   "hits": {
+    "types": 2,
+    "lean": 1,
+    "speed_band": 1,
+    "roles": 3,
+    "field": 0
+   },
+   "teams": 298
   },
   "Garbodor|": {
    "source": "partners",
    "partners": [
-    "Meowscarada",
-    "Corviknight"
+    "Corviknight",
+    "Volcarona",
+    "Swampert"
    ],
-   "teams": 29
+   "teams": 3
   },
   "Gourgeist-Large|": {
    "source": "partners",
@@ -66,9 +72,10 @@
    "source": "partners",
    "partners": [
     "Gyarados",
-    "Hydreigon"
+    "Hydreigon",
+    "Sylveon"
    ],
-   "teams": 26
+   "teams": 3
   },
   "Meowstic-F|": {
    "source": "partners",
@@ -80,20 +87,24 @@
    "teams": 6
   },
   "Morpeko-Hangry|": {
-   "source": "partners",
-   "partners": [
-    "Corviknight",
-    "Raichu"
-   ],
-   "teams": 21
+   "source": "stand_in",
+   "species": "Morpeko",
+   "hits": {
+    "types": 2,
+    "lean": 1,
+    "speed_band": 1,
+    "roles": 3,
+    "field": 0
+   },
+   "teams": 12
   },
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
     "Charizard",
-    "Corviknight"
+    "Basculegion"
    ],
-   "teams": 32
+   "teams": 23
   }
  }
 }

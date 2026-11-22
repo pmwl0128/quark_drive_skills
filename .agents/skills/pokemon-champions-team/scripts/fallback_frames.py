@@ -99,7 +99,19 @@ def specific_partners(partners: list[str], lists: dict[str, list[str]],
     return out
 
 
+def _teams_by_species(team_sets: list[set[str]]) -> dict[str, set[int]]:
+    index: dict[str, set[int]] = {}
+    for coordinate, species in enumerate(team_sets):
+        for name in species:
+            index.setdefault(name, set()).add(coordinate)
+    return index
+
+
 def partner_core(partners: list[str], team_sets: list[set[str]]) -> tuple[list[str], int]:
+    return _partner_core(partners, _teams_by_species(team_sets))
+
+
+def _partner_core(partners: list[str], team_index: dict[str, set[int]]) -> tuple[list[str], int]:
     """The largest group of the specific partners (three, else two) that real current teams carry
     together at least PARTNER_MIN_TEAMS times; ties go to the earlier-listed group. ([], 0) if none."""
     best: tuple[list[str], int] = ([], 0)
@@ -109,7 +121,8 @@ def partner_core(partners: list[str], team_sets: list[set[str]]) -> tuple[list[s
                 rest = [partners[k] for k in range(j + 1, len(partners))] if size == 3 else [None]
                 for c in rest:
                     group = [a, partners[j]] + ([c] if c else [])
-                    n = sum(1 for s in team_sets if all(g in s for g in group))
+                    pool = [team_index.get(name, set()) for name in group]
+                    n = len(set.intersection(*pool))
                     if n >= PARTNER_MIN_TEAMS and n > best[1]:
                         best = (group, n)
         if best[0]:
@@ -160,32 +173,54 @@ def stand_in(anchor_caps: dict[str, Any], candidates: dict[str, dict[str, Any]],
     return best, best_hits
 
 
+def _presence_counts(teams: list[dict[str, Any]]) -> Counter:
+    counts = Counter()
+    for team in teams:
+        present = set()
+        for member in team.get("pokemon", []):
+            name = member.get("species")
+            item = member.get("item")
+            present.add((name, None))
+            if item:
+                present.add((name, item))
+        counts.update(present)
+    return counts
+
+
 def build_table(anchors: Iterable[tuple[str, str | None]], *, fmt: str, rule: str, season: str | None,
                 current_teams: list[dict[str, Any]], history_teams: dict[str, list[dict[str, Any]]],
-                matches: Callable[[dict[str, Any], dict[str, Any]], bool],
                 partners_of: Callable[[str], list[str]], partner_lists: dict[str, list[str]],
                 overall_rank: dict[str, int],
                 anchor_caps: Callable[[str, str | None], dict[str, Any] | None],
-                candidate_caps: dict[str, dict[str, Any]]) -> dict[str, Any]:
+                candidate_caps: dict[str, dict[str, Any]],
+                matches: Callable[[dict[str, Any], dict[str, Any]], bool] | None = None) -> dict[str, Any]:
     """One format's table. `anchors` = (species, item-filter) frame filter members; only anchors with
     no current-rule team get a recipe. `history_teams` = {season: older-rule teams}."""
-    team_sets = [team_species(t) for t in current_teams]
-    team_counts = Counter(sp for s in team_sets for sp in s)
+    team_index = _teams_by_species([team_species(t) for t in current_teams])
+    team_counts = {name: len(teams) for name, teams in team_index.items()}
+    if matches is None:
+        current_presence = _presence_counts(current_teams)
+        history_presence = {part: _presence_counts(rows) for part, rows in history_teams.items()}
     recipes: dict[str, Any] = {}
     sources: Counter = Counter()
     for species, item in anchors:
-        f = {"species": species, "item": item}
-        if any(matches(t, f) for t in current_teams):
-            continue
+        if matches is None:
+            key = (species, item or None)
+            if current_presence[key]:
+                continue
+            seasons = {part: counts[key] for part, counts in history_presence.items() if counts[key]}
+        else:
+            f = {"species": species, "item": item}
+            if any(matches(t, f) for t in current_teams):
+                continue
+            seasons = {part: sum(1 for t in rows if matches(t, f)) for part, rows in history_teams.items()}
+            seasons = {part: count for part, count in seasons.items() if count}
         recipe = None
-        seasons = {season_: sum(1 for t in rows if matches(t, f))
-                   for season_, rows in history_teams.items()}
-        seasons = {s: n for s, n in seasons.items() if n}
         if sum(seasons.values()) >= HISTORY_MIN_TEAMS:
             recipe = {"source": "history", "seasons": sorted(seasons), "teams": sum(seasons.values())}
         if recipe is None:
             specific = specific_partners(partners_of(species), partner_lists, overall_rank)
-            group, n = partner_core(specific, team_sets)
+            group, n = _partner_core(specific, team_index)
             if group:
                 recipe = {"source": "partners", "partners": group, "teams": n}
         if recipe is None:

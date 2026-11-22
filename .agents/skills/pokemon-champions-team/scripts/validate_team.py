@@ -28,6 +28,7 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -156,7 +157,11 @@ def _incomplete_reason(m: Any) -> str | None:
     return ", ".join(missing) if missing else None
 
 
-def validate(team: Team, context: BuildContext | None = None) -> ValidationResult:
+def validate(team: Team, context: BuildContext | None = None, *,
+             pokemon_lookup: Callable[[list[str]], dict[str, dict[str, Any]]] | None = None,
+             item_lookup: Callable[[list[str]], dict[str, dict[str, Any]]] | None = None) -> ValidationResult:
+    pokemon_lookup = pokemon_lookup or lookup_pokemon
+    item_lookup = item_lookup or lookup_items
     r = ValidationResult()
     rs = get_ruleset(getattr(context, "season", None) if context else None,
                      getattr(context, "rule", None) if context else None)
@@ -171,7 +176,7 @@ def validate(team: Team, context: BuildContext | None = None) -> ValidationResul
     species_names = [m.species for m in team.pokemon if m.species]
     dex_ok = True
     try:
-        facts = lookup_pokemon(species_names)
+        facts = pokemon_lookup(species_names)
     except DexUnavailable as e:
         r.skip('val_skip_roster', e=e)
         facts = {}
@@ -184,9 +189,9 @@ def validate(team: Team, context: BuildContext | None = None) -> ValidationResul
     held_stones = sorted({m.item for m in team.pokemon if m.item})
     if dex_ok and held_stones:
         try:
-            item_facts = lookup_items(held_stones)
+            item_facts = item_lookup(held_stones)
             forms = sorted({f for it in item_facts.values() for f in (it.get("required_by") or [])})
-            form_info = {f: ff for f, ff in (lookup_pokemon(forms) if forms else {}).items()
+            form_info = {f: ff for f, ff in (pokemon_lookup(forms) if forms else {}).items()
                          if ff.get("found")}
         except DexUnavailable:
             pass
@@ -274,7 +279,7 @@ def validate(team: Team, context: BuildContext | None = None) -> ValidationResul
     held = sorted({m.item for m in team.pokemon if m.item})
     if held:
         try:
-            for it, f in lookup_items(held).items():
+            for it, f in item_lookup(held).items():
                 if not f.get("found"):
                     r.err('val_item_pool', it=it)
         except DexUnavailable as e:
@@ -290,7 +295,7 @@ def validate(team: Team, context: BuildContext | None = None) -> ValidationResul
             try:
                 owned_base = {
                     form_base_species(f.get("name"), f)
-                    for f in lookup_pokemon(context.owned).values() if f.get("found")
+                    for f in pokemon_lookup(context.owned).values() if f.get("found")
                 }
                 for m in team.pokemon:
                     ff = facts.get(m.species)
