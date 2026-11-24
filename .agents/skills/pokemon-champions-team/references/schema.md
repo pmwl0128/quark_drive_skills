@@ -39,7 +39,7 @@ One team. Used for both validation input and as the unit stored in the sample li
 {
   "schema_version": 1,
   "format": "single",                 // "single" | "double"
-  "season": "M-4",                    // nullable for a hand-built team
+  "season": "M-4",                    // null when no season is established or applicable
   "rule": "M-B",                      // nullable for a hand-built team
   "pokemon": [
     {
@@ -58,10 +58,11 @@ One team. Used for both validation input and as the unit stored in the sample li
 ```
 
 Field notes:
-- Collected ladder rows carry `season`. A competition not owned by a ladder season ships with
-  `season: null` and an explicit `rule`; its physical `<rule>-events_<format>.jsonl` partition records
-  the event provenance axis without exposing event identity. Full event metadata exists only in the
-  private updater build-state because event identity combined with placing can identify a source row.
+- A known ladder season is recorded in `season`. A competition outside the ladder season belongs
+  to `<rule>-events_<format>.jsonl` when its event identity is established. Evidence of actual
+  usage with a known rule and format but no established season or event belongs to
+  `<rule>-unassigned_<format>.jsonl`. Both rule-scoped partitions ship with `season: null` and an
+  explicit `rule`. Event identity, use and attribution evidence stay in the private updater state.
 - `species` / `item` / `ability` / `moves` use **dex canonical English** so validation and cross-checks
   against `$pokemon-champions-dex` are exact. Raw importer identifiers are normalized here before
   anything ships.
@@ -166,16 +167,19 @@ data/teams/
   index.json
   <season>_<format>.jsonl
   <rule>-events_<format>.jsonl
+  <rule>-unassigned_<format>.jsonl
   handover.json                         # optional, temporary cross-rule validation receipt
 ```
 
-- A season JSONL represents one `(season, format)` partition. A non-empty event JSONL represents the
-  rule-scoped event pool for `(rule, format)`; its rows have `season:null` plus distinct event ids.
+- A season JSONL represents one `(season, format)` partition. An event or unassigned JSONL
+  represents one rule-scoped partition for `(rule, format)`. Its index entry has `partition`,
+  `partition_kind` (`event` or `unassigned`), `season: null`, `rule`, `format` and `count`.
+  The private event rows carry event identity. The unassigned rows have no `event` field.
 - Filter and label evidence by `season`, `rule`, `format`, and `performance`.
 - Runtime consumers may merge partitions sharing the same rule; old regulations remain explicitly
   labeled and are not treated as current.
-- Exact-season reads use only `<season>_<format>.jsonl`; rule-pool reads also include the matching
-  `<rule>-events_<format>.jsonl`. Empty event scopes do not create files or index entries.
+- Exact-season reads use `<season>_<format>.jsonl`. Rule-pool reads also include matching event
+  and unassigned partitions when present. Empty scopes have no file or index entry.
 - `handover.json` never changes those rows or their labels. While its target is current and its
   maximum seven-day window is open, the runtime revalidates its target, ruleset, source partitions,
   target dex bytes, validator code, and immutable local activation timestamp. It deep-copies only
@@ -326,7 +330,7 @@ The **live cache shape** — the matrix is keyed by `variant_id`:
   one — so it appears as a **defender only** (`real_team_backed:false`, `moves:null`).
   It therefore appears only as a defender.
 - Source fingerprints cover the season-scoped meta ranking/details and every same-rule team-library
-  partition, including the rule event partition. An active handover adds its approved source
+  partition, including events and unassigned teams. An active handover adds its approved source
   partitions and receipt to that fingerprint and sets `built_for.handover_receipt:true` and
   `built_for.team_evidence_expires_at`. At expiry readers select the companion
   `<rule>_<format>.native.json`; `unavailable:true` means native samples cannot supply a matrix.
@@ -886,7 +890,8 @@ Table shape (storage; consume through `topmeta`):
 A species entry is `{teams, sets, lanes: {observed_full_set, extracted_set}, panels}`; each of
 `moves|items|abilities|natures|spreads|partners` is `{n, counts: {key: count}}` with its OWN `n` (the
 units whose field is known — a missing field is never a zero). Spread keys are `hp/atk/def/spa/spd/spe`.
-The season scope never reads event partitions; no scope reads a handover predecessor. No count
+The season scope reads its exact season partition. The rule scope includes matching events and
+unassigned teams. Top Meta counts use native evidence. No count
 is cropped and no publication threshold exists at this layer.
 
 The `high` scope (高端 / 上位 / high-level) is the rule scope filtered on RAW performance facts, each
@@ -930,7 +935,7 @@ limit. Their dex-declared Mega forms become separate rows when a usable configur
 `pool_source.usage_rank` belongs to the named parent, never to an expanded form. The queried ordinary
 form is never promoted to a Mega; a stated own stone explicitly changes the battle form.
 
-The current-rule reader loads all accepted season/event partitions and any receipt-approved
+The current-rule reader loads all accepted same-rule partitions and any receipt-approved
 handover rows. `coverage.teams_read`, `data_seasons`, `team_limit:null`, `identity_gaps` and
 `unavailable` disclose the population and missing configurations. Every numerical point is priced
 by one deduplicated public NCP speedline batch at level 50 / IV 31. No source data is rewritten.

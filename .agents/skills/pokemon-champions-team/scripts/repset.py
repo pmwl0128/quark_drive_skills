@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Representative-set reader over the real-team library (data/teams/<season>_<format>.jsonl).
+"""Representative-set reader over the real-team library (data/teams/<partition>_<format>.jsonl).
 
 Real teams are REAL JOINT objects: each member's ability/item/nature/moves co-occur, which the meta
 usage panels (independent marginals) cannot give — so this is the higher-accuracy source for those
@@ -93,7 +93,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 def load_teams(fmt: str, season: str | None = None) -> list[dict[str, Any]]:
     """All stored teams for a format (optionally one season). [] when the library is absent/empty.
 
-    season=None reads every season's file for the format; callers that must not mix regulations should
+    season=None reads every partition of the format; callers that must not mix regulations should
     use load_teams_for_rule or pass an explicit season."""
     d = data_dir()
     if not d.exists():
@@ -124,9 +124,8 @@ def cached_teams(fmt: str, season: str | None = None) -> list[dict[str, Any]]:
 def load_teams_for_rule(fmt: str, rule: str) -> list[dict[str, Any]]:
     """All stored teams for a format whose row provenance says `rule`.
 
-    Files stay season-partitioned (`M-3_double.jsonl`, `M-4_double.jsonl`, ...), but default build
-    consumption is rule-scoped: sibling seasons under the same rule contribute to one real-team
-    evidence pool, while rows from other rules stay out. Filtering on the row's own `rule` keeps the
+    Sibling seasons, events and unassigned teams under the same rule contribute to one real-team
+    evidence pool. Filtering on the row's own `rule` keeps the
     storage label authoritative and survives future same-rule season additions without another
     hardcoded filename list.
     """

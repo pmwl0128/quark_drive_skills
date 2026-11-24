@@ -258,7 +258,7 @@ def source_partitions(team_dir: Path, fmt: str, target_rule: str) -> list[str]:
     for source in sources:
         name = source.get("file") if isinstance(source, dict) else None
         if (not isinstance(name, str)
-                or not re.fullmatch(rf"(?:M-\d+|M-[A-Z]+-events)_{re.escape(fmt)}\.jsonl", name)):
+                or not re.fullmatch(rf"(?:M-\d+|M-[A-Z]+-(?:events|unassigned))_{re.escape(fmt)}\.jsonl", name)):
             raise HandoverError(f"handover has an unsafe source partition name for {fmt}")
         names.append(name)
     if len(names) != len(set(names)):
@@ -313,7 +313,7 @@ def _load_teams_uncached(team_dir: Path, fmt: str, target_rule: str,
             raise HandoverError(f"handover has a malformed source partition for {fmt}")
         name = source.get("file")
         if (not isinstance(name, str)
-                or not re.fullmatch(rf"(?:M-\d+|M-[A-Z]+-events)_{re.escape(fmt)}\.jsonl", name)):
+                or not re.fullmatch(rf"(?:M-\d+|M-[A-Z]+-(?:events|unassigned))_{re.escape(fmt)}\.jsonl", name)):
             raise HandoverError(f"handover has an unsafe source partition name for {fmt}")
         if name in seen_sources:
             raise HandoverError(f"handover repeats a source partition for {fmt}: {name}")

@@ -75,7 +75,7 @@
     "season": "M-7",
     "rule": "M-C",
     "format": "double",
-    "count": 8020
+    "count": 8021
   },
   "M-7_single": {
     "season": "M-7",
@@ -87,13 +87,13 @@
     "season": "M-8",
     "rule": "M-C",
     "format": "double",
-    "count": 4071
+    "count": 4504
   },
   "M-8_single": {
     "season": "M-8",
     "rule": "M-C",
     "format": "single",
-    "count": 289
+    "count": 332
   },
   "M-A-events_double": {
     "partition": "M-A-events",
@@ -141,6 +141,22 @@
     "season": null,
     "rule": "M-C",
     "format": "single",
-    "count": 60
+    "count": 118
+  },
+  "M-C-unassigned_double": {
+    "partition": "M-C-unassigned",
+    "partition_kind": "unassigned",
+    "season": null,
+    "rule": "M-C",
+    "format": "double",
+    "count": 3
+  },
+  "M-C-unassigned_single": {
+    "partition": "M-C-unassigned",
+    "partition_kind": "unassigned",
+    "season": null,
+    "rule": "M-C",
+    "format": "single",
+    "count": 6
   }
 }

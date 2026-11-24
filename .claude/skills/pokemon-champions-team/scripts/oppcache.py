@@ -79,7 +79,7 @@ def _fingerprint(paths: list[Path]) -> str:
 
 
 def team_seasons_for_rule(fmt: str, rule: str) -> list[str]:
-    """Non-empty shipped partitions that currently contribute to a rule-scoped team pool.
+    """Season labels that currently contribute to a rule-scoped team pool.
 
     Prefer the shipped index so a newly created partition invalidates the cache before a consumer has
     to load the full library. Fall back to the rows for custom/test data directories without an index.
@@ -99,7 +99,7 @@ def team_seasons_for_rule(fmt: str, rule: str) -> list[str]:
                     and entry.get("season")
                 }
                 seasons.update(p for p in handover.source_partitions(repset.data_dir(), fmt, rule)
-                               if not p.endswith("-events"))
+                               if not p.endswith(("-events", "-unassigned")))
                 return sorted(seasons)
         except (json.JSONDecodeError, OSError, TypeError, ValueError):
             pass
@@ -107,7 +107,7 @@ def team_seasons_for_rule(fmt: str, rule: str) -> list[str]:
 
 
 def team_partitions_for_rule(fmt: str, rule: str) -> list[str]:
-    """Non-empty physical partitions contributing to a rule pool, including rule-level events."""
+    """Non-empty physical partitions contributing to a rule pool, including seasonless rows."""
     index_path = repset.data_dir() / "index.json"
     if index_path.exists():
         try:
