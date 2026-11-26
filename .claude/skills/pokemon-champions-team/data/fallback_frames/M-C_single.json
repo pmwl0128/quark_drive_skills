@@ -5,7 +5,7 @@
   "format": "single",
   "rule": "M-C",
   "season": "M-8",
-  "built_at": "2026-11-24T01:17:44Z"
+  "built_at": "2026-11-26T06:10:32Z"
  },
  "counts": {
   "history": 1,
@@ -23,31 +23,31 @@
     "roles": 3,
     "field": 0
    },
-   "teams": 304
+   "teams": 307
   },
   "Garbodor|": {
    "source": "partners",
    "partners": [
     "Meowscarada",
-    "Corviknight"
+    "Dragonite"
    ],
-   "teams": 30
+   "teams": 26
   },
   "Gourgeist-Large|": {
    "source": "partners",
    "partners": [
-    "Charizard",
+    "Pawmot",
     "Glimmora"
    ],
-   "teams": 22
+   "teams": 7
   },
   "Gourgeist-Small|": {
    "source": "partners",
    "partners": [
-    "Snorlax",
-    "Ditto"
+    "Tyranitar",
+    "Rotom"
    ],
-   "teams": 12
+   "teams": 7
   },
   "Hydrapple|": {
    "source": "partners",
@@ -74,7 +74,7 @@
     "Gyarados",
     "Sylveon"
    ],
-   "teams": 3
+   "teams": 4
   },
   "Meowstic-F|": {
    "source": "partners",
@@ -96,10 +96,10 @@
   "Squawkabilly-Yellow|": {
    "source": "partners",
    "partners": [
-    "Charizard",
-    "Gyarados"
+    "Gyarados",
+    "Cinderace"
    ],
-   "teams": 21
+   "teams": 24
   }
  }
 }

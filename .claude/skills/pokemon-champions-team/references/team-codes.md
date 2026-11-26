@@ -66,7 +66,8 @@ interval, budget and in-flight lease still apply. Operators can run the native
 Python lookup on that query host without traversing the public HTTP boundary;
 reuse its private identity configuration and state directory.
 `PCUI_TEAMCODE_BATCH_LIMIT` bounds internal source enrichment; it does not enable a public batch API.
-`PCUI_TEAMCODE_CLIENT_VERSION` pins the client version (initially 1.2.2); changing it does not repair
+`PCUI_TEAMCODE_CLIENT_VERSION` pins the client version (floor verified as 1.2.3, the current
+App Store release; the resolver rejects 1.2.2 with 9901); changing it does not repair
 an incompatible protocol or mapping. Version rejections are not an invitation to enumerate versions.
 
 ## Consumer boundaries

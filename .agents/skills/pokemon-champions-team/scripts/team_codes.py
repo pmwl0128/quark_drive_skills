@@ -199,7 +199,7 @@ def _official(code: str, cfg: dict, *, before_request=None) -> dict:
     identity = cfg.get("PCUI_TEAMCODE_GUEST_UUID", "")
     if not re.fullmatch(r"[A-Za-z0-9]{42}", identity):
         raise TeamCodeError("not_configured")
-    version = cfg.get("PCUI_TEAMCODE_CLIENT_VERSION", "1.2.2")
+    version = cfg.get("PCUI_TEAMCODE_CLIENT_VERSION", "1.2.3")
     if not re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){1,3}", version):
         raise TeamCodeError("not_configured")
     client = OfficialClient(identity, version, before_request=before_request)
